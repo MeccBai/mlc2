@@ -1,5 +1,4 @@
 pub enum Operator {
-     
     Add,
     Subtract,
     Multiply,
@@ -16,9 +15,8 @@ pub enum Operator {
     BitOr,
     BitXor,
     BitNot,
-    
+
     LogicalAnd,
     LogicalOr,
     LogicalNot,
-    
 }

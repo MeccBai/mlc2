@@ -1,160 +1,123 @@
-use super::{
-    FunctionBody, TempGlobalStmt, ImportModule, TempStmt, TokenIter, UnitDecl, UsingType,
-    func::function_process,
-};
-use crate::lexer::TokenPack;
-use crate::lexer::TokenPack::{Eof, Ident};
-use crate::lexer::token::Token;
+use chumsky::{input::ValueInput, prelude::*};
 
-pub(super) fn ident_list_process(
-    iter: &mut TokenIter,
-    separator: Token,
-    end: Token,
-) -> Result<Vec<String>, TokenPack> {
-    let mut result = Vec::new();
-    let mut expect_ident = true;
+use crate::lexer::{Span, TokenPack, token::Token};
 
-    while let Some(token_pack) = iter.next() {
-        match token_pack {
-            Ident(ident) if expect_ident => {
-                result.push(ident);
-                expect_ident = false;
-            }
-            TokenPack::Keyword(token) if token == separator && !expect_ident => {
-                expect_ident = true;
-            }
-            TokenPack::Operator(token) if token == separator && !expect_ident => {
-                expect_ident = true;
-            }
-            TokenPack::Keyword(token) if token == end && !expect_ident => {
-                break;
-            }
-            TokenPack::Operator(token) if token == end && !expect_ident => {
-                break;
-            }
-            other => {
-                return Err(other);
-            }
-        }
-    }
+use super::{GenericParam, ParseError, Path, Spanned, TypeExpr, Visibility};
 
-    Ok(result)
+pub fn keyword<'tokens, I>(
+    token: Token,
+) -> impl Parser<'tokens, I, (), extra::Err<ParseError<'tokens>>> + Clone
+where
+    I: ValueInput<'tokens, Token = TokenPack, Span = Span>,
+{
+    just(TokenPack::KeyWord(token)).ignored()
 }
 
-pub fn get_name(iter: &mut TokenIter) -> Result<String, TokenPack> {
-    match iter.next() {
-        Some(Ident(ident)) => Ok(ident),
-        Some(other) => Err(other),
-        None => Err(Eof),
-    }
+pub fn operator<'tokens, I>(
+    token: Token,
+) -> impl Parser<'tokens, I, (), extra::Err<ParseError<'tokens>>> + Clone
+where
+    I: ValueInput<'tokens, Token = TokenPack, Span = Span>,
+{
+    just(TokenPack::Operator(token)).ignored()
 }
 
-fn import_process(iter: &mut TokenIter) -> Result<TempGlobalStmt, TokenPack> {
-    let path = ident_list_process(iter, Token::ColonColon, Token::Semicolon)?;
-    Ok(TempGlobalStmt::Import(ImportModule::new(path)))
+pub fn ident<'tokens, I>()
+-> impl Parser<'tokens, I, String, extra::Err<ParseError<'tokens>>> + Clone
+where
+    I: ValueInput<'tokens, Token = TokenPack, Span = Span>,
+{
+    select! { TokenPack::Ident(name) => name }.labelled("identifier")
 }
 
-fn attribute_process(iter: &mut TokenIter) -> Result<Vec<String>, TokenPack> {
-    ident_list_process(iter, Token::Comma, Token::AttributeEnd)
+pub fn path<'tokens, I>() -> impl Parser<'tokens, I, Path, extra::Err<ParseError<'tokens>>> + Clone
+where
+    I: ValueInput<'tokens, Token = TokenPack, Span = Span>,
+{
+    let segment = choice((ident(), keyword(Token::Generic).to("generic".to_owned())));
+
+    segment
+        .separated_by(operator(Token::ColonColon))
+        .at_least(1)
+        .collect::<Vec<_>>()
+        .map(|segments| Path { segments })
+        .labelled("path")
 }
 
-pub(super) fn next_and_assert(iter: &mut TokenIter, expected: Token) -> Result<(), TokenPack> {
-    match iter.next() {
-        Some(TokenPack::Keyword(token)) if token == expected => Ok(()),
-        Some(TokenPack::Operator(token)) if token == expected => Ok(()),
-        Some(other) => Err(other),
-        None => Err(Eof),
-    }
+pub fn visibility<'tokens, I>()
+-> impl Parser<'tokens, I, Visibility, extra::Err<ParseError<'tokens>>> + Clone
+where
+    I: ValueInput<'tokens, Token = TokenPack, Span = Span>,
+{
+    choice((
+        keyword(Token::Public).to(Visibility::Public),
+        keyword(Token::Export).to(Visibility::Export),
+        keyword(Token::Api).to(Visibility::Api),
+    ))
+    .or_not()
+    .map(Option::unwrap_or_default)
 }
 
-pub(super) fn split_by_semicolon(iter: &mut TokenIter,end: Token) -> Result<Vec<Vec<TokenPack>>, TokenPack> {
-    let mut result = Vec::new();
-    let mut current = Vec::new();
-
-    while let Some(token_pack) = iter.next() {
-        match token_pack {
-            TokenPack::Keyword(token) if token == end => {
-                if !current.is_empty() {
-                    result.push(std::mem::take(&mut current));
-                    current = Vec::new();
-                }
-                break;
-            }
-            TokenPack::Operator(token) if token == end => {
-                if !current.is_empty() {
-                    result.push(std::mem::take(&mut current));
-                    current = Vec::new();
-                }
-                break;
-            }
-            TokenPack::Keyword(token) if token == Token::Semicolon => {
-                result.push(std::mem::take(&mut current));
-                current = Vec::new();
-            }
-            other => {
-                current.push(other);
-            }
-        }
-    }
-
-    if !current.is_empty() {
-        result.push(std::mem::take(&mut current));
-    }
-
-    Ok(result)
+pub fn attributes<'tokens, I>()
+-> impl Parser<'tokens, I, Vec<String>, extra::Err<ParseError<'tokens>>> + Clone
+where
+    I: ValueInput<'tokens, Token = TokenPack, Span = Span>,
+{
+    ident()
+        .separated_by(operator(Token::Comma))
+        .allow_trailing()
+        .collect::<Vec<_>>()
+        .delimited_by(keyword(Token::AttributeStart), keyword(Token::AttributeEnd))
+        .repeated()
+        .collect::<Vec<_>>()
+        .map(|groups| groups.into_iter().flatten().collect())
 }
 
-pub fn coarse_segmentate(tokens: Vec<TokenPack>) -> Result<Vec<TempGlobalStmt>, TokenPack> {
-    let mut statements = Vec::<TempGlobalStmt>::new();
-    let mut iter = tokens.into_iter();
+pub fn generic_params<'tokens, I>()
+-> impl Parser<'tokens, I, Vec<GenericParam>, extra::Err<ParseError<'tokens>>> + Clone
+where
+    I: ValueInput<'tokens, Token = TokenPack, Span = Span>,
+{
+    ident()
+        .then(operator(Token::Colon).ignore_then(path()).or_not())
+        .map(|(name, constraint)| GenericParam { name, constraint })
+        .separated_by(operator(Token::Comma))
+        .at_least(1)
+        .allow_trailing()
+        .collect::<Vec<_>>()
+        .delimited_by(operator(Token::LAngle), operator(Token::RAngle))
+        .or_not()
+        .map(Option::unwrap_or_default)
+}
 
-    let mut attributes = Vec::<String>::new();
+pub fn type_parser<'tokens, I>()
+-> impl Parser<'tokens, I, Spanned<TypeExpr>, extra::Err<ParseError<'tokens>>> + Clone
+where
+    I: ValueInput<'tokens, Token = TokenPack, Span = Span>,
+{
+    recursive(|ty| {
+        let generic_args = ty
+            .clone()
+            .separated_by(operator(Token::Comma))
+            .at_least(1)
+            .allow_trailing()
+            .collect::<Vec<_>>()
+            .delimited_by(operator(Token::LAngle), operator(Token::RAngle));
 
-    while let Some(token_pack) = iter.next() {
-        match token_pack {
-            TokenPack::Keyword(keyword) => match keyword {
-                Token::Import => {
-                    let result = import_process(&mut iter);
-                    match result {
-                        Ok(statement) => statements.push(statement),
-                        Err(token_pack) => return Err(token_pack),
-                    }
-                }
-                Token::AttributeStart => {
-                    let result = attribute_process(&mut iter);
-                    match result {
-                        Ok(attr) => attributes = attr,
-                        Err(token_pack) => return Err(token_pack),
-                    }
-                }
-                Token::Function => {
-                    let result = function_process(&mut iter);
-                    match result {
-                        Ok(mut func) => {
-                            func.attributes = std::mem::take(&mut attributes);
-                            statements.push(TempGlobalStmt::Function(func));
-                            attributes = Vec::<String>::new();
-                        }
-                        Err(token_pack) => return Err(token_pack),
-                    }
-                }
-                Token::Generic => {}
-                Token::Unit => {}
-                Token::Using => {}
-                Token::Global => {}
-                Token::Enum => {}
-                _ => {}
-            },
-            Ident(ident) => {
-                return Err(Ident(ident));
-            }
-            TokenPack::Operator(_) => {
-                return Err(token_pack);
-            }
-            Eof => {
-                break;
-            }
-        }
-    }
-    Ok(statements)
+        let named = path()
+            .then(generic_args.or_not())
+            .map(|(base, args)| match args {
+                Some(args) => TypeExpr::Generic { base, args },
+                None => TypeExpr::Path(base),
+            });
+
+        let reference = operator(Token::Dereference)
+            .ignore_then(ty.clone())
+            .map(|inner| TypeExpr::Reference(Box::new(inner)));
+
+        choice((reference, named))
+            .map_with(|ty, extra| (ty, extra.span()))
+            .labelled("type")
+    })
+    .boxed()
 }

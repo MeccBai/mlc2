@@ -1,10 +1,11 @@
 use crate::lexer::tokenize;
+use crate::parser::TempGlobalStmt;
 
 mod ast;
 mod error;
 mod lexer;
 mod parser;
-
+pub mod build;
 
 fn main() {
     let code = r#"
@@ -13,43 +14,37 @@ fn main() {
 
         generic type1 {
             std::generic::is_integer;
+            std::generic::max_bits<16>;
         };
 
         generic type2 {
-            pub func add(self, i8 param1) -> i8;
+            pub func add(self, param1:i8) -> i8;
         };
 
-        unit a<type1> {
-            i8 x;
-            type1$b;
-
-            pub func add (self, i8 param1) -> i8 {
-                return self->x + param1;
-            }
+        unit a<T:type1> {
+            x:i8;
+            b:$T;
         };
 
-        func<type1> test(type1 a) -> i8 {
+        a::func add(self, param1:i8) -> i8 {
+            return self->x + param1;
+        }
+
+        func<T:type1> test(a:T) -> i8 {
             return a + 1;
         }
 
         using u8_unit = a<u8>;
 
-        func test1(u8 a,u8 b ,u8 c) -> i8 {
+        export func test1(a:u8,b:u8,c:u8) -> i8 {
             var d = a + b + c;
             return d;
         }
 
-        func test2(u8 a,u8 b) -> i8 {
+        export func test2(a:u8,b:u8) -> i8 {
             var d = a + b;
             return d;
         }
-
-        uint bx {
-            i8 xx;
-            pub func add (self, i8 param1) -> i8 {
-                return self->xx + param1;
-            }
-        };
 
         func main() -> i8 {
             // 这是一个注释
@@ -66,10 +61,11 @@ fn main() {
                 }
             }
 
-            var sum = { 5, {1,2,3} |> test1 } |> test2;
+            var sum =  {
+                5,
+                {1,2,3} |> test1
+            } |> test2 ;
 
-            bx c;
-            var result = 10 |> c.add;
 
             std::io::print("Hello, world!");
         }
@@ -77,12 +73,47 @@ fn main() {
 
     let err_h = error::ErrorHandle::new("test".to_string());
 
-    let tokens = tokenize(code).unwrap_or_else(|e| {
+    let lexed = tokenize(code).unwrap_or_else(|e| {
         err_h.token_error(e, code);
         std::process::exit(1);
     });
 
-    for x in tokens.iter() {
-        println!("{:?}", x);
+    let (module, errors) = parser::parse(&lexed.tokens, code.len());
+    for error in &errors {
+        err_h.parse_error(error, code);
+    }
+    if let Some(module) = module {
+        for (item, span) in &module {
+            match item {
+                TempGlobalStmt::Func(function) => {
+                    println!("Function: {}", function.name);
+                    print!("    Visibility:{:?}", function.visibility);
+                    print!("    Position:{:?}", span);
+                    println!()
+                }
+
+                TempGlobalStmt::Unit(unit) => {
+                    println!("Unit: {}", unit.name);
+
+                    for member in &unit.members {
+                        print!("    Member:{}", member.name);
+                        print!("    Type:{:?}", member.ty.0);
+                        print!("    Position:{:?}", member.ty.1);
+                        println!();
+                    }
+                }
+
+                TempGlobalStmt::Enum(enum_) => {
+                    println!("Enum: {}", enum_.name);
+                    println!("    Variants: {:?}", enum_.variants);
+                }
+
+                TempGlobalStmt::Import(import) => {
+                    println!("Import: {}", import.path().join("::"));
+                }
+
+                _ => {}
+            }
+        }
     }
 }

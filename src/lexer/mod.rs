@@ -1,66 +1,102 @@
 pub mod token;
 
+use chumsky::span::SimpleSpan;
+use std::{fmt, ops::Range};
+
 use crate::lexer::token::Token;
-pub use logos::{Logos, Span};
-use std::fmt::Formatter;
+pub use logos::Logos;
+
+pub type Span = SimpleSpan<usize>;
+pub type SpannedToken = (TokenPack, Span);
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Comment {
+    pub text: String,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Lexed {
+    pub tokens: Vec<SpannedToken>,
+    pub comments: Vec<Comment>,
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum TokenPack {
-    Keyword(Token),
+    KeyWord(Token),
     Operator(Token),
     Ident(String),
-    Eof,
+    Data { kind: Token, text: String },
 }
 
-impl TokenPack {
-    pub fn is_keyword(&self) -> bool {
-        matches!(self, TokenPack::Keyword(_))
-    }
-
-    pub fn is_ident(&self) -> bool {
-        matches!(self, TokenPack::Ident(_))
-    }
-
-    pub fn not_in_generic(&self) -> bool {
-        matches!(self, TokenPack::Keyword(Token::Generic))
-    }
-}
-
-impl std::fmt::Display for TokenPack {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for TokenPack {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            TokenPack::Keyword(token) => write!(f, "{:?}", token),
-            TokenPack::Ident(ident) => write!(f, "Ident({})", ident),
-            TokenPack::Operator(token) => write!(f, "Operator({:?})", token),
-            TokenPack::Eof => write!(f, "EOF"),
+            Self::KeyWord(token) | Self::Operator(token) => write!(f, "{token:?}"),
+            Self::Ident(ident) => write!(f, "{ident}"),
+            Self::Data { text, .. } => write!(f, "{text}"),
         }
     }
 }
+
 #[derive(Debug)]
 pub struct TokenError {
-    pub span: Span,
+    pub span: Range<usize>,
     pub context: String,
 }
 
-pub fn tokenize(source: &str) -> Result<Vec<TokenPack>, TokenError> {
-    Token::lexer(source)
-        .spanned()
-        .map(|(token, span)| match token {
-            Ok(token) => Ok(match token {
-                token::Token::Ident => TokenPack::Ident(source[span.clone()].to_string()),
-                _ => {
-                    if token.is_operator() {
-                        TokenPack::Operator(token)
-                    }
-                    else {
-                        TokenPack::Keyword(token)
-                    }
-                }
-            }),
-            Err(_) => Err(TokenError {
-                span: span.clone(),
-                context: format!("{}", &source[span.clone()]),
-            }),
-        })
-        .collect()
+pub fn tokenize(source: &str) -> Result<Lexed, TokenError> {
+    let mut tokens = Vec::new();
+    let mut comments = Vec::new();
+
+    for (token, range) in Token::lexer(source).spanned() {
+        let token = token.map_err(|_| TokenError {
+            span: range.clone(),
+            context: source[range.clone()].to_owned(),
+        })?;
+
+        if token.is_comment() {
+            comments.push(Comment {
+                text: source[range.clone()].to_owned(),
+                span: range.into(),
+            });
+            continue;
+        }
+
+        let packed = match token {
+            Token::Ident => TokenPack::Ident(source[range.clone()].to_owned()),
+            token if token.is_operator() => TokenPack::Operator(token),
+            token if token.is_data() => TokenPack::Data {
+                kind: token,
+                text: source[range.clone()].to_owned(),
+            },
+            token => TokenPack::KeyWord(token),
+        };
+
+        tokens.push((packed, range.into()));
+    }
+
+    Ok(Lexed { tokens, comments })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn retains_comment_text_and_source_span_outside_the_parser_stream() {
+        let source = "var a = 1; // keep me\n/* and me */ var b = 2;";
+        let lexed = tokenize(source).unwrap();
+
+        assert_eq!(lexed.comments.len(), 2);
+        assert_eq!(lexed.comments[0].text, "// keep me");
+        assert_eq!(lexed.comments[1].text, "/* and me */");
+        for comment in &lexed.comments {
+            assert_eq!(&source[comment.span.into_range()], comment.text);
+        }
+        assert!(lexed.tokens.iter().all(|(token, _)| !matches!(
+            token,
+            TokenPack::KeyWord(Token::SingleLineComment | Token::MultiLineComment)
+        )));
+    }
 }

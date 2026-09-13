@@ -1,15 +1,7 @@
-use crate::lexer;
 use crate::lexer::TokenError;
+use crate::parser::ParseError;
 use colored::Colorize;
-use logos::Span;
-
-pub enum SyntaxError {
-    InvalidImport,
-}
-pub enum ErrorType {
-    InvalidToken,
-    SyntaxError(SyntaxError),
-}
+use std::ops::Range;
 
 pub struct ErrorHandle {
     pub file: String,
@@ -25,7 +17,7 @@ impl ErrorHandle {
         source: &str,
         pre_lines: usize,
         after_lines: usize,
-        span: Span,
+        span: Range<usize>,
     ) -> String {
         let lines: Vec<&str> = source.lines().collect();
         let error_line = source[..span.start].matches('\n').count();
@@ -62,5 +54,15 @@ impl ErrorHandle {
         eprintln!("{}", self.get_context(source, 2, 2, token_error.span));
     }
 
-    pub fn error(&self, message: String) {}
+    pub fn parse_error(&self, parse_error: &ParseError<'_>, source: &str) {
+        let span = parse_error.span().into_range();
+        eprintln!(
+            "{}: {} at {}..{}",
+            "Syntax error".red().bold(),
+            parse_error.reason(),
+            span.start,
+            span.end,
+        );
+        eprintln!("{}", self.get_context(source, 2, 2, span));
+    }
 }

@@ -1,7 +1,6 @@
+pub mod build;
 pub mod operators;
 
-use crate::ast::class::CompileType;
-use crate::ast::func::FuncDecl;
 use crate::ast::stmt::Variable;
 use crate::ast::{FuncIndex, TypeIndex};
 use operators::Operator;
@@ -28,6 +27,7 @@ pub struct InitialList {
 pub struct FunctionCall {
     pub func: FuncIndex,
     pub args: Vec<Expression>,
+    pub piped: bool,
 }
 
 pub struct EnumValue {

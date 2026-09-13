@@ -3,13 +3,15 @@ use logos::Logos;
 #[derive(Logos, Debug, PartialEq, Clone)]
 #[logos(skip r"[ \t\n\f]+")]
 pub enum Token {
-    #[regex(r"//[^\n]*", logos::skip, allow_greedy = true)]
+    #[regex(r"//[^\n]*", allow_greedy = true)]
     SingleLineComment,
 
-    #[regex(r"/\*([^*]|\*[^/])*\*/", logos::skip)]
+    #[regex(r"/\*([^*]|\*[^/])*\*/")]
     MultiLineComment,
 
-    #[regex(r"[0-9]*\.[0-9]+([eE][-+]?[0-9]+)?|[0-9]+\.[0-9]*([eE][-+]?[0-9]+)?|[0-9]+[eE][-+]?[0-9]+")]
+    #[regex(
+        r"[0-9]*\.[0-9]+([eE][-+]?[0-9]+)?|[0-9]+\.[0-9]*([eE][-+]?[0-9]+)?|[0-9]+[eE][-+]?[0-9]+"
+    )]
     FloatLiteral,
 
     #[regex("[0-9]+")]
@@ -46,8 +48,6 @@ pub enum Token {
     Shl,
     #[token(">>")]
     Shr,
-    #[token("..")]
-    Until,
     #[token("=>")]
     FatArrow,
 
@@ -109,6 +109,8 @@ pub enum Token {
     Variable,
     #[token("const")]
     Constant,
+    #[token("mut")]
+    Mut,
     #[token("unit")]
     Unit,
     #[token("using")]
@@ -126,6 +128,8 @@ pub enum Token {
     Public,
     #[token("global")]
     Global,
+    #[token("api")]
+    Api, //Export and Public
 
     #[token("in")]
     In,
@@ -151,6 +155,11 @@ pub enum Token {
     Return,
     #[token("null")]
     Null,
+    #[token("anonymous")]
+    Anonymous,
+
+    #[token("_", priority = 3)]
+    Default,
 
     #[regex("[a-zA-Z_][a-zA-Z0-9_]*")]
     Ident,
@@ -192,6 +201,25 @@ impl Token {
     }
 
     pub fn is_sub_scope_start(&self) -> bool {
-        matches!(self, Token::If | Token::Else | Token::While | Token::For | Token::LBrace)
+        matches!(
+            self,
+            Token::If | Token::Else | Token::While | Token::For | Token::LBrace
+        )
+    }
+
+    pub fn is_data(&self) -> bool {
+        matches!(
+            self,
+            Token::IntLiteral
+                | Token::FloatLiteral
+                | Token::StringLiteral
+                | Token::True
+                | Token::False
+                | Token::Null
+        )
+    }
+
+    pub fn is_comment(&self) -> bool {
+        matches!(self, Self::SingleLineComment | Self::MultiLineComment)
     }
 }
