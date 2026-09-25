@@ -129,8 +129,8 @@ where
                 matches!(visibility, TempVisibility::Export | TempVisibility::Api),
             )),
             RawItem::Function(mut function) => {
-                function.visibility = visibility;
-                function.attributes = attributes;
+                function.symbol.visibility = visibility;
+                function.symbol.attributes = attributes;
                 TempGlobalStmt::Func(function)
             }
             RawItem::Unit {

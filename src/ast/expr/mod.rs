@@ -4,7 +4,6 @@ pub mod operators;
 use crate::ast::stmt::Variable;
 use crate::ast::{FuncIndex, TypeIndex};
 use operators::Operator;
-use std::sync::Arc;
 
 pub enum CompAtom {
     VarValue(Variable),

@@ -1,3 +1,5 @@
+pub mod ice;
+
 use crate::lexer::TokenError;
 use crate::parser::ParseError;
 use colored::Colorize;

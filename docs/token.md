@@ -36,17 +36,17 @@
 
 ### Keywords
 
-| Token    | SymbolName | Token      | SymbolName | Token       | SymbolName |
-|----------|------------|------------|------------|-------------|------------|
-| `func`   | Function   | `var`      | Variable   | `const`     | Constant   |
-| `unit`   | Unit       | `using`    | Using      | `generic`   | Generic    |
-| `enum`   | Enum       | `import`   | Import     | `export`    | Export     |
-| `pub`    | Public     | `global`   | Global     | `mut`       | Mut        |
-| `in`     | In         | `true`     | True       | `false`     | False      |
-| `if`     | If         | `else`     | Else       | `while`     | While      |
-| `for`    | For        | `break`    | Break      | `continue`  | Continue   |
-| `match`  | Match      | `return`   | Return     | `null`      | Null       |
-| `anonymous` | Anonymous |           |            |             |            |
+| Token       | SymbolName | Token    | SymbolName | Token      | SymbolName |
+|-------------|------------|----------|------------|------------|------------|
+| `func`      | Function   | `var`    | Variable   | `const`    | Constant   |
+| `unit`      | Unit       | `using`  | Using      | `generic`  | Generic    |
+| `enum`      | Enum       | `import` | Import     | `export`   | Export     |
+| `pub`       | Public     | `global` | Global     | `mut`      | Mut        |
+| `in`        | In         | `true`   | True       | `false`    | False      |
+| `if`        | If         | `else`   | Else       | `while`    | While      |
+| `for`       | For        | `break`  | Break      | `continue` | Continue   |
+| `match`     | Match      | `return` | Return     | `null`     | Null       |
+| `anonymous` | Anonymous  | `...`    | VarList    |            |            |
 
 ### Identifier
 

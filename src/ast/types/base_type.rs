@@ -28,23 +28,35 @@ impl BaseType {
         self.signed
     }
 
-    pub fn sizeof(&self) -> usize {
+    pub fn size(&self) -> usize {
         self.bits / 8
+    }
+
+    pub fn align(&self) -> usize {
+        self.size()
     }
 
     pub fn name(&self) -> String {
         match self.data_type {
             DataType::Integer => {
                 if self.signed {
-                    format!("i{}", self.sizeof())
+                    format!("i{}", self.size())
                 } else {
-                    format!("u{}", self.sizeof())
+                    format!("u{}", self.size())
                 }
             }
             DataType::Float => {
-                format!("f{}", self.sizeof())
+                format!("f{}", self.size())
             }
         }
+    }
+
+    pub fn format(&self) -> String {
+        self.name()
+    }
+
+    pub fn dump(&self) -> String {
+        self.name()
     }
 
     fn new(data_type: DataType, signed: bool, bits: usize) -> CompileType {
@@ -54,7 +66,7 @@ impl BaseType {
             bits,
         })
     }
-    pub(super) fn base_types() -> [CompileType; 10] {
+    pub fn base_types() -> [CompileType; 10] {
         [
             Self::new(DataType::Integer, true, 8),
             Self::new(DataType::Integer, true, 16),

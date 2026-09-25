@@ -1,18 +1,16 @@
-
-use std::path::{Path, PathBuf};
 use crate::error::ErrorHandle;
+use std::path::{Path, PathBuf};
 
 pub struct PathResolver {
     self_path: PathBuf,
     lib_paths: Vec<PathBuf>,
 }
 
-
 impl PathResolver {
-    pub fn new(self_path: PathBuf,err_h: &ErrorHandle) -> Self {
+    pub fn new(self_path: PathBuf, err_h: &ErrorHandle) -> Self {
         let executable = self_path.file_name().unwrap();
 
-        if (executable.to_str().unwrap() != "mlc.exe") {
+        if executable.to_str().unwrap() != "mlc.exe" {
             panic!()
         }
         let parent = self_path.parent().unwrap();
@@ -21,7 +19,7 @@ impl PathResolver {
 
         Self {
             self_path,
-            lib_paths
+            lib_paths,
         }
     }
     pub fn search_lib(&self, lib_name: &str) -> Option<PathBuf> {
@@ -33,6 +31,4 @@ impl PathResolver {
         }
         None
     }
-    
-    
 }

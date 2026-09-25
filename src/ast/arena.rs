@@ -1,10 +1,10 @@
-use std::collections::HashMap;
-use std::fmt;
-use std::marker::PhantomData;
-use lasso::{Rodeo, Spur};
 use crate::ast::func::FuncBody;
 use crate::ast::generic::GenericRequire;
 use crate::ast::types::CompileType;
+use lasso::{Rodeo, Spur};
+use std::collections::HashMap;
+use std::fmt;
+use std::marker::PhantomData;
 
 pub type Ident = Spur;
 
@@ -79,16 +79,25 @@ impl<T> NamedArena<T> {
         &self.values[index.index]
     }
 
-    pub fn get_by_name(&self, name: Ident) -> Option<ArenaIndex<T>> {
+    pub fn get_mut(&mut self, index: ArenaIndex<T>) -> &mut T {
+        &mut self.values[index.index]
+    }
+
+    pub fn get_by_name(&self, name: &String) -> Option<ArenaIndex<T>> {
+        let ident = get_ident(name);
+        self.get_by_ident(ident)
+    }
+
+    pub fn get_by_ident(&self, name: Ident) -> Option<ArenaIndex<T>> {
         self.by_name.get(&name).copied()
     }
 
-    pub fn value_by_name(&self, name: Ident) -> Option<&T> {
-        self.get_by_name(name).map(|index| self.get(index))
+    pub fn value_by_ident(&self, name: Ident) -> Option<&T> {
+        self.get_by_ident(name).map(|index| self.get(index))
     }
 }
 
-pub fn get_ident(name:&String) -> Ident {
+pub fn get_ident(name: &String) -> Ident {
     let mut interner = Rodeo::default();
     interner.get_or_intern(name)
 }

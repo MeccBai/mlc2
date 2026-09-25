@@ -1,10 +1,10 @@
 [package]
-name = "MLC2"
+name = "mlc2"
 version = "0.1.0"
 edition = "2024"
 
 [dependencies]
 logos = "0.16.1"
 colored = "3.1.1"
-lasso="0.7.3"
+lasso = "0.7.3"
 chumsky = "0.13"

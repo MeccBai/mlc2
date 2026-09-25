@@ -4,6 +4,7 @@ use crate::lexer::{Span, TokenPack, token::Token};
 
 use super::{
     FunctionDecl, Param, ParseError,
+    out::TempFuncSymbol,
     split::{generic_params, ident, keyword, operator, path, type_parser},
     stmt::scope_parser,
 };
@@ -74,14 +75,16 @@ where
         .then(body)
         .map(
             |(((((owner, generics), name), params), return_type), body)| FunctionDecl {
-                visibility: Default::default(),
-                owner,
-                name,
-                generics,
-                params,
-                return_type,
+                symbol: TempFuncSymbol {
+                    visibility: Default::default(),
+                    owner,
+                    name,
+                    generics,
+                    params,
+                    return_type,
+                    attributes: Vec::new(),
+                },
                 body,
-                attributes: Vec::new(),
             },
         )
         .labelled("function")

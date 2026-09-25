@@ -13,7 +13,15 @@ impl EnumType {
         self.name.clone()
     }
 
-    pub fn dump(&self) {
+    pub fn dump(&self) -> String {
+        format!("enum:{},variants:{:?}", self.name, self.variants)
+    }
 
+    pub fn size(&self) -> usize {
+        4
+    }
+
+    pub fn align(&self) -> usize {
+        4
     }
 }

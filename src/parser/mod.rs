@@ -206,24 +206,42 @@ mod tests {
         let TempGlobalStmt::Func(function) = &module[1].0 else {
             panic!("expected a free function");
         };
-        assert_eq!(function.attributes, ["c_abi"]);
-        assert_eq!(function.generics[0].name, "T");
+        assert_eq!(function.symbol.attributes, ["c_abi"]);
+        assert_eq!(function.symbol.generics[0].name, "T");
         assert_eq!(
-            function.generics[0].constraint.as_ref().unwrap().segments,
+            function.symbol.generics[0]
+                .constraint
+                .as_ref()
+                .unwrap()
+                .segments,
             ["number"]
         );
 
         let TempGlobalStmt::Func(method) = &module[3].0 else {
             panic!("expected a method");
         };
-        assert_eq!(method.owner.as_ref().unwrap().segments, ["Point"]);
-        assert!(method.params[0].is_self && method.params[0].mutable);
+        assert_eq!(method.symbol.owner.as_ref().unwrap().segments, ["Point"]);
+        assert!(method.symbol.params[0].is_self && method.symbol.params[0].mutable);
+        assert!(method.has_mutable_receiver());
 
         assert!(matches!(
             &module[4].0,
             TempGlobalStmt::Enum(TempEnum { name, variants, .. })
                 if name == "State" && variants == &["Waiting", "Running"]
         ));
+    }
+
+    #[test]
+    fn rejects_explicit_reference_syntax_for_method_receiver() {
+        for source in [
+            "Point::func set(self:$Point) {}",
+            "Point::func set(mut self:$Point) {}",
+            "Point::func set(&self) {}",
+        ] {
+            let lexed = tokenize(source).unwrap();
+            let (_, errors) = parse(&lexed.tokens, source.len());
+            assert!(!errors.is_empty(), "accepted invalid receiver: {source}");
+        }
     }
 
     #[test]

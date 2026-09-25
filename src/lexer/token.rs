@@ -119,6 +119,8 @@ pub enum Token {
     Generic,
     #[token("enum")]
     Enum,
+    #[token("...")]
+    VarList,
 
     #[token("import")]
     Import,

@@ -6,7 +6,7 @@ pub mod types;
 use crate::{ast::ImportModule, lexer::Span};
 
 pub use expr::{TempBinaryOp, TempExpr, TempLiteralKind, TempMemberAccess, TempUnaryOp};
-pub use func::{TempFunc, TempParam};
+pub use func::{TempFunc, TempFuncSymbol, TempParam};
 pub use stmt::{TempMatchPattern, TempScope, TempStmt};
 pub use types::{TempPath, TempType};
 

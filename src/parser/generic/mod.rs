@@ -16,7 +16,7 @@ where
     let function = visibility()
         .then(function_parser())
         .map(|(visibility, mut function)| {
-            function.visibility = visibility;
+            function.symbol.visibility = visibility;
             GenericRequirement::Function(function)
         });
 

@@ -2,10 +2,10 @@ use crate::lexer::tokenize;
 use crate::parser::TempGlobalStmt;
 
 mod ast;
+pub mod build;
 mod error;
 mod lexer;
 mod parser;
-pub mod build;
 
 fn main() {
     let code = r#"
@@ -86,8 +86,8 @@ fn main() {
         for (item, span) in &module {
             match item {
                 TempGlobalStmt::Func(function) => {
-                    println!("Function: {}", function.name);
-                    print!("    Visibility:{:?}", function.visibility);
+                    println!("Function: {}", function.symbol.name);
+                    print!("    Visibility:{:?}", function.symbol.visibility);
                     print!("    Position:{:?}", span);
                     println!()
                 }
