@@ -3,7 +3,7 @@ mod instance;
 use crate::ast::arena::{ArenaIndex, FuncArena, GenericArena, GenericIndex, NamedArena, get_ident};
 use crate::ast::types::CompileType::{Base, Enum};
 use crate::ast::types::{CompileType, UnitType, ref_type};
-use crate::ast::{SymbolTable, TypeIndex};
+use crate::ast::{SymbolTable, TypeIndex, config::Config};
 use crate::error::ice::ice;
 use crate::parser::out::TempGeneric;
 use std::collections::HashMap;
@@ -19,12 +19,13 @@ impl InterfaceRequire {
     pub fn check(&self, param: TypeIndex, symbols: &SymbolTable) -> bool {
         let param_name = param.format(&symbols.types);
         let interface_name = format!("{}::{}", param_name, self.name);
-        let interface = symbols.functions.get(&interface_name);
+        let interface = symbols.interfaces.get_by_name(&interface_name);
 
         let interface = match interface {
-            Some(interface) => interface,
+            Some(interface) => symbols.interfaces.get(interface),
             None => return false,
         };
+
         let ret_type = &interface.ret_type;
         if self.ret_type != *ret_type {
             return false;
@@ -101,7 +102,7 @@ pub struct GenericRequire {
 }
 
 impl GenericRequire {
-    pub fn new(temp: TempGeneric) -> Self {
+    pub fn new(config: &Config, temp: TempGeneric) -> Self {
         todo!()
     }
     pub fn check(&self, param: TypeIndex, symbols: &SymbolTable) -> bool {
@@ -114,7 +115,7 @@ impl GenericRequire {
 pub type UnitArena = NamedArena<UnitType>;
 pub type UnitIndex = ArenaIndex<UnitType>;
 pub struct GenericTable {
-    pub generics: GenericArena,
+    pub requires: GenericArena,
     pub units: UnitArena,
     pub funcs: FuncArena,
 }
@@ -122,13 +123,14 @@ pub struct GenericTable {
 impl GenericTable {
     pub fn new() -> Self {
         Self {
-            generics: GenericArena::empty(),
+            requires: GenericArena::empty(),
             units: UnitArena::empty(),
             funcs: FuncArena::empty(),
         }
     }
 }
 
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub enum InsFailed {
     NoGenerics,
     RequireUnMet,
@@ -137,7 +139,7 @@ pub enum InsFailed {
 
 impl GenericIndex {
     pub fn check(&self, param: TypeIndex, symbols: &SymbolTable) -> bool {
-        let generic = symbols.generics.get(*self);
+        let generic = symbols.generics.requires.get(*self);
         generic.check(param, symbols)
     }
 
@@ -146,7 +148,7 @@ impl GenericIndex {
         params: &HashMap<GenericIndex, TypeIndex>,
         symbols: &SymbolTable,
     ) -> Result<TypeIndex, InsFailed> {
-        let require = symbols.generics.get(self);
+        let require = symbols.generics.requires.get(self);
 
         let param = match params.get(&self) {
             Some(param) => *param,

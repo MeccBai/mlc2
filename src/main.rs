@@ -94,12 +94,15 @@ fn main() {
 
                 TempGlobalStmt::Unit(unit) => {
                     println!("Unit: {}", unit.name);
-
+                    println!("    Attributes: {:?}", unit.attributes);
+                    for generic in &unit.generics {
+                        print!("    Generic: {:?}", generic.name);
+                        println!("    Require: {:?}", generic.constraint);
+                    }
                     for member in &unit.members {
                         print!("    Member:{}", member.name);
                         print!("    Type:{:?}", member.ty.0);
-                        print!("    Position:{:?}", member.ty.1);
-                        println!();
+                        println!("    Position:{:?}", member.ty.1);
                     }
                 }
 

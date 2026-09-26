@@ -1,4 +1,5 @@
 use crate::ast::arena::{GenericIndex, Ident, TypeArena, TypeIndex, get_ident};
+use crate::ast::generic::InsFailed;
 use crate::ast::types::CompileType::{self, Ref};
 use lasso::Rodeo;
 use std::collections::HashMap;
@@ -60,11 +61,11 @@ impl RefType {
     }
 
     pub fn instantiation(
-        &self,
+        self,
         params: &HashMap<GenericIndex, TypeIndex>,
         symbols: &mut crate::ast::SymbolTable,
         actives: Option<&mut HashMap<String, TypeIndex>>,
-    ) -> Result<TypeIndex, crate::ast::generic::InsFailed> {
+    ) -> Result<TypeIndex, InsFailed> {
         let child = self.base.instantiation(params, symbols, actives)?;
         let instance = RefType::new(child, self.level);
 

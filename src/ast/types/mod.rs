@@ -1,5 +1,6 @@
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::hash::Hash;
+
 pub(crate) mod base_type;
 pub(crate) use base_type::BaseType;
 
@@ -15,10 +16,12 @@ pub(crate) mod enum_type;
 
 pub(crate) use enum_type::EnumType;
 
+use crate::ast::arena::get_ident;
+use crate::ast::config::Config;
 use crate::ast::types::CompileType::{Base, Enum, Generic, List, Ref, Unit};
-use crate::ast::{GenericIndex, TypeArena, TypeIndex};
+use crate::ast::{GenericIndex, SymbolTable, TypeArena, TypeIndex};
 use crate::error::ice::ice;
-use lasso::Rodeo;
+use crate::parser::out::TempType;
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub enum CompileType {
@@ -112,10 +115,12 @@ impl TypeIndex {
             }
         }
     }
+
     pub fn is_generic(&self, arena: &TypeArena) -> bool {
         let ty = arena.get(*self);
         ty.is_generic(arena)
     }
+
     pub fn has_generic(&self, arena: &TypeArena) -> bool {
         let ty = arena.get(*self);
         match ty {
@@ -126,24 +131,31 @@ impl TypeIndex {
             Generic(_) => false,
         }
     }
+
     pub fn is_base(&self, arena: &TypeArena) -> bool {
         matches!(arena.get(*self), Base(_))
     }
+
     pub fn is_ref(&self, arena: &TypeArena) -> bool {
         matches!(arena.get(*self), Ref(_))
     }
+
     pub fn is_unit(&self, arena: &TypeArena) -> bool {
         matches!(arena.get(*self), Unit(_))
     }
+
     pub fn is_integer(&self, arena: &TypeArena) -> bool {
         matches!(arena.get(*self), Base(base) if base.data_type() == base_type::DataType::Integer)
     }
+
     pub fn is_float(&self, arena: &TypeArena) -> bool {
         matches!(arena.get(*self), Base(base) if base.data_type() == base_type::DataType::Float)
     }
+
     pub fn is_signed(&self, arena: &TypeArena) -> bool {
         matches!(arena.get(*self), Base(base) if base.signed())
     }
+
     pub fn get_generic_index(&self, arena: &TypeArena) -> GenericIndex {
         let ty = arena.get(*self);
         match ty {
@@ -153,6 +165,7 @@ impl TypeIndex {
             }
         }
     }
+
     pub fn symbol_name(&self, arena: &TypeArena) -> String {
         if self.is_generic(arena) {
             ice("TypeIndex is a Generic type. Cannot get symbol name of a Generic type.")
@@ -190,6 +203,68 @@ impl TypeIndex {
                 ice(
                     "TypeIndex is not a Generic type. Cannot get generic instance name of a non-generic type.",
                 )
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+pub enum TypeError {
+    UnknownType,
+    GenericNotFound,
+}
+
+pub fn resolve_type(
+    config: &Config,
+    temp: TempType,
+    symbols: &mut SymbolTable,
+) -> Result<TypeIndex, TypeError> {
+    match temp {
+        TempType::Path(path) => {
+            let name = config.symbol_name(&path.join());
+            let ident = get_ident(&name);
+            symbols
+                .types
+                .get_by_ident(ident)
+                .ok_or(TypeError::UnknownType)
+        }
+        TempType::Generic { base, args } => {
+            let name = config.symbol_name(&base.join());
+
+            let ident = get_ident(&name);
+            let index = symbols
+                .generics
+                .units
+                .get_by_ident(ident)
+                .ok_or(TypeError::UnknownType)?;
+
+            let unit = symbols.generics.units.get_mut(index).clone();
+            let params = args
+                .into_iter()
+                .map(|arg| resolve_type(config, arg.0, symbols))
+                .zip(unit.generics.iter())
+                .map(|(param, generic)| (generic.clone(), param.unwrap()))
+                .collect::<HashMap<_, _>>();
+
+            let instance = unit.instantiation(&params, symbols, None).unwrap();
+
+            Ok(instance)
+        }
+        TempType::Reference(ref_type) => {
+            let (base, _) = *ref_type;
+            let base = resolve_type(config, base, symbols)?;
+            let ty = symbols.types.get(base);
+
+            if let CompileType::Ref(ref_type) = ty {
+                let new_ref = RefType::new(ref_type.base, ref_type.level + 1);
+                let type_str = new_ref.format(&symbols.types);
+                let ident = get_ident(&type_str);
+                Ok(symbols.types.insert(ident, CompileType::Ref(new_ref)))
+            } else {
+                let new_ref = RefType::new(base, 1);
+                let type_str = new_ref.format(&symbols.types);
+                let ident = get_ident(&type_str);
+                Ok(symbols.types.insert(ident, CompileType::Ref(new_ref)))
             }
         }
     }

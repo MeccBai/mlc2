@@ -1,3 +1,5 @@
+use crate::ast::config::Config;
+
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct EnumType {
     pub name: String,
@@ -5,8 +7,11 @@ pub struct EnumType {
 }
 
 impl EnumType {
-    pub fn new(name: String, variants: Vec<String>) -> Self {
-        Self { name, variants }
+    pub fn new(config: &Config, name: String, variants: Vec<String>) -> Self {
+        Self {
+            name: config.symbol_name(&name),
+            variants,
+        }
     }
 
     pub fn format(&self) -> String {

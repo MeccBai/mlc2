@@ -5,7 +5,6 @@ use crate::ast::generic::InsFailed;
 use crate::ast::types::CompileType::List;
 use crate::ast::{SymbolTable, TypeIndex};
 use std::collections::HashMap;
-use std::sync::Arc;
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct ListType {
@@ -62,7 +61,7 @@ impl ListType {
     }
 
     pub fn instantiation(
-        &self,
+        self,
         params: &HashMap<GenericIndex, TypeIndex>,
         symbols: &mut SymbolTable,
         actives: Option<&mut HashMap<String, TypeIndex>>,

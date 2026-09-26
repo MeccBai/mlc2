@@ -1,13 +1,15 @@
 use chumsky::primitive::todo;
 
-use crate::ast::arena::{GenericArena, get_ident};
-use crate::ast::generic::InsFailed;
+use crate::ast::arena::{GenericArena, InterfaceIndex, get_ident};
+use crate::ast::config::Config;
+use crate::ast::generic::{Constraints, InsFailed};
 use crate::ast::types::CompileType::{Generic, Unit};
+use crate::ast::types::resolve_type;
 use crate::ast::{GenericIndex, SymbolTable, TypeArena, TypeIndex, stmt::Statement};
 use crate::error::ice::ice;
+use crate::parser::Visibility::{self, Export, Private};
 use crate::parser::out::{TempType, TempUnit};
 use std::collections::HashMap;
-use std::mem;
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct UnitMember {
@@ -16,23 +18,6 @@ pub struct UnitMember {
     pub public: bool,
 }
 
-pub struct Interface {
-    pub symbol: InterfaceSymbol,
-    pub body: Vec<Statement>,
-}
-
-pub struct InterfaceSymbol {
-    pub public: bool,
-    /// Whether the implicit receiver may mutate its owning unit.
-    pub mutable: bool,
-    pub exported: bool,
-    pub owner: TypeIndex,
-    pub attributes: Vec<String>,
-    pub generics: Vec<GenericIndex>,
-    pub name: String,
-    pub params: Vec<(TypeIndex, String)>,
-    pub ret_type: Option<TypeIndex>,
-}
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct UnitType {
     pub name: String,
@@ -42,45 +27,66 @@ pub struct UnitType {
     pub exported: bool,
 }
 
-pub struct UnitResult {
-    pub unit: UnitType,
-    pub generic: bool,
-    pub need_finalize: bool,
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+pub enum UnitError {
+    GenericNotFound,
+    MemberTypeNotFound,
+    MemberTypeIsGeneric,
 }
 
 impl UnitType {
-    pub fn new(prototype: TempUnit, arena: &TypeArena, generics: &mut GenericArena) -> UnitResult {
-        let name = prototype.name;
-        let attributes = prototype.attributes;
+    pub fn new(
+        config: &Config,
+        prototype: TempUnit,
+        symbols: &mut SymbolTable,
+    ) -> Result<UnitType, UnitError> {
+        let mut this = UnitType {
+            name: prototype.name,
+            attributes: prototype.attributes,
+            members: Vec::new(),
+            generics: Vec::new(),
+            exported: match prototype.visibility {
+                Export => true,
+                Private => false,
+                _ => ice("Unexpected visibility for unit type."),
+            },
+        };
 
-        let mut need_finalize = false;
+        let mut generics = HashMap::<String, GenericIndex>::new();
 
-        let mut members = Vec::<UnitMember>::new();
+        this.generics = prototype
+            .generics
+            .into_iter()
+            .map(|generic| {
+                let constraint = generic
+                    .constraint
+                    .unwrap_or_else(|| ice("Generic constraint not found."))
+                    .join();
+                let ident = get_ident(&constraint);
+                let index = symbols
+                    .generics
+                    .requires
+                    .get_by_ident(ident)
+                    .unwrap_or_else(|| ice("Generic constraint type not found."));
+                generics.insert(generic.name, index);
+                index
+            })
+            .collect::<Vec<_>>();
 
-        prototype.members.into_iter().for_each(|member| {
-            let name = member.name;
-            let public = member.public;
-            match member.ty.0 {
-                TempType::Path(temp) => {
-                    let ty = temp.join();
-                    let ident = get_ident(&ty);
-                    let ty_index = arena.get_by_ident(ident);
-                    if let Some(ty_index) = ty_index {
-                        members.push(UnitMember {
-                            name,
-                            member_type: ty_index,
-                            public,
-                        });
-                    } else {
-                        need_finalize = true;
-                    }
+        this.members = prototype
+            .members
+            .into_iter()
+            .map(|member| {
+                let ty_index = resolve_type(config, member.ty.0, symbols).unwrap();
+                UnitMember {
+                    name: member.name,
+                    member_type: ty_index,
+                    public: member.public,
                 }
-                TempType::Generic { base, args } => {}
-                TempType::Reference(reference) => {}
-            }
-        });
+            })
+            .collect::<Vec<_>>();
 
-        todo!()
+        Ok(this)
     }
 
     pub fn empty() -> Self {
@@ -92,8 +98,6 @@ impl UnitType {
             exported: false,
         }
     }
-
-    pub fn finalize(&mut self) {}
 
     pub fn format(&self) -> String {
         self.name.clone()
@@ -134,7 +138,7 @@ impl UnitType {
     }
 
     pub fn instantiation(
-        &self,
+        self,
         params: &HashMap<GenericIndex, TypeIndex>,
         symbols: &mut SymbolTable,
         actives: Option<&mut HashMap<String, TypeIndex>>,

@@ -1,6 +1,8 @@
-use crate::ast::func::FuncBody;
+use crate::ast::func::{FuncBody, FuncSymbol};
+use crate::ast::func::{Interface, InterfaceSymbol};
 use crate::ast::generic::GenericRequire;
 use crate::ast::types::CompileType;
+use chumsky::primitive::todo;
 use lasso::{Rodeo, Spur};
 use std::collections::HashMap;
 use std::fmt;
@@ -95,6 +97,10 @@ impl<T> NamedArena<T> {
     pub fn value_by_ident(&self, name: Ident) -> Option<&T> {
         self.get_by_ident(name).map(|index| self.get(index))
     }
+
+    pub fn set(&mut self, index: &ArenaIndex<T>, data: T) {
+        self.values[index.index] = data;
+    }
 }
 
 pub fn get_ident(name: &String) -> Ident {
@@ -108,5 +114,9 @@ pub type TypeIndex = ArenaIndex<CompileType>;
 pub type GenericArena = NamedArena<GenericRequire>;
 pub type GenericIndex = ArenaIndex<GenericRequire>;
 
-pub type FuncArena = NamedArena<FuncBody>;
-pub type FuncIndex = ArenaIndex<FuncBody>;
+pub type FuncArena = NamedArena<FuncSymbol>;
+pub type FuncIndex = ArenaIndex<FuncSymbol>;
+
+pub type InterfaceArena = NamedArena<InterfaceSymbol>;
+pub type InterfaceIndex = ArenaIndex<InterfaceSymbol>;
+
