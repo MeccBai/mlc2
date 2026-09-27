@@ -124,7 +124,7 @@ unit One {
 
 One::func of() {}
 
-var t:One;
+var t:One = One{};
 t |> of;       //允许：调用自由函数 of(t)
 t |> t.of();   //不允许：成员函数不能作为管道目标
 

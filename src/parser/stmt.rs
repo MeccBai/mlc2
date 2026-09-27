@@ -3,8 +3,9 @@ use chumsky::{input::ValueInput, prelude::*};
 use crate::lexer::{TokenPack, token::Token};
 
 use super::{
-    MatchPattern, ParseError, Scope, Spanned, Statement, out::Span,
+    MatchPattern, ParseError, Scope, Spanned, Statement,
     expr::expression_parser,
+    out::Span,
     split::{ident, keyword, operator, type_parser},
 };
 
@@ -25,9 +26,7 @@ where
             .map(|statements| Scope { statements });
 
         let declared_type = operator(Token::Colon).ignore_then(type_parser()).or_not();
-        let initializer = operator(Token::Assign)
-            .ignore_then(expression.clone())
-            .or_not();
+        let initializer = operator(Token::Assign).ignore_then(expression.clone());
 
         let variable = choice((
             keyword(Token::Variable).to(false),
@@ -41,7 +40,7 @@ where
             constant,
             name,
             ty,
-            value,
+            value: Some(value),
         });
 
         let return_ = keyword(Token::Return)

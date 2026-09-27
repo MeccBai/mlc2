@@ -40,7 +40,7 @@ pub struct TempInterface {
 #[derive(Debug, Clone, PartialEq)]
 pub struct TempInterfaceSymbol {
     pub visibility: TempVisibility,
-    pub owner: Option<TempPath>,
+    pub owner: Option<Spanned<TempPath>>,
     pub has_self: bool,
     pub mutable: bool,
     pub name: String,
@@ -108,7 +108,9 @@ impl TempInterfaceSymbol {
         format!(
             "{}\n    Owner: {:?}\n    Has self: {}\n    Mutable: {}\n    Visibility: {:?}\n    Generics: [{}]\n    Parameters: [{}]\n    Return Type: {}\n    Attributes: {:?}",
             self.name,
-            self.owner.as_ref().map(|owner| owner.segments.join("::")),
+            self.owner
+                .as_ref()
+                .map(|(owner, _)| owner.segments.join("::")),
             self.has_self,
             self.mutable,
             self.visibility,

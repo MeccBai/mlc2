@@ -105,11 +105,7 @@ where
         )))
         .then(ident())
         .then(operator(Token::Colon).ignore_then(type_parser()).or_not())
-        .then(
-            operator(Token::Assign)
-                .ignore_then(super::expr::expression_parser())
-                .or_not(),
-        )
+        .then(operator(Token::Assign).ignore_then(super::expr::expression_parser()))
         .then_ignore(keyword(Token::Semicolon))
         .map(|(((constant, name), ty), initializer)| {
             TempGlobalStmt::Variable(TempVar {
@@ -123,53 +119,63 @@ where
         .map_with(|item, extra| (item, extra.span()));
 
     let declaration = attributes()
-        .then(visibility())
+        .then(visibility().map_with(|visibility, extra| (visibility, extra.span())))
         .then(choice((
             import, unit, using, generic, enum_, interface, function,
         )))
-        .map(|((attributes, visibility), raw)| match raw {
-            RawItem::Import(path) => TempGlobalStmt::Import(ImportModule::new(
-                path.segments,
-                matches!(visibility, TempVisibility::Export | TempVisibility::Api),
-            )),
-            RawItem::Function(mut function) => {
-                function.symbol.visibility = visibility;
-                function.symbol.attributes = attributes;
-                TempGlobalStmt::Func(function)
+        .try_map(|((attributes, (visibility, visibility_span)), raw), _| {
+            if !matches!(raw, RawItem::Interface(_))
+                && matches!(visibility, TempVisibility::Public | TempVisibility::Api)
+            {
+                return Err(Rich::custom(
+                    visibility_span,
+                    "pub and api are only valid for interfaces",
+                ));
             }
-            RawItem::Interface(mut interface) => {
-                interface.symbol.visibility = visibility;
-                interface.symbol.attributes = attributes;
-                TempGlobalStmt::Interface(interface)
-            }
-            RawItem::Unit {
-                name,
-                generics,
-                members,
-            } => TempGlobalStmt::Unit(TempUnit {
-                visibility,
-                name,
-                generics,
-                members,
-                attributes,
-            }),
-            RawItem::Using { name, ty } => TempGlobalStmt::Using(TempUsing {
-                visibility,
-                name,
-                target: ty,
-            }),
-            RawItem::Generic { name, requirements } => TempGlobalStmt::Generic(TempGeneric {
-                visibility,
-                name,
-                requirements,
-                attributes,
-            }),
-            RawItem::Enum { name, variants } => TempGlobalStmt::Enum(TempEnum {
-                visibility,
-                name,
-                variants,
-                attributes,
-            }),
+            Ok(match raw {
+                RawItem::Import(path) => TempGlobalStmt::Import(ImportModule::new(
+                    path.segments,
+                    matches!(visibility, TempVisibility::Export),
+                )),
+                RawItem::Function(mut function) => {
+                    function.symbol.visibility = visibility;
+                    function.symbol.attributes = attributes;
+                    TempGlobalStmt::Func(function)
+                }
+                RawItem::Interface(mut interface) => {
+                    interface.symbol.visibility = visibility;
+                    interface.symbol.attributes = attributes;
+                    TempGlobalStmt::Interface(interface)
+                }
+                RawItem::Unit {
+                    name,
+                    generics,
+                    members,
+                } => TempGlobalStmt::Unit(TempUnit {
+                    visibility,
+                    name,
+                    generics,
+                    members,
+                    attributes,
+                }),
+                RawItem::Using { name, ty } => TempGlobalStmt::Using(TempUsing {
+                    visibility,
+                    name,
+                    target: ty,
+                }),
+                RawItem::Generic { name, requirements } => TempGlobalStmt::Generic(TempGeneric {
+                    visibility,
+                    name,
+                    requirements,
+                    attributes,
+                }),
+                RawItem::Enum { name, variants } => TempGlobalStmt::Enum(TempEnum {
+                    visibility,
+                    name,
+                    variants,
+                    attributes,
+                }),
+            })
         })
         .map_with(|item, extra| (item, extra.span()))
         .labelled("module declaration");

@@ -7,6 +7,7 @@ use crate::error::ice::ice;
 use crate::error::{CompileError, IllegalUseError, ResolveError};
 use crate::parser::out::{Span, TempUnit};
 use std::collections::HashMap;
+use std::hash::Hash;
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct UnitMember {
@@ -15,12 +16,13 @@ pub struct UnitMember {
     pub public: bool,
 }
 
-#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UnitType {
     pub name: String,
     pub members: Vec<UnitMember>,
     pub attributes: Vec<String>,
-    pub generics: Vec<GenericIndex>,
+    pub generics: Vec<String>,
+    pub generic_map: HashMap<String, GenericIndex>,
     pub exported: bool,
 }
 
@@ -31,10 +33,11 @@ impl UnitType {
             attributes: prototype.attributes,
             members: Vec::new(),
             generics: Vec::new(),
+            generic_map: HashMap::new(),
             exported: prototype.visibility.normal_export(),
         };
 
-        let mut generics = HashMap::<String, GenericIndex>::new();
+        let mut generic_map = HashMap::<String, GenericIndex>::new();
 
         this.generics = prototype
             .generics
@@ -48,10 +51,12 @@ impl UnitType {
                         .submit_error(CompileError::Resolve(ResolveError::UnknownConstraint), span);
                     return None;
                 };
-                generics.insert(generic.name, index);
-                Some(index)
+                generic_map.insert(generic.name.clone(), index);
+                Some(generic.name)
             })
             .collect::<Vec<_>>();
+
+        this.generic_map = generic_map;
 
         this.members = prototype
             .members
@@ -75,6 +80,7 @@ impl UnitType {
             members: Vec::new(),
             attributes: Vec::new(),
             generics: Vec::new(),
+            generic_map: HashMap::new(),
             exported: false,
         }
     }
@@ -140,6 +146,10 @@ impl UnitType {
         }
 
         for generic in &self.generics {
+            let generic = self
+                .generic_map
+                .get(generic)
+                .unwrap_or_else(|| ice("Generic not found."));
             let Some(&argument) = params.get(generic) else {
                 config.submit_error(
                     CompileError::IllegalUse(IllegalUseError::GenericCountMismatch),
@@ -200,6 +210,7 @@ impl UnitType {
             members: new_members,
             attributes: self.attributes.clone(),
             generics: Vec::new(),
+            generic_map: HashMap::new(),
             exported: self.exported,
         };
 
@@ -221,7 +232,11 @@ impl UnitType {
             .iter()
             .map(|generic| {
                 params
-                    .get(generic)
+                    .get(
+                        self.generic_map
+                            .get(generic)
+                            .unwrap_or_else(|| ice("Generic not found")),
+                    )
                     .unwrap_or_else(|| ice("Generic param not found."))
                     .format(arena)
             })

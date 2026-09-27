@@ -6,6 +6,8 @@ mod generic;
 pub mod stmt;
 pub(crate) mod types;
 
+use std::collections::HashMap;
+
 use crate::ast::arena::{InterfaceArena, get_ident};
 use crate::ast::func::FuncSymbol;
 use crate::ast::func::{Interface, InterfaceSymbol};
@@ -96,6 +98,7 @@ impl SymbolTable {
                         ret_type: Some(ret_type),
                         generics: Vec::new(),
                         attributes: Vec::new(),
+                        generic_map: HashMap::new(),
                         exported: false,
                     };
                     let ident = get_ident(&name);
@@ -227,7 +230,7 @@ impl AbstractSyntaxTree {
 
         symbols.globals = globals
             .into_iter()
-            .map(|temp_variable| Variable::new(temp_variable, &mut symbols))
+            .map(|temp_variable| Variable::new(&mut config, temp_variable, &mut symbols))
             .collect::<Vec<Variable>>();
 
         temp_funcs.into_iter().for_each(|(index, temp_body)| {

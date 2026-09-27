@@ -1,4 +1,5 @@
 use super::{Spanned, TempPath};
+use crate::ast::expr::operators::Operator;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TempLiteralKind {
@@ -9,43 +10,6 @@ pub enum TempLiteralKind {
     Null,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum TempUnaryOp {
-    Negate,
-    LogicalNot,
-    BitNot,
-    AddressOf,
-    Dereference,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum TempBinaryOp {
-    Add,
-    Subtract,
-    Multiply,
-    Divide,
-    Remainder,
-    ShiftLeft,
-    ShiftRight,
-    BitAnd,
-    BitOr,
-    BitXor,
-    Equal,
-    NotEqual,
-    Less,
-    LessOrEqual,
-    Greater,
-    GreaterOrEqual,
-    LogicalAnd,
-    LogicalOr,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum TempMemberAccess {
-    Dot,
-    Arrow,
-}
-
 #[derive(Debug, Clone, PartialEq)]
 pub enum TempExpr {
     Literal {
@@ -53,14 +17,14 @@ pub enum TempExpr {
         text: String,
     },
     Path(TempPath),
+    Group(Box<Spanned<TempExpr>>),
     Unary {
-        op: TempUnaryOp,
+        op: Operator,
         value: Box<Spanned<TempExpr>>,
     },
     Binary {
-        lhs: Box<Spanned<TempExpr>>,
-        op: TempBinaryOp,
-        rhs: Box<Spanned<TempExpr>>,
+        operands: Vec<Spanned<TempExpr>>,
+        operators: Vec<Operator>,
     },
     Call {
         callee: Box<Spanned<TempExpr>>,
@@ -68,7 +32,7 @@ pub enum TempExpr {
     },
     Member {
         base: Box<Spanned<TempExpr>>,
-        access: TempMemberAccess,
+        indirect: bool,
         name: String,
     },
     Init {
@@ -83,9 +47,23 @@ impl TempExpr {
         match self {
             Self::Literal { text, .. } => text.clone(),
             Self::Path(path) => path.segments.join("::"),
+            Self::Group(inner) => format!("({})", inner.0.dump()),
             Self::Unary { op, value } => format!("{op:?}({})", value.0.dump()),
-            Self::Binary { lhs, op, rhs } => {
-                format!("({} {op:?} {})", lhs.0.dump(), rhs.0.dump())
+            Self::Binary {
+                operands,
+                operators,
+            } => {
+                if operators == &[Operator::Index] && operands.len() == 2 {
+                    return format!("{}[{}]", operands[0].0.dump(), operands[1].0.dump());
+                }
+                let mut parts = operands.iter().map(|(expr, _)| expr.dump());
+                let first = parts.next().unwrap_or_default();
+                let rest = operators
+                    .iter()
+                    .zip(parts)
+                    .map(|(op, expr)| format!(" {op:?} {expr}"))
+                    .collect::<String>();
+                format!("({first}{rest})")
             }
             Self::Call { callee, args } => format!(
                 "{}({})",
@@ -95,8 +73,13 @@ impl TempExpr {
                     .collect::<Vec<_>>()
                     .join(", ")
             ),
-            Self::Member { base, access, name } => {
-                format!("{} {access:?} {name}", base.0.dump())
+            Self::Member {
+                base,
+                indirect,
+                name,
+            } => {
+                let access = if *indirect { "->" } else { "." };
+                format!("{}{access}{name}", base.0.dump())
             }
             Self::Init { target, values } => format!(
                 "{}{{{}}}",

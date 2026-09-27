@@ -1,23 +1,25 @@
 use chumsky::{input::ValueInput, prelude::*};
 
+use crate::ast::expr::operators::Operator;
 use crate::lexer::{TokenPack, token::Token};
 
 use super::{
-    BinaryOp, Expr, LiteralKind, MemberAccess, ParseError, Spanned, UnaryOp,
+    Expr, LiteralKind, ParseError, Spanned,
     out::Span,
     split::{keyword, operator, path},
 };
 
 enum Postfix {
     Call(Vec<Spanned<Expr>>),
-    Member(MemberAccess, String),
+    Member(bool, String),
     Init(Vec<Spanned<Expr>>),
+    Index(Spanned<Expr>),
 }
 
 fn binary<'tokens, I>(
     token: Token,
-    op: BinaryOp,
-) -> impl Parser<'tokens, I, BinaryOp, extra::Err<ParseError<'tokens>>> + Clone
+    op: Operator,
+) -> impl Parser<'tokens, I, Operator, extra::Err<ParseError<'tokens>>> + Clone
 where
     I: ValueInput<'tokens, Token = TokenPack, Span = Span>,
 {
@@ -31,21 +33,57 @@ fn fold_binary<'tokens, I, P, O>(
 where
     I: ValueInput<'tokens, Token = TokenPack, Span = Span>,
     P: Parser<'tokens, I, Spanned<Expr>, extra::Err<ParseError<'tokens>>> + Clone + 'tokens,
-    O: Parser<'tokens, I, BinaryOp, extra::Err<ParseError<'tokens>>> + Clone + 'tokens,
+    O: Parser<'tokens, I, Operator, extra::Err<ParseError<'tokens>>> + Clone + 'tokens,
 {
     operand
         .clone()
         .foldl_with(op.then(operand).repeated(), |lhs, (op, rhs), extra| {
+            let span = extra.span();
+            if op.changes_binary_result_type() {
+                return (
+                    Expr::Binary {
+                        operands: vec![lhs, rhs],
+                        operators: vec![op],
+                    },
+                    span,
+                );
+            }
+
+            let mut operands = Vec::new();
+            let mut operators = Vec::new();
+            append_same_type_operand(lhs, &mut operands, &mut operators);
+            operators.push(op);
+            append_same_type_operand(rhs, &mut operands, &mut operators);
             (
                 Expr::Binary {
-                    lhs: Box::new(lhs),
-                    op,
-                    rhs: Box::new(rhs),
+                    operands,
+                    operators,
                 },
-                extra.span(),
+                span,
             )
         })
         .boxed()
+}
+
+fn append_same_type_operand(
+    expr: Spanned<Expr>,
+    operands: &mut Vec<Spanned<Expr>>,
+    operators: &mut Vec<Operator>,
+) {
+    let (expr, span) = expr;
+    match expr {
+        Expr::Binary {
+            operands: nested_operands,
+            operators: nested_operators,
+        } if nested_operators
+            .iter()
+            .all(|op| !op.changes_binary_result_type()) =>
+        {
+            operands.extend(nested_operands);
+            operators.extend(nested_operators);
+        }
+        other => operands.push((other, span)),
+    }
 }
 
 pub fn expression_parser<'tokens, I>()
@@ -87,7 +125,7 @@ where
         let parenthesized = expr
             .clone()
             .delimited_by(keyword(Token::LParen), keyword(Token::RParen))
-            .map_with(|(expr, _), extra| (expr, extra.span()));
+            .map_with(|expr, extra| (Expr::Group(Box::new(expr)), extra.span()));
 
         let bare_init = init_list
             .clone()
@@ -112,30 +150,38 @@ where
             .map(Postfix::Call);
 
         let member = choice((
-            operator(Token::Dot).to(MemberAccess::Dot),
-            operator(Token::Arrow).to(MemberAccess::Arrow),
+            operator(Token::Dot).to(false),
+            operator(Token::Arrow).to(true),
         ))
         .then(super::split::ident())
         .map(|(access, name)| Postfix::Member(access, name));
 
         let postfix_init = init_list.map(Postfix::Init);
+        let index = expr
+            .clone()
+            .delimited_by(keyword(Token::LeftBracket), keyword(Token::RightBracket))
+            .map(Postfix::Index);
 
         let postfix = atom.foldl_with(
-            choice((call, member, postfix_init)).repeated(),
+            choice((call, member, postfix_init, index)).repeated(),
             |base, postfix, extra| {
                 let expr = match postfix {
                     Postfix::Call(args) => Expr::Call {
                         callee: Box::new(base),
                         args,
                     },
-                    Postfix::Member(access, name) => Expr::Member {
+                    Postfix::Member(indirect, name) => Expr::Member {
                         base: Box::new(base),
-                        access,
+                        indirect,
                         name,
                     },
                     Postfix::Init(values) => Expr::Init {
                         target: Some(Box::new(base)),
                         values,
+                    },
+                    Postfix::Index(index) => Expr::Binary {
+                        operands: vec![base, index],
+                        operators: vec![Operator::Index],
                     },
                 };
                 (expr, extra.span())
@@ -143,11 +189,11 @@ where
         );
 
         let prefix = choice((
-            operator(Token::Minus).to(UnaryOp::Negate),
-            operator(Token::LogicalNot).to(UnaryOp::LogicalNot),
-            operator(Token::BitNot).to(UnaryOp::BitNot),
-            operator(Token::AddressOf).to(UnaryOp::AddressOf),
-            operator(Token::Dereference).to(UnaryOp::Dereference),
+            operator(Token::Minus).to(Operator::Negate),
+            operator(Token::LogicalNot).to(Operator::LogicalNot),
+            operator(Token::BitNot).to(Operator::BitNot),
+            operator(Token::AddressOf).to(Operator::AddressOf),
+            operator(Token::Dereference).to(Operator::Dereference),
         ));
 
         let unary = prefix
@@ -168,38 +214,38 @@ where
             });
 
         let product_op = choice((
-            binary(Token::Multi, BinaryOp::Multiply),
-            binary(Token::Div, BinaryOp::Divide),
-            binary(Token::Mod, BinaryOp::Remainder),
+            binary(Token::Multi, Operator::Multiply),
+            binary(Token::Div, Operator::Divide),
+            binary(Token::Mod, Operator::Remainder),
         ));
         let product = fold_binary(unary, product_op);
 
         let sum_op = choice((
-            binary(Token::Plus, BinaryOp::Add),
-            binary(Token::Minus, BinaryOp::Subtract),
+            binary(Token::Plus, Operator::Add),
+            binary(Token::Minus, Operator::Subtract),
         ));
         let sum = fold_binary(product, sum_op);
 
         let shift_op = choice((
-            binary(Token::Shl, BinaryOp::ShiftLeft),
-            binary(Token::Shr, BinaryOp::ShiftRight),
+            binary(Token::Shl, Operator::ShiftLeft),
+            binary(Token::Shr, Operator::ShiftRight),
         ));
         let shift = fold_binary(sum, shift_op);
 
         let compare_op = choice((
-            binary(Token::Equal, BinaryOp::Equal),
-            binary(Token::NotEqual, BinaryOp::NotEqual),
-            binary(Token::LAngle, BinaryOp::Less),
-            binary(Token::LessOrEqual, BinaryOp::LessOrEqual),
-            binary(Token::RAngle, BinaryOp::Greater),
-            binary(Token::GreaterOrEqual, BinaryOp::GreaterOrEqual),
+            binary(Token::Equal, Operator::Equal),
+            binary(Token::NotEqual, Operator::NotEqual),
+            binary(Token::LAngle, Operator::Less),
+            binary(Token::LessOrEqual, Operator::LessOrEqual),
+            binary(Token::RAngle, Operator::Greater),
+            binary(Token::GreaterOrEqual, Operator::GreaterOrEqual),
         ));
         let compare = fold_binary(shift, compare_op);
-        let bit_and = fold_binary(compare, binary(Token::BitAnd, BinaryOp::BitAnd));
-        let bit_xor = fold_binary(bit_and, binary(Token::BitXor, BinaryOp::BitXor));
-        let bit_or = fold_binary(bit_xor, binary(Token::BitOr, BinaryOp::BitOr));
-        let logical_and = fold_binary(bit_or, binary(Token::LogicalAnd, BinaryOp::LogicalAnd));
-        let logical_or = fold_binary(logical_and, binary(Token::LogicalOr, BinaryOp::LogicalOr));
+        let bit_and = fold_binary(compare, binary(Token::BitAnd, Operator::BitAnd));
+        let bit_xor = fold_binary(bit_and, binary(Token::BitXor, Operator::BitXor));
+        let bit_or = fold_binary(bit_xor, binary(Token::BitOr, Operator::BitOr));
+        let logical_and = fold_binary(bit_or, binary(Token::LogicalAnd, Operator::LogicalAnd));
+        let logical_or = fold_binary(logical_and, binary(Token::LogicalOr, Operator::LogicalOr));
 
         let pipe_target = path()
             .then(

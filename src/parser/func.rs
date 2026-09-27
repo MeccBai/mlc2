@@ -114,7 +114,10 @@ pub fn interface_symbol_parser<'tokens, I>(
 where
     I: ValueInput<'tokens, Token = TokenPack, Span = Span>,
 {
-    let owner = path().then_ignore(operator(Token::ColonColon)).map(Some);
+    let owner = path()
+        .map_with(|path, extra| (path, extra.span()))
+        .then_ignore(operator(Token::ColonColon))
+        .map(Some);
     let owner = if require_owner {
         owner.boxed()
     } else {

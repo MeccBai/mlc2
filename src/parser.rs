@@ -14,11 +14,10 @@ use self::out::Span;
 
 pub use glob::module_parser;
 pub(crate) use out::{
-    Spanned, TempBinaryOp as BinaryOp, TempConstraints as GenericRequirement, TempExpr as Expr,
-    TempFunc as FunctionDecl, TempGenericParam as GenericParam, TempLiteralKind as LiteralKind,
-    TempMatchPattern as MatchPattern, TempMemberAccess as MemberAccess, TempParam as Param,
-    TempPath as Path, TempScope as Scope, TempStmt as Statement, TempType as TypeExpr,
-    TempUnaryOp as UnaryOp, TempVisibility as Visibility,
+    Spanned, TempConstraints as GenericRequirement, TempExpr as Expr, TempFunc as FunctionDecl,
+    TempGenericParam as GenericParam, TempLiteralKind as LiteralKind,
+    TempMatchPattern as MatchPattern, TempParam as Param, TempPath as Path, TempScope as Scope,
+    TempStmt as Statement, TempType as TypeExpr, TempVisibility as Visibility,
 };
 pub use out::{TempGlobalStmt, TempModule};
 
@@ -37,9 +36,7 @@ pub fn parse(
 mod tests {
     use super::*;
     use crate::lexer::tokenize;
-    use crate::parser::out::{
-        TempEnum, TempExpr, TempMatchPattern, TempPath, TempStmt, TempType, TempUnaryOp,
-    };
+    use crate::parser::out::{TempEnum, TempExpr, TempMatchPattern, TempPath, TempStmt, TempType};
 
     fn parse_ok(source: &str) -> TempModule {
         let lexed = tokenize(source).unwrap();
@@ -51,6 +48,30 @@ mod tests {
     #[test]
     fn parses_import() {
         assert_eq!(parse_ok("import std::io;").len(), 1);
+    }
+
+    #[test]
+    fn only_interfaces_accept_pub_and_api_visibility() {
+        for declaration in [
+            "import std::io;",
+            "unit Point {};",
+            "using PointAlias = Point;",
+            "generic Number {};",
+            "enum Color { Red };",
+            "func run();",
+        ] {
+            for visibility in ["pub", "api"] {
+                let source = format!("{visibility} {declaration}");
+                let lexed = tokenize(&source).unwrap();
+                let (_, errors) = parse(&lexed.tokens, source.len());
+                assert!(!errors.is_empty(), "{source} should be rejected");
+                assert_eq!(errors[0].span().into_range(), 0..visibility.len());
+            }
+        }
+
+        parse_ok("pub Point::func inspect(self);");
+        parse_ok("api Point::func inspect(self);");
+        parse_ok("export func run();");
     }
 
     #[test]
@@ -78,6 +99,23 @@ mod tests {
             TempGlobalStmt::Variable(variable)
                 if variable.name == "limit" && variable.constant
         ));
+    }
+
+    #[test]
+    fn variable_declarations_require_initializers() {
+        for source in [
+            "func main() { var x:i32; }",
+            "func main() { const x:i32; }",
+            "global var x:i32;",
+            "global const x:i32;",
+        ] {
+            let lexed = tokenize(source).unwrap();
+            let (_, errors) = parse(&lexed.tokens, source.len());
+            assert!(!errors.is_empty(), "{source} should be rejected");
+        }
+
+        parse_ok("func main() { var x:i32 = 1; const y = 2; }");
+        parse_ok("global var x:i32 = 1; global const y = 2;");
     }
 
     #[test]
@@ -146,9 +184,178 @@ mod tests {
     }
 
     #[test]
+    fn temp_expressions_flatten_type_preserving_operators_across_precedence() {
+        use crate::ast::expr::operators::Operator;
+
+        let module = parse_ok("func main() { var x = a + b - c * d; var y = object.field; }");
+        let TempGlobalStmt::Func(function) = &module[0].0 else {
+            panic!("expected a function");
+        };
+        let statements = &function.body.as_ref().unwrap().statements;
+        assert!(matches!(
+            &statements[0].0,
+            TempStmt::Variable {
+                value: Some((TempExpr::Binary { operands, operators }, _)),
+                ..
+            } if operators == &[Operator::Add, Operator::Subtract, Operator::Multiply]
+                && operands.len() == 4
+        ));
+        assert!(matches!(
+            &statements[1].0,
+            TempStmt::Variable {
+                value: Some((
+                    TempExpr::Member {
+                        indirect: false,
+                        ..
+                    },
+                    _
+                )),
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn binary_flattening_preserves_parentheses_and_member_access_kind() {
+        use crate::ast::expr::operators::Operator;
+
+        let module = parse_ok("func main() { var x = a - (b - c); var y = ptr->field + 1; }");
+        let TempGlobalStmt::Func(function) = &module[0].0 else {
+            panic!("expected a function");
+        };
+        let statements = &function.body.as_ref().unwrap().statements;
+        assert!(matches!(
+            &statements[0].0,
+            TempStmt::Variable {
+                value: Some((TempExpr::Binary { operands, operators }, _)),
+                ..
+            } if operators == &[Operator::Subtract]
+                && matches!(&operands[1].0, TempExpr::Group(inner)
+                    if matches!(&inner.0, TempExpr::Binary { operators, .. }
+                        if operators == &[Operator::Subtract]))
+        ));
+        assert!(matches!(
+            &statements[1].0,
+            TempStmt::Variable {
+                value: Some((TempExpr::Binary { operands, .. }, _)),
+                ..
+            } if matches!(&operands[0].0, TempExpr::Member { indirect: true, .. })
+        ));
+    }
+
+    #[test]
+    fn flattened_binary_keeps_call_init_and_array_operands() {
+        let module = parse_ok("func main() { var x = f(1) + Point{2} + [3]; }");
+        let TempGlobalStmt::Func(function) = &module[0].0 else {
+            panic!("expected a function");
+        };
+        let TempStmt::Variable {
+            value: Some((TempExpr::Binary { operands, .. }, _)),
+            ..
+        } = &function.body.as_ref().unwrap().statements[0].0
+        else {
+            panic!("expected a flattened binary expression");
+        };
+        assert!(matches!(&operands[0].0, TempExpr::Call { .. }));
+        assert!(matches!(&operands[1].0, TempExpr::Init { .. }));
+        assert!(matches!(&operands[2].0, TempExpr::Array(_)));
+    }
+
+    #[test]
+    fn comparisons_form_type_changing_binary_boundaries() {
+        use crate::ast::expr::operators::Operator;
+
+        let module = parse_ok("func main() { var x = a + b * c < d + e; var y = a & b == c; }");
+        let TempGlobalStmt::Func(function) = &module[0].0 else {
+            panic!("expected a function");
+        };
+        let statements = &function.body.as_ref().unwrap().statements;
+        assert!(matches!(
+            &statements[0].0,
+            TempStmt::Variable {
+                value: Some((TempExpr::Binary { operands, operators }, _)),
+                ..
+            } if operators == &[Operator::Less]
+                && matches!(&operands[0].0, TempExpr::Binary { operators, .. }
+                    if operators == &[Operator::Add, Operator::Multiply])
+                && matches!(&operands[1].0, TempExpr::Binary { operators, .. }
+                    if operators == &[Operator::Add])
+        ));
+        assert!(matches!(
+            &statements[1].0,
+            TempStmt::Variable {
+                value: Some((TempExpr::Binary { operands, operators }, _)),
+                ..
+            } if operators == &[Operator::BitAnd]
+                && matches!(&operands[1].0, TempExpr::Binary { operators, .. }
+                    if operators == &[Operator::Equal])
+        ));
+    }
+
+    #[test]
+    fn logical_operators_keep_boolean_boundaries() {
+        use crate::ast::expr::operators::Operator;
+
+        let module = parse_ok("func main() { var x = a < b && c < d; }");
+        let TempGlobalStmt::Func(function) = &module[0].0 else {
+            panic!("expected a function");
+        };
+        assert!(matches!(
+            &function.body.as_ref().unwrap().statements[0].0,
+            TempStmt::Variable {
+                value: Some((TempExpr::Binary { operands, operators }, _)),
+                ..
+            } if operators == &[Operator::LogicalAnd]
+                && operands.iter().all(|(operand, _)| matches!(operand,
+                    TempExpr::Binary { operators, .. } if operators == &[Operator::Less]))
+        ));
+    }
+
+    #[test]
+    fn indexing_is_a_type_changing_binary_subexpression() {
+        use crate::ast::expr::operators::Operator;
+
+        let module = parse_ok(
+            "func main() { var x = values[i + 1] * 2; var y = matrix[row][column]; var z = [7, 8][0]; }",
+        );
+        let TempGlobalStmt::Func(function) = &module[0].0 else {
+            panic!("expected a function");
+        };
+        let statements = &function.body.as_ref().unwrap().statements;
+        assert!(matches!(
+            &statements[0].0,
+            TempStmt::Variable {
+                value: Some((TempExpr::Binary { operands, operators }, _)),
+                ..
+            } if operators == &[Operator::Multiply]
+                && matches!(&operands[0].0, TempExpr::Binary { operands, operators }
+                    if operators == &[Operator::Index]
+                        && matches!(&operands[1].0, TempExpr::Binary { operators, .. }
+                            if operators == &[Operator::Add]))
+        ));
+        assert!(matches!(
+            &statements[1].0,
+            TempStmt::Variable {
+                value: Some((TempExpr::Binary { operands, operators }, _)),
+                ..
+            } if operators == &[Operator::Index]
+                && matches!(&operands[0].0, TempExpr::Binary { operators, .. }
+                    if operators == &[Operator::Index])
+        ));
+        assert!(matches!(
+            &statements[2].0,
+            TempStmt::Variable {
+                value: Some((TempExpr::Binary { operands, operators }, _)),
+                ..
+            } if operators == &[Operator::Index]
+                && matches!(&operands[0].0, TempExpr::Array(values) if values.len() == 2)
+        ));
+    }
+
+    #[test]
     fn parses_references_arrays_and_half_open_for() {
         let module = parse_ok(
-            "func main() { var a:i32; var c:$i32 = @a; $c = 10; \
+            "func main() { var a:i32 = 0; var c:$i32 = @a; $c = 10; \
              var values = [1, 2, 3]; for i in [0, 10] { continue; } }",
         );
         let TempGlobalStmt::Func(function) = &module[0].0 else {
@@ -168,7 +375,7 @@ mod tests {
         assert!(matches!(
             value,
             TempExpr::Unary {
-                op: TempUnaryOp::AddressOf,
+                op: crate::ast::expr::operators::Operator::AddressOf,
                 ..
             }
         ));
@@ -177,7 +384,7 @@ mod tests {
             TempStmt::Assignment {
                 target: (
                     TempExpr::Unary {
-                        op: TempUnaryOp::Dereference,
+                        op: crate::ast::expr::operators::Operator::Dereference,
                         ..
                     },
                     _
@@ -223,7 +430,7 @@ mod tests {
         let TempGlobalStmt::Interface(method) = &module[3].0 else {
             panic!("expected a method");
         };
-        assert_eq!(method.symbol.owner.as_ref().unwrap().segments, ["Point"]);
+        assert_eq!(method.symbol.owner.as_ref().unwrap().0.segments, ["Point"]);
         assert!(method.symbol.has_self);
         assert!(method.symbol.mutable);
         assert_eq!(method.symbol.params.len(), 1);
@@ -257,7 +464,7 @@ mod tests {
         let out::TempConstraints::Interface(owned) = &generic.requirements[1].0 else {
             panic!("expected an owned interface requirement");
         };
-        assert_eq!(owned.owner.as_ref().unwrap().segments, ["Point"]);
+        assert_eq!(owned.owner.as_ref().unwrap().0.segments, ["Point"]);
         assert!(!owned.has_self);
         assert!(!owned.mutable);
         assert!(owned.params.is_empty());
@@ -294,8 +501,20 @@ mod tests {
         assert!(matches!(&module[0].0, TempGlobalStmt::Func(function)
             if function.symbol.name == "make" && function.body.is_some()));
         assert!(matches!(&module[1].0, TempGlobalStmt::Interface(interface)
-            if interface.symbol.owner.as_ref().unwrap().segments == ["Point"]
+            if interface.symbol.owner.as_ref().unwrap().0.segments == ["Point"]
                 && !interface.symbol.has_self && !interface.symbol.mutable && interface.body.is_some()));
+    }
+
+    #[test]
+    fn interface_owner_keeps_its_own_span() {
+        let source = "pkg::Point::func read(self);";
+        let module = parse_ok(source);
+        let TempGlobalStmt::Interface(interface) = &module[0].0 else {
+            panic!("expected an interface");
+        };
+        let (owner, span) = interface.symbol.owner.as_ref().unwrap();
+        assert_eq!(owner.segments, ["pkg", "Point"]);
+        assert_eq!(&source[span.into_range()], "pkg::Point");
     }
 
     #[test]

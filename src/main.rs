@@ -80,18 +80,24 @@ fn main() {
     });
 
     let (module, errors) = parser::parse(&lexed.tokens, code.len());
+    if !errors.is_empty() {
+        for error in &errors {
+            err_h.parse_error(error, code);
+        }
+        return;
+    }
+    let Some(module) = module else {
+        return;
+    };
 
     let config = Config::new(vec!["".to_string()], "".to_string(), "".to_string(), err_h);
 
-    let ast = ast::AbstractSyntaxTree::new(
-        config,
-        module.unwrap().into_iter().map(|(stmt, _)| stmt).collect(),
-    );
-    
+    let ast =
+        ast::AbstractSyntaxTree::new(config, module.into_iter().map(|(stmt, _)| stmt).collect());
+
     //if let Some(module) = module {
     //    for (item, _) in &module {
     //        println!("{}", item.dump());
     //    }
     //}
-
 }

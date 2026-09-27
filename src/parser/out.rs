@@ -7,7 +7,7 @@ use crate::{ast::ImportModule, error::ice::ice};
 
 pub use crate::lexer::Span;
 
-pub use expr::{TempBinaryOp, TempExpr, TempLiteralKind, TempMemberAccess, TempUnaryOp};
+pub use expr::{TempExpr, TempLiteralKind};
 pub use func::{TempFunc, TempFuncSymbol, TempInterface, TempInterfaceSymbol, TempParam};
 pub use stmt::{TempMatchPattern, TempScope, TempStmt};
 pub use types::{TempPath, TempType};
@@ -222,7 +222,7 @@ impl TempEnum {
 pub struct TempVar {
     pub name: String,
     pub ty: Option<Spanned<TempType>>,
-    pub initializer: Option<Spanned<TempExpr>>,
+    pub initializer: Spanned<TempExpr>,
     pub constant: bool,
     pub generics: Vec<TempGenericParam>,
 }
@@ -237,10 +237,7 @@ impl TempVar {
                 .as_ref()
                 .map(|(ty, _)| ty.dump())
                 .unwrap_or_else(|| "None".into()),
-            self.initializer
-                .as_ref()
-                .map(|(expr, _)| expr.dump())
-                .unwrap_or_else(|| "None".into())
+            self.initializer.0.dump()
         )
     }
 }

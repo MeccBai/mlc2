@@ -1,6 +1,4 @@
 use std::collections::HashMap;
-use std::hash::Hash;
-
 pub(crate) mod base_type;
 pub(crate) use base_type::BaseType;
 
@@ -24,7 +22,7 @@ use crate::error::ice::ice;
 use crate::error::{CompileError, ResolveError};
 use crate::parser::out::{Spanned, TempType};
 
-#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CompileType {
     Base(BaseType),
     Ref(RefType),
@@ -253,12 +251,15 @@ pub fn resolve_type(
                 .into_iter()
                 .map(|arg| resolve_type(config, arg, symbols))
                 .collect::<Option<Vec<_>>>()?;
-            let params = unit
-                .generics
-                .iter()
-                .copied()
-                .zip(resolved)
-                .collect::<HashMap<_, _>>();
+
+            let mut params = HashMap::new();
+            for (name, ty) in unit.generics.iter().zip(resolved) {
+                let Some(&index) = unit.generic_map.get(name) else {
+                    config.submit_error(CompileError::Resolve(ResolveError::UnknownGeneric), span);
+                    return None;
+                };
+                params.insert(index, ty);
+            }
             unit.instantiation(config, &params, symbols, None, span)
         }
         TempType::Reference(ref_type) => {
@@ -319,7 +320,7 @@ mod tests {
         let mut symbols = SymbolTable::new();
         let name = config.symbol_name("Box");
         let mut unit = UnitType::empty();
-        unit.generics.push(GenericIndex::empty());
+        unit.generics.push(String::new());
         symbols.generics.units.insert(get_ident(&name), unit);
         let span = (20..27).into();
         let ty = TempType::Generic {

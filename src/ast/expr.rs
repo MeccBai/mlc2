@@ -1,8 +1,11 @@
-pub mod build;
 pub mod operators;
+pub mod parse;
 
+use crate::ast::config::Config;
 use crate::ast::stmt::Variable;
-use crate::ast::{FuncIndex, TypeIndex};
+use crate::ast::{FuncIndex, SymbolTable, TypeIndex};
+use crate::parser::Spanned;
+use crate::parser::out::TempExpr;
 use operators::Operator;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CompAtom {
@@ -44,6 +47,15 @@ pub struct ConstValue {
     pub ty: TypeIndex,
 }
 
+impl ConstValue {
+    pub fn null() -> Self {
+        ConstValue {
+            value: "null".to_string(),
+            ty: TypeIndex::empty(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Expression {
     VarValue(Variable),
@@ -52,4 +64,16 @@ pub enum Expression {
     FunctionCall(FunctionCall),
     EnumValue(EnumValue),
     ConstValue(ConstValue),
+}
+
+impl Expression {
+    pub fn null() -> Self {
+        Expression::ConstValue(ConstValue::null())
+    }
+
+    pub fn type_inference(&self, config: &mut Config, symbols: &mut SymbolTable) -> TypeIndex {
+        todo!()
+    }
+
+
 }
