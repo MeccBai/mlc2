@@ -1,5 +1,6 @@
+use crate::ast::config::Config;
+use crate::ast::types::CompileType::Generic;
 use crate::lexer::tokenize;
-use crate::parser::TempGlobalStmt;
 
 mod ast;
 pub mod build;
@@ -79,44 +80,18 @@ fn main() {
     });
 
     let (module, errors) = parser::parse(&lexed.tokens, code.len());
-    for error in &errors {
-        err_h.parse_error(error, code);
-    }
-    if let Some(module) = module {
-        for (item, span) in &module {
-            match item {
-                TempGlobalStmt::Func(function) => {
-                    println!("Function: {}", function.symbol.name);
-                    print!("    Visibility:{:?}", function.symbol.visibility);
-                    print!("    Position:{:?}", span);
-                    println!()
-                }
 
-                TempGlobalStmt::Unit(unit) => {
-                    println!("Unit: {}", unit.name);
-                    println!("    Attributes: {:?}", unit.attributes);
-                    for generic in &unit.generics {
-                        print!("    Generic: {:?}", generic.name);
-                        println!("    Require: {:?}", generic.constraint);
-                    }
-                    for member in &unit.members {
-                        print!("    Member:{}", member.name);
-                        print!("    Type:{:?}", member.ty.0);
-                        println!("    Position:{:?}", member.ty.1);
-                    }
-                }
+    let config = Config::new(vec!["".to_string()], "".to_string(), "".to_string(), err_h);
 
-                TempGlobalStmt::Enum(enum_) => {
-                    println!("Enum: {}", enum_.name);
-                    println!("    Variants: {:?}", enum_.variants);
-                }
+    let ast = ast::AbstractSyntaxTree::new(
+        config,
+        module.unwrap().into_iter().map(|(stmt, _)| stmt).collect(),
+    );
+    
+    //if let Some(module) = module {
+    //    for (item, _) in &module {
+    //        println!("{}", item.dump());
+    //    }
+    //}
 
-                TempGlobalStmt::Import(import) => {
-                    println!("Import: {}", import.path().join("::"));
-                }
-
-                _ => {}
-            }
-        }
-    }
 }

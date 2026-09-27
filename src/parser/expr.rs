@@ -1,9 +1,10 @@
 use chumsky::{input::ValueInput, prelude::*};
 
-use crate::lexer::{Span, TokenPack, token::Token};
+use crate::lexer::{TokenPack, token::Token};
 
 use super::{
     BinaryOp, Expr, LiteralKind, MemberAccess, ParseError, Spanned, UnaryOp,
+    out::Span,
     split::{keyword, operator, path},
 };
 

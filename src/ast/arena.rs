@@ -3,17 +3,17 @@ use crate::ast::func::{Interface, InterfaceSymbol};
 use crate::ast::generic::GenericRequire;
 use crate::ast::types::CompileType;
 use chumsky::primitive::todo;
-use lasso::{Rodeo, Spur};
 use std::collections::HashMap;
 use std::fmt;
 use std::marker::PhantomData;
 
-pub type Ident = Spur;
+pub type Ident = String;
 
 pub struct ArenaIndex<T> {
     index: usize,
     _marker: PhantomData<fn() -> T>,
 }
+
 impl<T> fmt::Debug for ArenaIndex<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "ArenaIndex({})", self.index)
@@ -48,6 +48,10 @@ impl<T> ArenaIndex<T> {
             index,
             _marker: PhantomData,
         }
+    }
+
+    pub fn empty() -> Self {
+        Self::new(usize::MAX)
     }
 }
 
@@ -104,8 +108,7 @@ impl<T> NamedArena<T> {
 }
 
 pub fn get_ident(name: &String) -> Ident {
-    let mut interner = Rodeo::default();
-    interner.get_or_intern(name)
+    name.clone()
 }
 
 pub type TypeArena = NamedArena<CompileType>;
@@ -119,4 +122,3 @@ pub type FuncIndex = ArenaIndex<FuncSymbol>;
 
 pub type InterfaceArena = NamedArena<InterfaceSymbol>;
 pub type InterfaceIndex = ArenaIndex<InterfaceSymbol>;
-

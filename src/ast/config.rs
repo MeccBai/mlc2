@@ -1,4 +1,5 @@
 use crate::error::ErrorHandle;
+use crate::parser::out::Span;
 
 pub struct Config {
     system_path: Vec<String>,
@@ -37,5 +38,17 @@ impl Config {
 
     pub fn current_file(&self) -> &String {
         &self.current_file
+    }
+
+    pub fn submit_error(&mut self, error: crate::error::CompileError, span: Span) {
+        self.err_h.submit_error(error, span);
+    }
+
+    pub fn error_handle(&self) -> &ErrorHandle {
+        &self.err_h
+    }
+
+    pub fn into_error_handle(self) -> ErrorHandle {
+        self.err_h
     }
 }

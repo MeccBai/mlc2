@@ -1,7 +1,7 @@
 use crate::ast::arena::{GenericIndex, Ident, TypeArena, TypeIndex, get_ident};
-use crate::ast::generic::InsFailed;
+use crate::ast::config::Config;
 use crate::ast::types::CompileType::{self, Ref};
-use lasso::Rodeo;
+use crate::parser::out::Span;
 use std::collections::HashMap;
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
@@ -28,10 +28,8 @@ impl RefType {
         if new_type.level > 1 {
             let deref_type = RefType::new(new_type.base, new_type.level - 1);
             let type_str = deref_type.format(arena);
-            let mut interner = Rodeo::default();
-            let ident: Ident = interner.get_or_intern(type_str);
-            arena.insert(ident, CompileType::Ref(deref_type));
-            Some(arena.get_by_ident(ident).unwrap())
+            let ident: Ident = get_ident(&type_str);
+            Some(arena.insert(ident, CompileType::Ref(deref_type)))
         } else if new_type.level == 1 {
             Some(new_type.base)
         } else {
@@ -62,20 +60,24 @@ impl RefType {
 
     pub fn instantiation(
         self,
+        config: &mut Config,
         params: &HashMap<GenericIndex, TypeIndex>,
         symbols: &mut crate::ast::SymbolTable,
         actives: Option<&mut HashMap<String, TypeIndex>>,
-    ) -> Result<TypeIndex, InsFailed> {
-        let child = self.base.instantiation(params, symbols, actives)?;
+        span: Span,
+    ) -> Option<TypeIndex> {
+        let child = self
+            .base
+            .instantiation(config, params, symbols, actives, span)?;
         let instance = RefType::new(child, self.level);
 
         let name = instance.format(&symbols.types);
         let ident = get_ident(&name);
 
-        if let Some(index) = symbols.types.get_by_ident(ident) {
-            return Ok(index);
+        if let Some(index) = symbols.types.get_by_name(&ident) {
+            return Some(index);
         }
 
-        Ok(symbols.types.insert(ident, Ref(instance)))
+        Some(symbols.types.insert(ident, Ref(instance)))
     }
 }

@@ -21,7 +21,8 @@ use crate::ast::config::Config;
 use crate::ast::types::CompileType::{Base, Enum, Generic, List, Ref, Unit};
 use crate::ast::{GenericIndex, SymbolTable, TypeArena, TypeIndex};
 use crate::error::ice::ice;
-use crate::parser::out::TempType;
+use crate::error::{CompileError, ResolveError};
+use crate::parser::out::{Spanned, TempType};
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub enum CompileType {
@@ -47,10 +48,9 @@ impl CompileType {
 impl TypeArena {
     pub fn new() -> Self {
         let mut arena = Self::empty();
-        let mut interner = lasso::Rodeo::new();
         for ty in BaseType::base_types() {
             let name = match &ty {
-                Base(base) => interner.get_or_intern(base.name()),
+                Base(base) => get_ident(&base.name()),
                 _ => unreachable!(),
             };
             arena.insert(name, ty);
@@ -208,64 +208,130 @@ impl TypeIndex {
     }
 }
 
-#[derive(Debug, Clone, Hash, PartialEq, Eq)]
-pub enum TypeError {
-    UnknownType,
-    GenericNotFound,
-}
-
 pub fn resolve_type(
-    config: &Config,
-    temp: TempType,
+    config: &mut Config,
+    temp: Spanned<TempType>,
     symbols: &mut SymbolTable,
-) -> Result<TypeIndex, TypeError> {
+) -> Option<TypeIndex> {
+    let (temp, span) = temp;
     match temp {
         TempType::Path(path) => {
-            let name = config.symbol_name(&path.join());
-            let ident = get_ident(&name);
-            symbols
+            let path = path.join();
+            let local = config.symbol_name(&path);
+            match symbols
                 .types
-                .get_by_ident(ident)
-                .ok_or(TypeError::UnknownType)
+                .get_by_name(&local)
+                .or_else(|| symbols.types.get_by_name(&path))
+            {
+                Some(ty) => Some(ty),
+                None => {
+                    config.submit_error(CompileError::Resolve(ResolveError::UnknownType), span);
+                    None
+                }
+            }
         }
         TempType::Generic { base, args } => {
             let name = config.symbol_name(&base.join());
-
             let ident = get_ident(&name);
-            let index = symbols
-                .generics
-                .units
-                .get_by_ident(ident)
-                .ok_or(TypeError::UnknownType)?;
+            let index = match symbols.generics.units.get_by_ident(ident) {
+                Some(index) => index,
+                None => {
+                    config.submit_error(CompileError::Resolve(ResolveError::UnknownGeneric), span);
+                    return None;
+                }
+            };
 
-            let unit = symbols.generics.units.get_mut(index).clone();
-            let params = args
+            let unit = symbols.generics.units.get(index).clone();
+            if args.len() != unit.generics.len() {
+                config.submit_error(
+                    CompileError::IllegalUse(crate::error::IllegalUseError::GenericCountMismatch),
+                    span,
+                );
+                return None;
+            }
+            let resolved = args
                 .into_iter()
-                .map(|arg| resolve_type(config, arg.0, symbols))
-                .zip(unit.generics.iter())
-                .map(|(param, generic)| (generic.clone(), param.unwrap()))
+                .map(|arg| resolve_type(config, arg, symbols))
+                .collect::<Option<Vec<_>>>()?;
+            let params = unit
+                .generics
+                .iter()
+                .copied()
+                .zip(resolved)
                 .collect::<HashMap<_, _>>();
-
-            let instance = unit.instantiation(&params, symbols, None).unwrap();
-
-            Ok(instance)
+            unit.instantiation(config, &params, symbols, None, span)
         }
         TempType::Reference(ref_type) => {
-            let (base, _) = *ref_type;
-            let base = resolve_type(config, base, symbols)?;
+            let base = resolve_type(config, *ref_type, symbols)?;
             let ty = symbols.types.get(base);
 
             if let CompileType::Ref(ref_type) = ty {
                 let new_ref = RefType::new(ref_type.base, ref_type.level + 1);
                 let type_str = new_ref.format(&symbols.types);
                 let ident = get_ident(&type_str);
-                Ok(symbols.types.insert(ident, CompileType::Ref(new_ref)))
+                Some(symbols.types.insert(ident, CompileType::Ref(new_ref)))
             } else {
                 let new_ref = RefType::new(base, 1);
                 let type_str = new_ref.format(&symbols.types);
                 let ident = get_ident(&type_str);
-                Ok(symbols.types.insert(ident, CompileType::Ref(new_ref)))
+                Some(symbols.types.insert(ident, CompileType::Ref(new_ref)))
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::error::{CompileError, ErrorHandle, ErrorInfo, IllegalUseError, ResolveError};
+    use crate::parser::out::TempPath;
+
+    fn config() -> Config {
+        Config::new(
+            Vec::new(),
+            String::new(),
+            String::new(),
+            ErrorHandle::new("test".into()),
+        )
+    }
+
+    #[test]
+    fn unknown_type_submits_resolution_error_at_type_span() {
+        let mut config = config();
+        let mut symbols = SymbolTable::new();
+        let span = (10..17).into();
+        let path = TempPath {
+            segments: vec!["Missing".into()],
+        };
+        assert_eq!(
+            resolve_type(&mut config, (TempType::Path(path), span), &mut symbols),
+            None
+        );
+        assert!(config.error_handle().errors.contains(&ErrorInfo::new(
+            CompileError::Resolve(ResolveError::UnknownType),
+            span,
+        )));
+    }
+
+    #[test]
+    fn generic_argument_count_submits_illegal_use_error() {
+        let mut config = config();
+        let mut symbols = SymbolTable::new();
+        let name = config.symbol_name("Box");
+        let mut unit = UnitType::empty();
+        unit.generics.push(GenericIndex::empty());
+        symbols.generics.units.insert(get_ident(&name), unit);
+        let span = (20..27).into();
+        let ty = TempType::Generic {
+            base: TempPath {
+                segments: vec!["Box".into()],
+            },
+            args: Vec::new(),
+        };
+        assert_eq!(resolve_type(&mut config, (ty, span), &mut symbols), None);
+        assert!(config.error_handle().errors.contains(&ErrorInfo::new(
+            CompileError::IllegalUse(IllegalUseError::GenericCountMismatch),
+            span,
+        )));
     }
 }

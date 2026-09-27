@@ -66,6 +66,7 @@ impl BaseType {
             bits,
         })
     }
+
     pub fn base_types() -> [CompileType; 10] {
         [
             Self::new(DataType::Integer, true, 8),

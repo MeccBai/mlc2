@@ -1,8 +1,8 @@
 use chumsky::{input::ValueInput, prelude::*};
 
-use crate::lexer::{Span, TokenPack, token::Token};
+use crate::lexer::{TokenPack, token::Token};
 
-use super::{GenericParam, ParseError, Path, Spanned, TypeExpr, Visibility};
+use super::{GenericParam, ParseError, Path, Spanned, TypeExpr, Visibility, out::Span};
 
 pub fn keyword<'tokens, I>(
     token: Token,
@@ -79,7 +79,11 @@ where
     I: ValueInput<'tokens, Token = TokenPack, Span = Span>,
 {
     ident()
-        .then(operator(Token::Colon).ignore_then(path()).or_not())
+        .then(
+            operator(Token::Colon)
+                .ignore_then(path().map_with(|path, extra| (path, extra.span())))
+                .or_not(),
+        )
         .map(|(name, constraint)| GenericParam { name, constraint })
         .separated_by(operator(Token::Comma))
         .at_least(1)

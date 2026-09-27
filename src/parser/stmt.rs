@@ -1,9 +1,9 @@
 use chumsky::{input::ValueInput, prelude::*};
 
-use crate::lexer::{Span, TokenPack, token::Token};
+use crate::lexer::{TokenPack, token::Token};
 
 use super::{
-    MatchPattern, ParseError, Scope, Spanned, Statement,
+    MatchPattern, ParseError, Scope, Spanned, Statement, out::Span,
     expr::expression_parser,
     split::{ident, keyword, operator, type_parser},
 };

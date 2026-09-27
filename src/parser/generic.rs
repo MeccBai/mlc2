@@ -1,23 +1,25 @@
 use chumsky::{input::ValueInput, prelude::*};
 
-use crate::lexer::{Span, TokenPack, token::Token};
+use crate::lexer::{TokenPack, token::Token};
 
 use super::{
     GenericRequirement, ParseError,
-    func::function_parser,
+    func::interface_symbol_parser,
+    out::{Span, Spanned},
     split::{ident, keyword, operator, path, visibility},
 };
 
 pub fn requirement_parser<'tokens, I>()
--> impl Parser<'tokens, I, GenericRequirement, extra::Err<ParseError<'tokens>>> + Clone
+-> impl Parser<'tokens, I, Spanned<GenericRequirement>, extra::Err<ParseError<'tokens>>> + Clone
 where
     I: ValueInput<'tokens, Token = TokenPack, Span = Span>,
 {
-    let function = visibility()
-        .then(function_parser())
-        .map(|(visibility, mut function)| {
-            function.symbol.visibility = visibility;
-            GenericRequirement::Function(function)
+    let interface = visibility()
+        .then(interface_symbol_parser(false))
+        .then_ignore(keyword(Token::Semicolon))
+        .map(|(visibility, mut symbol)| {
+            symbol.visibility = visibility;
+            GenericRequirement::Interface(symbol)
         });
 
     let integer_argument = select! {
@@ -30,13 +32,15 @@ where
         .then_ignore(keyword(Token::Semicolon))
         .map(|(path, argument)| GenericRequirement::Type { path, argument });
 
-    choice((function, type_requirement))
+    choice((interface, type_requirement))
+        .map_with(|requirement, extra| (requirement, extra.span()))
         .labelled("generic requirement")
         .boxed()
 }
 
 pub fn generic_parser<'tokens, I>()
--> impl Parser<'tokens, I, (String, Vec<GenericRequirement>), extra::Err<ParseError<'tokens>>> + Clone
+-> impl Parser<'tokens, I, (String, Vec<Spanned<GenericRequirement>>), extra::Err<ParseError<'tokens>>>
++ Clone
 where
     I: ValueInput<'tokens, Token = TokenPack, Span = Span>,
 {

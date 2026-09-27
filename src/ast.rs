@@ -6,7 +6,7 @@ mod generic;
 pub mod stmt;
 pub(crate) mod types;
 
-use crate::ast::arena::{InterfaceArena, InterfaceIndex, get_ident};
+use crate::ast::arena::{InterfaceArena, get_ident};
 use crate::ast::func::FuncSymbol;
 use crate::ast::func::{Interface, InterfaceSymbol};
 use crate::ast::generic::GenericTable;
@@ -14,9 +14,12 @@ use crate::ast::stmt::Variable;
 use crate::ast::types::CompileType::{Base, Enum, List, Ref, Unit};
 use crate::ast::types::{BaseType, CompileType};
 use crate::ast::types::{EnumType, UnitType};
+use crate::error::ErrorHandle;
 use crate::error::ice::ice;
 use crate::parser::TempGlobalStmt;
-use crate::parser::out::{TempEnum, TempFunc, TempGeneric, TempUnit, TempUsing, TempVar};
+use crate::parser::out::{
+    TempEnum, TempFunc, TempGeneric, TempInterface, TempUnit, TempUsing, TempVar,
+};
 use arena::{FuncArena, FuncIndex, GenericIndex, TypeArena, TypeIndex};
 use config::Config;
 use func::FuncBody;
@@ -59,6 +62,7 @@ pub enum Function {
 pub struct AbstractSyntaxTree {
     pub symbols: SymbolTable,
     pub body: Vec<Function>,
+    pub diagnostics: ErrorHandle,
 }
 
 pub struct SymbolTable {
@@ -119,6 +123,7 @@ impl AbstractSyntaxTree {
         Vec<ImportModule>,
         Vec<TempVar>,
         Vec<TempUsing>,
+        Vec<TempInterface>,
     ) {
         let mut enums = Vec::<TempEnum>::new();
         let mut units = Vec::<TempUnit>::new();
@@ -127,6 +132,7 @@ impl AbstractSyntaxTree {
         let mut imports = Vec::<ImportModule>::new();
         let mut globals = Vec::<TempVar>::new();
         let mut usings = Vec::<TempUsing>::new();
+        let mut interfaces = Vec::<TempInterface>::new();
 
         temp_ast.into_iter().for_each(|stmt| match stmt {
             TempGlobalStmt::Unit(temp_unit) => units.push(temp_unit),
@@ -136,36 +142,32 @@ impl AbstractSyntaxTree {
             TempGlobalStmt::Enum(temp_enum) => enums.push(temp_enum),
             TempGlobalStmt::Import(temp_import) => imports.push(temp_import),
             TempGlobalStmt::Variable(temp_variable) => globals.push(temp_variable),
+            TempGlobalStmt::Interface(interface) => interfaces.push(interface),
         });
 
-        (enums, units, funcs, generics, imports, globals, usings)
+        (
+            enums, units, funcs, generics, imports, globals, usings, interfaces,
+        )
     }
 
-    pub fn new(config: Config, temp_ast: Vec<TempGlobalStmt>) -> Self {
+    pub fn new(mut config: Config, temp_ast: Vec<TempGlobalStmt>) -> Self {
         let mut symbols = SymbolTable::new();
-        let mut generics = GenericTable::new();
         let mut body = Vec::<Function>::new();
 
-        let (enums, mut units, funcs, temp_generics, imports, globals, usings) =
+        let (enums, mut units, funcs, temp_generics, imports, globals, usings, interfaces) =
             Self::split(temp_ast);
 
-        imports.into_iter().for_each(|import| todo!());
+        imports.into_iter().for_each(|_import| {});
 
-        temp_generics.into_iter().for_each(|temp_generic| {
-            let generic_type = GenericRequire::new(&config, temp_generic);
-            let ident = arena::get_ident(&generic_type.name);
-            generics.requires.insert(ident, generic_type);
-        });
+        usings.into_iter().for_each(|_temp_using| {});
 
         enums.into_iter().for_each(|temp_enum| {
             let name = temp_enum.name;
             let variants = temp_enum.variants;
-            let enum_type = EnumType::new(&config, name, variants);
+            let enum_type = EnumType::new(&mut config, name, variants);
             let ident = get_ident(&enum_type.name);
             symbols.types.insert(ident, CompileType::Enum(enum_type));
         });
-
-        usings.into_iter().for_each(|temp_using| todo!());
 
         let unit_indexs = units
             .iter_mut()
@@ -181,60 +183,68 @@ impl AbstractSyntaxTree {
             })
             .collect::<Vec<_>>();
 
+        temp_generics.into_iter().for_each(|temp_generic| {
+            let generic_type = GenericRequire::new(&mut config, temp_generic, &mut symbols);
+            let ident = arena::get_ident(&generic_type.name);
+            symbols.generics.requires.insert(ident, generic_type);
+        });
+
         unit_indexs
             .into_iter()
             .zip(units.into_iter())
             .for_each(|(index, temp)| match index {
                 Bool::True(unit_index) => {
-                    let unit = UnitType::new(&config, temp, &mut symbols).unwrap();
+                    let unit = UnitType::new(&mut config, temp, &mut symbols);
                     symbols.types.set(&unit_index, Unit(unit));
                 }
                 Bool::False(unit_index) => {
-                    let unit = UnitType::new(&config, temp, &mut symbols).unwrap();
+                    let unit = UnitType::new(&mut config, temp, &mut symbols);
                     symbols.generics.units.set(&unit_index, unit);
                 }
             });
+
+        let temp_funcs = funcs
+            .into_iter()
+            .map(|temp_func| {
+                let (symbol, body) = temp_func.split();
+                let symbol = FuncSymbol::new(&mut config, symbol, &mut symbols);
+                let ident = get_ident(&symbol.name);
+                let index = symbols.functions.insert(ident, symbol);
+                (index, body)
+            })
+            .collect::<Vec<_>>();
+
+        let temp_interfaces = interfaces
+            .into_iter()
+            .map(|temp_interface| {
+                let (symbol, body) = temp_interface.split();
+                let symbol = InterfaceSymbol::new(&mut config, symbol, &mut symbols);
+                let ident = get_ident(&symbol.name);
+                let index = symbols.interfaces.insert(ident, symbol);
+                (index, body)
+            })
+            .collect::<Vec<_>>();
 
         symbols.globals = globals
             .into_iter()
             .map(|temp_variable| Variable::new(temp_variable, &mut symbols))
             .collect::<Vec<Variable>>();
 
-        let temp_funcs: Vec<_> = funcs
-            .into_iter()
-            .map(|temp_func| {
-                let (symbol, body) = temp_func.split();
-                let is_interface = symbol.owner.is_some();
-                if is_interface {
-                    let symbol = InterfaceSymbol::new(&config, symbol, &symbols);
-                    let ident = get_ident(&symbol.name);
-                    let index = symbols.interfaces.insert(ident, symbol);
-                    (Bool::True(index), body)
-                } else {
-                    let symbol = FuncSymbol::new(&config, symbol, &symbols);
-                    let ident = get_ident(&symbol.name);
-                    let index = symbols.functions.insert(ident, symbol);
-                    (Bool::False(index), body)
-                }
-            })
-            .collect();
+        temp_funcs.into_iter().for_each(|(index, temp_body)| {
+            let func_body = FuncBody::new(&mut config, index, temp_body, &mut symbols);
+            body.push(Function::Func(func_body));
+        });
 
-        temp_funcs
-            .into_iter()
-            .for_each(|(index, temp_body)| match index {
-                Bool::False(func_index) => {
-                    let func_body =
-                        FuncBody::new(func_index, temp_body, &mut generics, &mut symbols);
-                    body.push(Function::Func(func_body));
-                }
-                Bool::True(interface_index) => {
-                    let interface =
-                        Interface::new(interface_index, temp_body, &mut generics, &mut symbols);
-                    body.push(Function::Interface(interface));
-                }
-            });
+        temp_interfaces.into_iter().for_each(|(index, temp_body)| {
+            let interface_body = Interface::new(&mut config, index, temp_body, &mut symbols);
+            body.push(Function::Interface(interface_body));
+        });
 
-        Self { symbols, body }
+        Self {
+            symbols,
+            body,
+            diagnostics: config.into_error_handle(),
+        }
     }
 
     pub fn export(config: Config, temp_ast: Vec<TempGlobalStmt>) -> SymbolTable {

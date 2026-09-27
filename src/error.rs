@@ -2,16 +2,66 @@ pub mod ice;
 
 use crate::lexer::TokenError;
 use crate::parser::ParseError;
+use crate::parser::out::Span;
 use colored::Colorize;
+use std::collections::HashSet;
+
 use std::ops::Range;
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum ConstraintError {
+    InvalidRequirement,
+    InvalidArgument,
+    NoRequirements,
+    NoArgument,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum CompileError {
+    Resolve(ResolveError),
+    IllegalUse(IllegalUseError),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum ResolveError {
+    UnknownType,
+    UnknownGeneric,
+    UnknownConstraint,
+    MissingType,
+    Constraint(ConstraintError),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum IllegalUseError {
+    GenericCountMismatch,
+    NonGenericInstantiation,
+    RequirementUnmet,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct ErrorInfo {
+    error: CompileError,
+    span: Span,
+}
+
+impl ErrorInfo {
+    pub fn new(error: CompileError, span: Span) -> Self {
+        Self { error, span }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ErrorHandle {
     pub file: String,
+    pub errors: HashSet<ErrorInfo>,
 }
 
 impl ErrorHandle {
     pub fn new(file: String) -> Self {
-        Self { file }
+        Self {
+            file,
+            errors: HashSet::new(),
+        }
     }
 
     pub fn get_context(
@@ -66,5 +116,10 @@ impl ErrorHandle {
             span.end,
         );
         eprintln!("{}", self.get_context(source, 2, 2, span));
+    }
+
+    pub fn submit_error(&mut self, error: CompileError, span: Span) {
+        let error_info = ErrorInfo::new(error, span);
+        self.errors.insert(error_info);
     }
 }

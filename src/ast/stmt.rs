@@ -54,7 +54,6 @@ pub struct AnonymousBlock {
     pub statements: Vec<Statement>,
 }
 
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Statement {
     VariableDecl(Variable),

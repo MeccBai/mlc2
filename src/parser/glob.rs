@@ -1,16 +1,16 @@
 use chumsky::{input::ValueInput, prelude::*};
 
 use crate::ast::ImportModule;
-use crate::lexer::{Span, TokenPack, token::Token};
+use crate::lexer::{TokenPack, token::Token};
 
 use super::{
     ParseError, Spanned,
-    func::function_parser,
+    func::{function_parser, interface_parser},
     generic::generic_parser,
     out::{
-        TempConstraints, TempEnum, TempFunc, TempGeneric, TempGenericParam, TempGlobalStmt,
-        TempModule, TempPath, TempType, TempUnit, TempUnitMember, TempUsing, TempVar,
-        TempVisibility,
+        Span, TempConstraints, TempEnum, TempFunc, TempGeneric, TempGenericParam, TempGlobalStmt,
+        TempInterface, TempModule, TempPath, TempType, TempUnit, TempUnitMember, TempUsing,
+        TempVar, TempVisibility,
     },
     split::{attributes, generic_params, ident, keyword, operator, path, type_parser, visibility},
 };
@@ -18,6 +18,7 @@ use super::{
 enum RawItem {
     Import(TempPath),
     Function(TempFunc),
+    Interface(TempInterface),
     Unit {
         name: String,
         generics: Vec<TempGenericParam>,
@@ -29,7 +30,7 @@ enum RawItem {
     },
     Generic {
         name: String,
-        requirements: Vec<TempConstraints>,
+        requirements: Vec<Spanned<TempConstraints>>,
     },
     Enum {
         name: String,
@@ -82,6 +83,7 @@ where
         generic_parser().map(|(name, requirements)| RawItem::Generic { name, requirements });
 
     let function = function_parser().map(RawItem::Function);
+    let interface = interface_parser().map(RawItem::Interface);
 
     let enum_ = keyword(Token::Enum)
         .ignore_then(ident())
@@ -122,7 +124,9 @@ where
 
     let declaration = attributes()
         .then(visibility())
-        .then(choice((import, unit, using, generic, enum_, function)))
+        .then(choice((
+            import, unit, using, generic, enum_, interface, function,
+        )))
         .map(|((attributes, visibility), raw)| match raw {
             RawItem::Import(path) => TempGlobalStmt::Import(ImportModule::new(
                 path.segments,
@@ -132,6 +136,11 @@ where
                 function.symbol.visibility = visibility;
                 function.symbol.attributes = attributes;
                 TempGlobalStmt::Func(function)
+            }
+            RawItem::Interface(mut interface) => {
+                interface.symbol.visibility = visibility;
+                interface.symbol.attributes = attributes;
+                TempGlobalStmt::Interface(interface)
             }
             RawItem::Unit {
                 name,

@@ -77,3 +77,47 @@ pub enum TempExpr {
     },
     Array(Vec<Spanned<TempExpr>>),
 }
+
+impl TempExpr {
+    pub fn dump(&self) -> String {
+        match self {
+            Self::Literal { text, .. } => text.clone(),
+            Self::Path(path) => path.segments.join("::"),
+            Self::Unary { op, value } => format!("{op:?}({})", value.0.dump()),
+            Self::Binary { lhs, op, rhs } => {
+                format!("({} {op:?} {})", lhs.0.dump(), rhs.0.dump())
+            }
+            Self::Call { callee, args } => format!(
+                "{}({})",
+                callee.0.dump(),
+                args.iter()
+                    .map(|(arg, _)| arg.dump())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+            Self::Member { base, access, name } => {
+                format!("{} {access:?} {name}", base.0.dump())
+            }
+            Self::Init { target, values } => format!(
+                "{}{{{}}}",
+                target
+                    .as_ref()
+                    .map(|target| target.0.dump())
+                    .unwrap_or_default(),
+                values
+                    .iter()
+                    .map(|(value, _)| value.dump())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+            Self::Array(values) => format!(
+                "[{}]",
+                values
+                    .iter()
+                    .map(|(value, _)| value.dump())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+        }
+    }
+}

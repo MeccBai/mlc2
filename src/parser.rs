@@ -8,7 +8,9 @@ mod stmt;
 
 use chumsky::{input::Input, prelude::*};
 
-use crate::lexer::{Span, SpannedToken, TokenPack};
+use crate::lexer::{SpannedToken, TokenPack};
+
+use self::out::Span;
 
 pub use glob::module_parser;
 pub(crate) use out::{
@@ -213,22 +215,171 @@ mod tests {
                 .constraint
                 .as_ref()
                 .unwrap()
+                .0
                 .segments,
             ["number"]
         );
 
-        let TempGlobalStmt::Func(method) = &module[3].0 else {
+        let TempGlobalStmt::Interface(method) = &module[3].0 else {
             panic!("expected a method");
         };
         assert_eq!(method.symbol.owner.as_ref().unwrap().segments, ["Point"]);
-        assert!(method.symbol.params[0].is_self && method.symbol.params[0].mutable);
-        assert!(method.has_mutable_receiver());
+        assert!(method.symbol.has_self);
+        assert!(method.symbol.mutable);
+        assert_eq!(method.symbol.params.len(), 1);
+        assert_eq!(method.symbol.params[0].name, "value");
 
         assert!(matches!(
             &module[4].0,
             TempGlobalStmt::Enum(TempEnum { name, variants, .. })
                 if name == "State" && variants == &["Waiting", "Running"]
         ));
+    }
+
+    #[test]
+    fn generic_interface_requirement_has_only_a_symbol() {
+        let module = parse_ok(
+            "generic Addable { pub func add(mut self, rhs:i32) -> i32; Point::func make() -> Point; };",
+        );
+        let TempGlobalStmt::Generic(generic) = &module[0].0 else {
+            panic!("expected a generic declaration");
+        };
+        let out::TempConstraints::Interface(symbol) = &generic.requirements[0].0 else {
+            panic!("expected an interface requirement");
+        };
+        assert!(symbol.owner.is_none());
+        assert!(symbol.has_self);
+        assert!(symbol.mutable);
+        assert_eq!(symbol.visibility, out::TempVisibility::Public);
+        assert_eq!(symbol.name, "add");
+        assert_eq!(symbol.params[0].name, "rhs");
+
+        let out::TempConstraints::Interface(owned) = &generic.requirements[1].0 else {
+            panic!("expected an owned interface requirement");
+        };
+        assert_eq!(owned.owner.as_ref().unwrap().segments, ["Point"]);
+        assert!(!owned.has_self);
+        assert!(!owned.mutable);
+        assert!(owned.params.is_empty());
+    }
+
+    #[test]
+    fn preserves_generic_requirement_and_constraint_spans() {
+        let source = "generic G { std::generic::max_bits<16>; func check(self); }; unit U<T:G> {};";
+        let module = parse_ok(source);
+        let TempGlobalStmt::Generic(generic) = &module[0].0 else {
+            panic!("expected a generic declaration");
+        };
+        assert_eq!(
+            &source[generic.requirements[0].1.into_range()],
+            "std::generic::max_bits<16>;"
+        );
+        assert_eq!(
+            &source[generic.requirements[1].1.into_range()],
+            "func check(self);"
+        );
+
+        let TempGlobalStmt::Unit(unit) = &module[1].0 else {
+            panic!("expected a unit declaration");
+        };
+        let (_, constraint_span) = unit.generics[0].constraint.as_ref().unwrap();
+        assert_eq!(&source[constraint_span.into_range()], "G");
+        assert!(!generic.dump().contains("Position:"));
+        assert_eq!(generic.dump_with_span().matches("Position:").count(), 2);
+    }
+
+    #[test]
+    fn distinguishes_free_functions_and_interfaces_without_receivers() {
+        let module = parse_ok("func make() {} Point::func make() {}");
+        assert!(matches!(&module[0].0, TempGlobalStmt::Func(function)
+            if function.symbol.name == "make" && function.body.is_some()));
+        assert!(matches!(&module[1].0, TempGlobalStmt::Interface(interface)
+            if interface.symbol.owner.as_ref().unwrap().segments == ["Point"]
+                && !interface.symbol.has_self && !interface.symbol.mutable && interface.body.is_some()));
+    }
+
+    #[test]
+    fn receiver_flags_live_only_on_interface_symbol() {
+        let module = parse_ok(
+            "Point::func read(self, value:i32) {} \
+             Point::func write(mut self, value:i32) {} \
+             Point::func make(value:i32) {}",
+        );
+        for ((item, _), (has_self, mutable)) in
+            module
+                .iter()
+                .zip([(true, false), (true, true), (false, false)])
+        {
+            let TempGlobalStmt::Interface(interface) = item else {
+                panic!("expected an interface");
+            };
+            assert_eq!(interface.symbol.has_self, has_self);
+            assert_eq!(interface.symbol.mutable, mutable);
+            assert_eq!(interface.symbol.params.len(), 1);
+            assert_eq!(interface.symbol.params[0].name, "value");
+        }
+    }
+
+    #[test]
+    fn temp_dump_includes_interface_and_generic_requirements() {
+        let module = parse_ok("generic G { func run(self); }; Point::func run(self) {}");
+        let generic_dump = module[0].0.dump();
+        assert!(generic_dump.contains("Interface Requirement: run"));
+        assert!(generic_dump.contains("Has self: true"));
+
+        let interface_dump = module[1].0.dump_with_span(module[1].1);
+        assert!(interface_dump.contains("Interface: run"));
+        assert!(interface_dump.contains("Owner: Some(\"Point\")"));
+        assert!(interface_dump.contains("Position:"));
+    }
+
+    #[test]
+    fn temp_dump_covers_every_global_item() {
+        let module = parse_ok(
+            "import std::io; unit Point { x:i32; }; func run() {} \
+             Point::func get(self) {} using Number = i32; \
+             generic Numeric { std::generic::is_integer; }; \
+             enum State { Ready }; global var count:i32 = 0;",
+        );
+        let labels = [
+            "Import:",
+            "Unit:",
+            "Function:",
+            "Interface:",
+            "Using:",
+            "Generic:",
+            "Enum:",
+            "Global Variable:",
+        ];
+        assert_eq!(module.len(), labels.len());
+        for ((item, span), label) in module.iter().zip(labels) {
+            let dump = item.dump();
+            assert!(dump.starts_with(label), "unexpected dump: {dump}");
+            assert!(!dump.contains("Position:"), "unexpected span: {dump}");
+            let with_span = item.dump_with_span(*span);
+            assert!(with_span.contains("Position:"));
+        }
+        assert_eq!(
+            module[1]
+                .0
+                .dump_with_span(module[1].1)
+                .matches("Position:")
+                .count(),
+            2
+        );
+    }
+
+    #[test]
+    fn rejects_self_outside_first_interface_parameter() {
+        for source in [
+            "func invalid(self) {}",
+            "Point::func invalid(value:i32, self) {}",
+            "generic G { func invalid(value:i32, mut self); };",
+        ] {
+            let lexed = tokenize(source).unwrap();
+            let (_, errors) = parse(&lexed.tokens, source.len());
+            assert!(!errors.is_empty(), "accepted invalid receiver: {source}");
+        }
     }
 
     #[test]

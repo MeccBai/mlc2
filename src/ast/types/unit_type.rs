@@ -1,14 +1,11 @@
-use chumsky::primitive::todo;
-
-use crate::ast::arena::{GenericArena, InterfaceIndex, get_ident};
+use crate::ast::arena::get_ident;
 use crate::ast::config::Config;
-use crate::ast::generic::{Constraints, InsFailed};
-use crate::ast::types::CompileType::{Generic, Unit};
+use crate::ast::types::CompileType::Unit;
 use crate::ast::types::resolve_type;
-use crate::ast::{GenericIndex, SymbolTable, TypeArena, TypeIndex, stmt::Statement};
+use crate::ast::{GenericIndex, SymbolTable, TypeArena, TypeIndex};
 use crate::error::ice::ice;
-use crate::parser::Visibility::{self, Export, Private};
-use crate::parser::out::{TempType, TempUnit};
+use crate::error::{CompileError, IllegalUseError, ResolveError};
+use crate::parser::out::{Span, TempUnit};
 use std::collections::HashMap;
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
@@ -27,29 +24,14 @@ pub struct UnitType {
     pub exported: bool,
 }
 
-#[derive(Debug, Clone, Hash, PartialEq, Eq)]
-pub enum UnitError {
-    GenericNotFound,
-    MemberTypeNotFound,
-    MemberTypeIsGeneric,
-}
-
 impl UnitType {
-    pub fn new(
-        config: &Config,
-        prototype: TempUnit,
-        symbols: &mut SymbolTable,
-    ) -> Result<UnitType, UnitError> {
+    pub fn new(config: &mut Config, prototype: TempUnit, symbols: &mut SymbolTable) -> Self {
         let mut this = UnitType {
             name: prototype.name,
             attributes: prototype.attributes,
             members: Vec::new(),
             generics: Vec::new(),
-            exported: match prototype.visibility {
-                Export => true,
-                Private => false,
-                _ => ice("Unexpected visibility for unit type."),
-            },
+            exported: prototype.visibility.normal_export(),
         };
 
         let mut generics = HashMap::<String, GenericIndex>::new();
@@ -57,36 +39,34 @@ impl UnitType {
         this.generics = prototype
             .generics
             .into_iter()
-            .map(|generic| {
-                let constraint = generic
-                    .constraint
-                    .unwrap_or_else(|| ice("Generic constraint not found."))
-                    .join();
+            .filter_map(|generic| {
+                let (path, span) = generic.constraint?;
+                let constraint = path.join();
                 let ident = get_ident(&constraint);
-                let index = symbols
-                    .generics
-                    .requires
-                    .get_by_ident(ident)
-                    .unwrap_or_else(|| ice("Generic constraint type not found."));
+                let Some(index) = symbols.generics.requires.get_by_ident(ident) else {
+                    config
+                        .submit_error(CompileError::Resolve(ResolveError::UnknownConstraint), span);
+                    return None;
+                };
                 generics.insert(generic.name, index);
-                index
+                Some(index)
             })
             .collect::<Vec<_>>();
 
         this.members = prototype
             .members
             .into_iter()
-            .map(|member| {
-                let ty_index = resolve_type(config, member.ty.0, symbols).unwrap();
-                UnitMember {
+            .filter_map(|member| {
+                let ty_index = resolve_type(config, member.ty, symbols)?;
+                Some(UnitMember {
                     name: member.name,
                     member_type: ty_index,
                     public: member.public,
-                }
+                })
             })
             .collect::<Vec<_>>();
 
-        Ok(this)
+        this
     }
 
     pub fn empty() -> Self {
@@ -139,21 +119,48 @@ impl UnitType {
 
     pub fn instantiation(
         self,
+        config: &mut Config,
         params: &HashMap<GenericIndex, TypeIndex>,
         symbols: &mut SymbolTable,
         actives: Option<&mut HashMap<String, TypeIndex>>,
-    ) -> Result<TypeIndex, InsFailed> {
+        span: Span,
+    ) -> Option<TypeIndex> {
         if self.generics.len() != params.len() {
-            return Err(InsFailed::CountMismatch);
+            config.submit_error(
+                CompileError::IllegalUse(IllegalUseError::GenericCountMismatch),
+                span,
+            );
+            return None;
         } else if self.generics.len() == 0 {
-            return Err(InsFailed::NoGenerics);
+            config.submit_error(
+                CompileError::IllegalUse(IllegalUseError::NonGenericInstantiation),
+                span,
+            );
+            return None;
+        }
+
+        for generic in &self.generics {
+            let Some(&argument) = params.get(generic) else {
+                config.submit_error(
+                    CompileError::IllegalUse(IllegalUseError::GenericCountMismatch),
+                    span,
+                );
+                return None;
+            };
+            if !generic.check(argument, symbols) {
+                config.submit_error(
+                    CompileError::IllegalUse(IllegalUseError::RequirementUnmet),
+                    span,
+                );
+                return None;
+            }
         }
 
         let instance_name = self.generic_instance_name(&symbols.types, params);
         let ident = get_ident(&instance_name);
 
-        if let Some(instance_index) = symbols.types.get_by_ident(ident) {
-            return Ok(instance_index);
+        if let Some(instance_index) = symbols.types.get_by_name(&ident) {
+            return Some(instance_index);
         }
 
         let temp_instance = UnitType::empty();
@@ -171,20 +178,22 @@ impl UnitType {
             .map(|member| {
                 if member.member_type.is_generic(&symbols.types) {
                     let new_type = member.member_type.clone().instantiation(
+                        config,
                         params,
                         symbols,
                         Some(temp_actives),
+                        span,
                     )?;
-                    Ok(UnitMember {
+                    Some(UnitMember {
                         name: member.name.clone(),
                         member_type: new_type,
                         public: member.public,
                     })
                 } else {
-                    Ok(member.clone())
+                    Some(member.clone())
                 }
             })
-            .collect::<Result<Vec<UnitMember>, InsFailed>>()?;
+            .collect::<Option<Vec<UnitMember>>>()?;
 
         let instance = UnitType {
             name: instance_name,
@@ -194,9 +203,8 @@ impl UnitType {
             exported: self.exported,
         };
 
-        symbols.types.insert(ident, Unit(instance));
-
-        Ok(symbols.types.get_by_ident(ident).unwrap())
+        symbols.types.set(&holder_index, Unit(instance));
+        Some(holder_index)
     }
 
     pub fn has_generic(&self) -> bool {

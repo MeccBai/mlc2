@@ -20,3 +20,20 @@ pub enum TempType {
     },
     Reference(Box<Spanned<TempType>>),
 }
+
+impl TempType {
+    pub fn dump(&self) -> String {
+        match self {
+            Self::Path(path) => path.segments.join("::"),
+            Self::Generic { base, args } => format!(
+                "{}<{}>",
+                base.segments.join("::"),
+                args.iter()
+                    .map(|(arg, _)| arg.dump())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+            Self::Reference(inner) => format!("${}", inner.0.dump()),
+        }
+    }
+}

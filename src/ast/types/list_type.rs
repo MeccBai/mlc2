@@ -1,9 +1,8 @@
-use chumsky::primitive::todo;
-
 use crate::ast::arena::{GenericIndex, TypeArena, get_ident};
-use crate::ast::generic::InsFailed;
+use crate::ast::config::Config;
 use crate::ast::types::CompileType::List;
 use crate::ast::{SymbolTable, TypeIndex};
+use crate::parser::out::Span;
 use std::collections::HashMap;
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
@@ -62,20 +61,24 @@ impl ListType {
 
     pub fn instantiation(
         self,
+        config: &mut Config,
         params: &HashMap<GenericIndex, TypeIndex>,
         symbols: &mut SymbolTable,
         actives: Option<&mut HashMap<String, TypeIndex>>,
-    ) -> Result<TypeIndex, InsFailed> {
-        let child = self.element_type.instantiation(params, symbols, actives)?;
+        span: Span,
+    ) -> Option<TypeIndex> {
+        let child = self
+            .element_type
+            .instantiation(config, params, symbols, actives, span)?;
         let instance = ListType::new(child, self.length);
 
         let name = instance.format(&symbols.types);
         let ident = get_ident(&name);
 
-        if let Some(index) = symbols.types.get_by_ident(ident) {
-            return Ok(index);
+        if let Some(index) = symbols.types.get_by_name(&ident) {
+            return Some(index);
         }
 
-        Ok(symbols.types.insert(ident, List(instance)))
+        Some(symbols.types.insert(ident, List(instance)))
     }
 }
