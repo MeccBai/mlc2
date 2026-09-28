@@ -1,5 +1,7 @@
 use crate::ast::arena::get_ident;
 use crate::ast::config::Config;
+use crate::ast::generic::GenericRequire;
+use crate::ast::symbol_name::SymbolName;
 use crate::ast::types::CompileType::Unit;
 use crate::ast::types::resolve_type;
 use crate::ast::{GenericIndex, SymbolTable, TypeArena, TypeIndex};
@@ -27,14 +29,19 @@ pub struct UnitType {
 }
 
 impl UnitType {
-    pub fn new(config: &mut Config, prototype: TempUnit, symbols: &mut SymbolTable) -> Self {
+    pub fn finalize(
+        config: &mut Config,
+        prototype: TempUnit,
+        symbols: &mut SymbolTable,
+    ) -> (Self, Span) {
+        let name_span = prototype.name_span;
         let mut this = UnitType {
             name: prototype.name,
             attributes: prototype.attributes,
             members: Vec::new(),
             generics: Vec::new(),
             generic_map: HashMap::new(),
-            exported: prototype.visibility.normal_export(),
+            exported: prototype.visibility.normal_export(config, &name_span),
         };
 
         let mut generic_map = HashMap::<String, GenericIndex>::new();
@@ -43,13 +50,23 @@ impl UnitType {
             .generics
             .into_iter()
             .filter_map(|generic| {
-                let (path, span) = generic.constraint?;
-                let constraint = path.join();
-                let ident = get_ident(&constraint);
-                let Some(index) = symbols.generics.requires.get_by_ident(ident) else {
-                    config
-                        .submit_error(CompileError::Resolve(ResolveError::UnknownConstraint), span);
-                    return None;
+                let index = if let Some((path, span)) = generic.constraint {
+                    let constraint = SymbolName::path(&path.segments);
+                    let ident = get_ident(&constraint);
+                    let Some(index) = symbols.generics.requires.get_by_ident(ident) else {
+                        config.submit_error(
+                            CompileError::Resolve(ResolveError::UnknownConstraint),
+                            span,
+                        );
+                        return None;
+                    };
+                    index
+                } else {
+                    let name = SymbolName::unconstrained_unit_param(&this.name, &generic.name);
+                    symbols
+                        .generics
+                        .requires
+                        .insert(get_ident(&name), GenericRequire::empty(name))
                 };
                 generic_map.insert(generic.name.clone(), index);
                 Some(generic.name)
@@ -71,7 +88,7 @@ impl UnitType {
             })
             .collect::<Vec<_>>();
 
-        this
+        (this, name_span)
     }
 
     pub fn empty() -> Self {
@@ -240,9 +257,70 @@ impl UnitType {
                     .unwrap_or_else(|| ice("Generic param not found."))
                     .format(arena)
             })
-            .collect::<Vec<_>>()
-            .join(",");
+            .collect::<Vec<_>>();
 
-        format!("{}<{}>", self.name, elements)
+        SymbolName::generic_instance(&self.name, &elements)
+    }
+
+    pub fn get_member(&self, name: &str) -> Option<&UnitMember> {
+        self.members.iter().find(|member| member.name == name)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::error::ErrorHandle;
+    use crate::parser::out::{TempGenericParam, TempPath, TempType, TempVisibility};
+
+    #[test]
+    fn unconstrained_generic_is_kept_and_can_be_instantiated() {
+        let mut config = Config::new(
+            Vec::new(),
+            String::new(),
+            String::new(),
+            ErrorHandle::new("test".into()),
+        );
+        let mut symbols = SymbolTable::new();
+        let span = (0..1).into();
+        let name = config.symbol_name("Box");
+        let prototype = TempUnit {
+            visibility: TempVisibility::Private,
+            name: name.clone(),
+            name_span: span,
+            generics: vec![TempGenericParam {
+                name: "T".into(),
+                name_span: span,
+                constraint: None,
+            }],
+            members: Vec::new(),
+            attributes: Vec::new(),
+        };
+        let (unit, _) = UnitType::finalize(&mut config, prototype, &mut symbols);
+        assert_eq!(unit.generics, ["T"]);
+        let requirement = unit.generic_map["T"];
+        assert!(
+            symbols
+                .generics
+                .requires
+                .get(requirement)
+                .requires
+                .is_empty()
+        );
+        symbols.generics.units.insert(get_ident(&name), unit);
+
+        let arg = TempType::Generic {
+            base: TempPath {
+                segments: vec!["Box".into()],
+            },
+            args: vec![(
+                TempType::Path(TempPath {
+                    segments: vec!["bool".into()],
+                }),
+                span,
+            )],
+        };
+        assert!(resolve_type(&mut config, (arg, span), &mut symbols).is_some());
+        assert!(config.error_handle().errors.is_empty());
     }
 }

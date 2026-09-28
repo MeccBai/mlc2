@@ -1,4 +1,4 @@
-use super::{Spanned, TempPath, TempType};
+use super::{Span, Spanned, TempPath, TempType};
 use crate::ast::expression::operators::Operator;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -34,6 +34,7 @@ pub enum TempExpr {
         base: Box<Spanned<TempExpr>>,
         indirect: bool,
         name: String,
+        name_span: Span,
     },
     Init {
         target: Option<Spanned<TempType>>,
@@ -77,6 +78,7 @@ impl TempExpr {
                 base,
                 indirect,
                 name,
+                ..
             } => {
                 let access = if *indirect { "->" } else { "." };
                 format!("{}{access}{name}", base.0.dump())

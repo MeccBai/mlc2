@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use crate::ast::arena::{FuncIndex, InterfaceIndex, get_ident};
 use crate::ast::statement::Statement;
+use crate::ast::symbol_name::SymbolName;
 use crate::ast::types::resolve_type;
 use crate::ast::{Config, GenericIndex, SymbolTable, TypeIndex};
 use crate::error::{CompileError, ResolveError};
@@ -48,7 +49,16 @@ pub struct InterfaceSymbol {
 }
 
 impl FuncSymbol {
-    pub fn new(config: &mut Config, prototype: TempFuncSymbol, symbols: &mut SymbolTable) -> Self {
+    pub fn has_generics(&self) -> bool {
+        !self.generics.is_empty()
+    }
+
+    pub fn new(
+        config: &mut Config,
+        prototype: TempFuncSymbol,
+        symbols: &mut SymbolTable,
+    ) -> (Self, Span) {
+        let name_span = prototype.name_span;
         let params = prototype
             .params
             .into_iter()
@@ -68,7 +78,7 @@ impl FuncSymbol {
             .into_iter()
             .filter_map(|generic| {
                 let (path, span) = generic.constraint?;
-                let constraint = path.join();
+                let constraint = SymbolName::path(&path.segments);
                 let ident = get_ident(&constraint);
                 let Some(index) = symbols.generics.requires.get_by_ident(ident) else {
                     config
@@ -80,15 +90,18 @@ impl FuncSymbol {
             })
             .collect::<Vec<_>>();
 
-        Self {
-            name: prototype.name,
-            params,
-            ret_type,
-            generics: generics,
-            generic_map: generic_map,
-            attributes: prototype.attributes,
-            exported: prototype.visibility.normal_export(),
-        }
+        (
+            Self {
+                name: prototype.name,
+                params,
+                ret_type,
+                generics: generics,
+                generic_map: generic_map,
+                attributes: prototype.attributes,
+                exported: prototype.visibility.normal_export(config, &name_span),
+            },
+            name_span,
+        )
     }
 }
 
@@ -104,11 +117,16 @@ impl FuncBody {
 }
 
 impl InterfaceSymbol {
+    pub fn has_generics(&self) -> bool {
+        !self.generics.is_empty()
+    }
+
     pub fn new(
         config: &mut Config,
         prototype: TempInterfaceSymbol,
         symbols: &mut SymbolTable,
-    ) -> Self {
+    ) -> (Self, Span) {
+        let name_span = prototype.name_span;
         let params = prototype
             .params
             .into_iter()
@@ -135,7 +153,7 @@ impl InterfaceSymbol {
             .into_iter()
             .filter_map(|generic| {
                 let (path, span) = generic.constraint?;
-                let constraint = path.join();
+                let constraint = SymbolName::path(&path.segments);
                 let ident = get_ident(&constraint);
                 let Some(index) = symbols.generics.requires.get_by_ident(ident) else {
                     config
@@ -152,19 +170,22 @@ impl InterfaceSymbol {
             .and_then(|(path, span)| resolve_type(config, (TempType::Path(path), span), symbols))
             .unwrap_or(TypeIndex::empty());
 
-        Self {
-            name: prototype.name,
-            params,
-            ret_type,
-            generics: generics,
-            generic_map: generic_map,
-            attributes: prototype.attributes,
-            public,
-            exported,
-            mutable: prototype.mutable,
-            has_self: prototype.has_self,
-            owner: owner,
-        }
+        (
+            Self {
+                name: prototype.name,
+                params,
+                ret_type,
+                generics: generics,
+                generic_map: generic_map,
+                attributes: prototype.attributes,
+                public,
+                exported,
+                mutable: prototype.mutable,
+                has_self: prototype.has_self,
+                owner: owner,
+            },
+            name_span,
+        )
     }
 }
 
@@ -206,6 +227,7 @@ mod tests {
             has_self: false,
             mutable: false,
             name: "run".into(),
+            name_span: span,
             generics: Vec::new(),
             params: Vec::new(),
             return_type: None,

@@ -1,5 +1,6 @@
 use crate::ast::arena::{GenericIndex, Ident, TypeArena, TypeIndex, get_ident};
 use crate::ast::config::Config;
+use crate::ast::symbol_name::SymbolName;
 use crate::ast::types::CompileType::{self, Ref};
 use crate::parser::out::Span;
 use std::collections::HashMap;
@@ -18,9 +19,7 @@ impl RefType {
     }
 
     pub fn format(&self, arena: &TypeArena) -> String {
-        let level = std::format!("{}", "$".repeat(self.level));
-        let type_name = self.base.format(arena);
-        format!("{}{}", level, type_name)
+        SymbolName::reference(&self.base.format(arena), self.level)
     }
 
     pub fn deref(mut self, arena: &mut TypeArena) -> Option<TypeIndex> {
@@ -52,9 +51,7 @@ impl RefType {
         arena: &TypeArena,
         params: &HashMap<GenericIndex, TypeIndex>,
     ) -> String {
-        let base_name = self.base.generic_instance_name(arena, params);
-        let level_str = "$".repeat(self.level);
-        format!("{}{}", level_str, base_name)
+        SymbolName::reference(&self.base.generic_instance_name(arena, params), self.level)
     }
 
     pub fn instantiation(

@@ -1,3 +1,4 @@
+use crate::ast::symbol_name::SymbolName;
 use crate::error::ErrorHandle;
 use crate::parser::out::Span;
 
@@ -24,16 +25,11 @@ impl Config {
     }
 
     pub fn symbol_prefix(&self) -> String {
-        let mut prefix = self.system_path.join("::");
-        if !prefix.is_empty() {
-            prefix.push_str("::");
-        }
-        prefix.push_str(&self.project_path);
-        prefix
+        SymbolName::prefix(&self.system_path, &self.project_path)
     }
 
     pub fn symbol_name(&self, name: &str) -> String {
-        format!("{}::{}", self.symbol_prefix(), name)
+        SymbolName::qualified(&self.system_path, &self.project_path, name)
     }
 
     pub fn current_file(&self) -> &String {

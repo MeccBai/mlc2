@@ -1,6 +1,9 @@
 mod instance;
 
-use crate::ast::arena::{ArenaIndex, FuncArena, GenericArena, GenericIndex, NamedArena};
+use crate::ast::arena::{
+    ArenaIndex, FuncArena, GenericArena, GenericIndex, InterfaceArena, NamedArena,
+};
+use crate::ast::symbol_name::SymbolName;
 use crate::ast::types::CompileType::{Base, Enum};
 use crate::ast::types::{CompileType, UnitType, resolve_type};
 use crate::ast::{SymbolTable, TypeIndex, config::Config};
@@ -62,7 +65,7 @@ impl InterfaceRequire {
 
     pub fn check(&self, param: TypeIndex, symbols: &SymbolTable) -> bool {
         let param_name = param.format(&symbols.types);
-        let interface_name = format!("{}::{}", param_name, self.name);
+        let interface_name = SymbolName::member(&param_name, &self.name);
         let interface = symbols.interfaces.get_by_name(&interface_name);
 
         let interface = match interface {
@@ -225,26 +228,43 @@ pub struct GenericRequire {
 }
 
 impl GenericRequire {
-    pub fn new(config: &mut Config, prototype: TempGeneric, symbols: &mut SymbolTable) -> Self {
+    pub fn empty(name: String) -> Self {
         Self {
-            name: prototype.name,
-            requires: prototype
-                .requirements
-                .into_iter()
-                .filter_map(|(temp, span)| match temp {
-                    TempConstraints::Type { path, argument } => {
-                        GenericTypeRequire::new(config, (path, argument), span)
-                            .map(Constraints::Type)
-                    }
-                    TempConstraints::Interface(func) => {
-                        InterfaceRequire::new(config, func, symbols, span)
-                            .map(Constraints::Interface)
-                    }
-                })
-                .collect(),
-            attributes: prototype.attributes,
-            exported: prototype.visibility.normal_export(),
+            name,
+            requires: Vec::new(),
+            attributes: Vec::new(),
+            exported: false,
         }
+    }
+
+    pub fn new(
+        config: &mut Config,
+        prototype: TempGeneric,
+        symbols: &mut SymbolTable,
+    ) -> (Self, Span) {
+        let name_span = prototype.name_span;
+        (
+            Self {
+                name: prototype.name,
+                requires: prototype
+                    .requirements
+                    .into_iter()
+                    .filter_map(|(temp, span)| match temp {
+                        TempConstraints::Type { path, argument } => {
+                            GenericTypeRequire::new(config, (path, argument), span)
+                                .map(Constraints::Type)
+                        }
+                        TempConstraints::Interface(func) => {
+                            InterfaceRequire::new(config, func, symbols, span)
+                                .map(Constraints::Interface)
+                        }
+                    })
+                    .collect(),
+                attributes: prototype.attributes,
+                exported: prototype.visibility.normal_export(config, &name_span),
+            },
+            name_span,
+        )
     }
 
     pub fn check(&self, param: TypeIndex, symbols: &SymbolTable) -> bool {
@@ -259,7 +279,8 @@ pub type UnitIndex = ArenaIndex<UnitType>;
 pub struct GenericTable {
     pub requires: GenericArena,
     pub units: UnitArena,
-    pub funcs: FuncArena,
+    pub functions: FuncArena,
+    pub interfaces: InterfaceArena,
 }
 
 impl GenericTable {
@@ -267,7 +288,8 @@ impl GenericTable {
         Self {
             requires: GenericArena::empty(),
             units: UnitArena::empty(),
-            funcs: FuncArena::empty(),
+            functions: FuncArena::empty(),
+            interfaces: InterfaceArena::empty(),
         }
     }
 }
@@ -411,6 +433,7 @@ mod tests {
         let prototype = TempGeneric {
             visibility: Default::default(),
             name: "G".into(),
+            name_span: span,
             requirements: vec![(
                 TempConstraints::Type {
                     path: path("std::generic::unknown"),
@@ -421,7 +444,8 @@ mod tests {
             attributes: Vec::new(),
         };
 
-        let generic = GenericRequire::new(&mut config, prototype, &mut symbols);
+        let (generic, name_span) = GenericRequire::new(&mut config, prototype, &mut symbols);
+        assert_eq!(name_span, span);
         assert!(generic.requires.is_empty());
         assert!(config.error_handle().errors.contains(&ErrorInfo::new(
             CompileError::Resolve(ResolveError::Constraint(ConstraintError::NoRequirements)),

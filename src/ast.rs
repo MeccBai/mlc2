@@ -2,9 +2,10 @@ pub mod arena;
 pub mod config;
 pub mod expression;
 pub mod function;
-mod generic;
+pub mod generic;
 pub mod statement;
-pub(crate) mod types;
+pub mod symbol_name;
+pub mod types;
 
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
@@ -19,10 +20,10 @@ use crate::ast::types::{BaseType, CompileType};
 use crate::ast::types::{EnumType, UnitType};
 use crate::error::ice::ice;
 use crate::error::{CompileError, ErrorHandle, ResolveError};
-use crate::parser::TempGlobalStmt;
 use crate::parser::out::{
     TempEnum, TempFunc, TempGeneric, TempInterface, TempUnit, TempUsing, TempVar,
 };
+use crate::parser::{TempGlobalStmt, TempModule};
 use arena::{FuncArena, FuncIndex, GenericIndex, TypeArena, TypeIndex};
 use config::Config;
 use function::FuncBody;
@@ -65,7 +66,7 @@ pub enum Function {
 pub struct AbstractSyntaxTree {
     pub symbols: SymbolTable,
     pub body: Vec<Function>,
-    pub diagnostics: ErrorHandle,
+    pub config: Config,
 }
 
 pub struct SymbolTable {
@@ -129,7 +130,7 @@ pub enum EnumBool<T, F> {
 
 impl AbstractSyntaxTree {
     fn split(
-        temp_ast: Vec<TempGlobalStmt>,
+        temp_ast: TempModule,
     ) -> (
         Vec<TempEnum>,
         Vec<TempUnit>,
@@ -149,7 +150,7 @@ impl AbstractSyntaxTree {
         let mut usings = Vec::<TempUsing>::new();
         let mut interfaces = Vec::<TempInterface>::new();
 
-        temp_ast.into_iter().for_each(|stmt| match stmt {
+        temp_ast.into_iter().for_each(|(stmt, _span)| match stmt {
             TempGlobalStmt::Unit(temp_unit) => units.push(temp_unit),
             TempGlobalStmt::Func(temp_func) => funcs.push(temp_func),
             TempGlobalStmt::Using(temp_using) => usings.push(temp_using),
@@ -165,7 +166,7 @@ impl AbstractSyntaxTree {
         )
     }
 
-    pub fn new(mut config: Config, temp_ast: Vec<TempGlobalStmt>) -> Self {
+    pub fn new(mut config: Config, temp_ast: TempModule) -> Self {
         let mut symbols = SymbolTable::new();
         let mut body = Vec::<Function>::new();
 
@@ -177,9 +178,7 @@ impl AbstractSyntaxTree {
         usings.into_iter().for_each(|_temp_using| {});
 
         enums.into_iter().for_each(|temp_enum| {
-            let name = temp_enum.name;
-            let variants = temp_enum.variants;
-            let enum_type = EnumType::new(&mut config, name, variants);
+            let (enum_type, _span) = EnumType::new(&config, temp_enum);
             let ident = get_ident(&enum_type.name);
             symbols.types.insert(ident, CompileType::Enum(enum_type));
         });
@@ -199,7 +198,8 @@ impl AbstractSyntaxTree {
             .collect::<Vec<_>>();
 
         temp_generics.into_iter().for_each(|temp_generic| {
-            let generic_type = GenericRequire::new(&mut config, temp_generic, &mut symbols);
+            let (generic_type, _span) =
+                GenericRequire::new(&mut config, temp_generic, &mut symbols);
             let ident = arena::get_ident(&generic_type.name);
             symbols.generics.requires.insert(ident, generic_type);
         });
@@ -209,11 +209,11 @@ impl AbstractSyntaxTree {
             .zip(units.into_iter())
             .for_each(|(index, temp)| match index {
                 EnumBool::True(unit_index) => {
-                    let unit = UnitType::new(&mut config, temp, &mut symbols);
+                    let (unit, _span) = UnitType::finalize(&mut config, temp, &mut symbols);
                     symbols.types.set(&unit_index, Unit(unit));
                 }
                 EnumBool::False(unit_index) => {
-                    let unit = UnitType::new(&mut config, temp, &mut symbols);
+                    let (unit, _span) = UnitType::finalize(&mut config, temp, &mut symbols);
                     symbols.generics.units.set(&unit_index, unit);
                 }
             });
@@ -222,9 +222,13 @@ impl AbstractSyntaxTree {
             .into_iter()
             .map(|temp_func| {
                 let (symbol, body) = temp_func.split();
-                let symbol = FuncSymbol::new(&mut config, symbol, &mut symbols);
+                let (symbol, _span) = FuncSymbol::new(&mut config, symbol, &mut symbols);
                 let ident = get_ident(&symbol.name);
-                let index = symbols.functions.insert(ident, symbol);
+                let index = if symbol.has_generics() {
+                    EnumBool::False(symbols.generics.functions.insert(ident, symbol))
+                } else {
+                    EnumBool::True(symbols.functions.insert(ident, symbol))
+                };
                 (index, body)
             })
             .collect::<Vec<_>>();
@@ -233,9 +237,13 @@ impl AbstractSyntaxTree {
             .into_iter()
             .map(|temp_interface| {
                 let (symbol, body) = temp_interface.split();
-                let symbol = InterfaceSymbol::new(&mut config, symbol, &mut symbols);
+                let (symbol, _span) = InterfaceSymbol::new(&mut config, symbol, &mut symbols);
                 let ident = get_ident(&symbol.name);
-                let index = symbols.interfaces.insert(ident, symbol);
+                let index = if symbol.has_generics() {
+                    EnumBool::False(symbols.generics.interfaces.insert(ident, symbol))
+                } else {
+                    EnumBool::True(symbols.interfaces.insert(ident, symbol))
+                };
                 (index, body)
             })
             .collect::<Vec<_>>();
@@ -250,24 +258,47 @@ impl AbstractSyntaxTree {
             })
             .collect::<HashMap<String, Rc<Variable>>>();
 
-        temp_funcs.into_iter().for_each(|(index, temp_body)| {
-            let func_body = FuncBody::new(&mut config, index, temp_body, &mut symbols);
-            body.push(Function::Func(func_body));
-        });
+        temp_funcs
+            .into_iter()
+            .for_each(|(index, temp_body)| match index {
+                EnumBool::True(func_index) => {
+                    let func_body = FuncBody::new(&mut config, func_index, temp_body, &mut symbols);
+                    body.push(Function::Func(func_body));
+                }
+                EnumBool::False(generic_func_index) => {
+                    let func_body =
+                        FuncBody::new(&mut config, generic_func_index, temp_body, &mut symbols);
+                    body.push(Function::Func(func_body));
+                }
+            });
 
-        temp_interfaces.into_iter().for_each(|(index, temp_body)| {
-            let interface_body = Interface::new(&mut config, index, temp_body, &mut symbols);
-            body.push(Function::Interface(interface_body));
-        });
+        temp_interfaces
+            .into_iter()
+            .for_each(|(index, temp_body)| match index {
+                EnumBool::True(interface_index) => {
+                    let interface_body =
+                        Interface::new(&mut config, interface_index, temp_body, &mut symbols);
+                    body.push(Function::Interface(interface_body));
+                }
+                EnumBool::False(generic_interface_index) => {
+                    let interface_body = Interface::new(
+                        &mut config,
+                        generic_interface_index,
+                        temp_body,
+                        &mut symbols,
+                    );
+                    body.push(Function::Interface(interface_body));
+                }
+            });
 
         Self {
             symbols,
             body,
-            diagnostics: config.into_error_handle(),
+            config,
         }
     }
 
-    pub fn export(config: Config, temp_ast: Vec<TempGlobalStmt>) -> SymbolTable {
+    pub fn export(config: Config, temp_ast: TempModule) -> SymbolTable {
         // Implementation for exporting the AST
         todo!()
     }

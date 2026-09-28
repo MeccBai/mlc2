@@ -16,6 +16,7 @@ pub(crate) use enum_type::EnumType;
 
 use crate::ast::arena::get_ident;
 use crate::ast::config::Config;
+use crate::ast::symbol_name::SymbolName;
 use crate::ast::types::CompileType::{Base, Enum, Generic, List, Ref, Unit};
 use crate::ast::{GenericIndex, SymbolTable, TypeArena, TypeIndex};
 use crate::error::ice::ice;
@@ -39,6 +40,17 @@ impl CompileType {
             Ref(ref_type) => ref_type.base.is_generic(arena),
             Unit(unit_type) => unit_type.has_generic(),
             List(list_type) => list_type.is_generic(arena),
+        }
+    }
+
+    pub fn format(&self, arena: &TypeArena) -> String {
+        match self {
+            Base(base_type) => base_type.name(),
+            Ref(ref_type) => ref_type.format(arena),
+            Unit(unit_type) => unit_type.format(),
+            List(list_type) => list_type.format(arena),
+            Enum(enum_type) => enum_type.name.clone(),
+            Generic(_) => ice("Cannot format a Generic type."),
         }
     }
 }
@@ -214,6 +226,24 @@ impl TypeIndex {
             _ => ice("Non-ref type cannot be de referenced."),
         }
     }
+
+    pub fn make_ref(&self, arena: &mut TypeArena) -> TypeIndex {
+        let ty = arena.get(*self);
+        match ty {
+            Ref(ref_type) => {
+                let new_ref = RefType::new(ref_type.base, ref_type.level + 1);
+                let type_str = new_ref.format(arena);
+                let ident = get_ident(&type_str);
+                arena.insert(ident, Ref(new_ref))
+            }
+            _ => {
+                let new_ref = RefType::new(*self, 1);
+                let type_str = new_ref.format(arena);
+                let ident = get_ident(&type_str);
+                arena.insert(ident, Ref(new_ref))
+            }
+        }
+    }
 }
 
 pub fn resolve_type(
@@ -224,7 +254,7 @@ pub fn resolve_type(
     let (temp, span) = temp;
     match temp {
         TempType::Path(path) => {
-            let path = path.join();
+            let path = SymbolName::path(&path.segments);
             let local = config.symbol_name(&path);
             match symbols
                 .types
@@ -239,7 +269,7 @@ pub fn resolve_type(
             }
         }
         TempType::Generic { base, args } => {
-            let name = config.symbol_name(&base.join());
+            let name = config.symbol_name(&SymbolName::path(&base.segments));
             let ident = get_ident(&name);
             let index = match symbols.generics.units.get_by_ident(ident) {
                 Some(index) => index,

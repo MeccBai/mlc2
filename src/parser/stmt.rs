@@ -6,7 +6,7 @@ use super::{
     MatchPattern, ParseError, Scope, Spanned, Statement,
     expr::expression_parser,
     out::Span,
-    split::{ident, keyword, operator, type_parser},
+    split::{ident, keyword, operator, spanned_ident, type_parser},
 };
 
 pub fn statement_parser<'tokens, I>()
@@ -32,16 +32,19 @@ where
             keyword(Token::Variable).to(false),
             keyword(Token::Constant).to(true),
         ))
-        .then(ident())
+        .then(spanned_ident())
         .then(declared_type)
         .then(initializer)
         .then_ignore(semicolon.clone())
-        .map(|(((constant, name), ty), value)| Statement::Variable {
-            constant,
-            name,
-            ty,
-            value: Some(value),
-        });
+        .map(
+            |(((constant, (name, name_span)), ty), value)| Statement::Variable {
+                constant,
+                name,
+                name_span,
+                ty,
+                value: Some(value),
+            },
+        );
 
         let return_ = keyword(Token::Return)
             .ignore_then(expression.clone().or_not())
@@ -96,16 +99,19 @@ where
             .then(expression.clone())
             .delimited_by(keyword(Token::LeftBracket), keyword(Token::RightBracket));
         let for_ = keyword(Token::For)
-            .ignore_then(ident())
+            .ignore_then(spanned_ident())
             .then_ignore(keyword(Token::In))
             .then(for_bounds)
             .then(scope.clone())
-            .map(|((binding, (start, end)), scope)| Statement::For {
-                binding,
-                start,
-                end,
-                scope,
-            });
+            .map(
+                |(((binding, binding_span), (start, end)), scope)| Statement::For {
+                    binding,
+                    binding_span,
+                    start,
+                    end,
+                    scope,
+                },
+            );
 
         let assignment = expression
             .clone()

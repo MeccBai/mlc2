@@ -537,7 +537,9 @@ mod tests {
         assert!(matches!(
             &module[4].0,
             TempGlobalStmt::Enum(TempEnum { name, variants, .. })
-                if name == "State" && variants == &["Waiting", "Running"]
+                if name == "State"
+                    && variants.iter().map(|(name, _)| name.as_str()).collect::<Vec<_>>()
+                        == ["Waiting", "Running"]
         ));
     }
 
@@ -591,6 +593,60 @@ mod tests {
         assert_eq!(&source[constraint_span.into_range()], "G");
         assert!(!generic.dump().contains("Position:"));
         assert_eq!(generic.dump_with_span().matches("Position:").count(), 2);
+    }
+
+    #[test]
+    fn preserves_declaration_and_nested_name_spans() {
+        let source = "unit Point<T> { x:i32; }; func run(value:i32,...) {} \
+                      Point::func get(self, index:i32) {} \
+                      generic Numeric { func check(self); }; \
+                      enum State { Ready }; using Alias = i32; global var count:i32 = 0;";
+        let module = parse_ok(source);
+        let at = |span: out::Span| &source[span.into_range()];
+
+        let TempGlobalStmt::Unit(unit) = &module[0].0 else {
+            panic!("expected unit");
+        };
+        assert_eq!(at(unit.name_span), "Point");
+        assert_eq!(at(unit.generics[0].name_span), "T");
+        assert_eq!(at(unit.members[0].name_span), "x");
+
+        let TempGlobalStmt::Func(function) = &module[1].0 else {
+            panic!("expected function");
+        };
+        assert_eq!(at(function.symbol.name_span), "run");
+        assert_eq!(at(function.symbol.params[0].name_span), "value");
+        assert_eq!(at(function.symbol.params[1].name_span), "...");
+
+        let TempGlobalStmt::Interface(interface) = &module[2].0 else {
+            panic!("expected interface");
+        };
+        assert_eq!(at(interface.symbol.name_span), "get");
+        assert_eq!(at(interface.symbol.params[0].name_span), "index");
+
+        let TempGlobalStmt::Generic(generic) = &module[3].0 else {
+            panic!("expected generic");
+        };
+        assert_eq!(at(generic.name_span), "Numeric");
+        let out::TempConstraints::Interface(requirement) = &generic.requirements[0].0 else {
+            panic!("expected interface requirement");
+        };
+        assert_eq!(at(requirement.name_span), "check");
+
+        let TempGlobalStmt::Enum(enumeration) = &module[4].0 else {
+            panic!("expected enum");
+        };
+        assert_eq!(at(enumeration.name_span), "State");
+        assert_eq!(at(enumeration.variants[0].1), "Ready");
+
+        let TempGlobalStmt::Using(using) = &module[5].0 else {
+            panic!("expected using");
+        };
+        assert_eq!(at(using.name_span), "Alias");
+        let TempGlobalStmt::Variable(variable) = &module[6].0 else {
+            panic!("expected global variable");
+        };
+        assert_eq!(at(variable.name_span), "count");
     }
 
     #[test]
@@ -676,14 +732,9 @@ mod tests {
             let with_span = item.dump_with_span(*span);
             assert!(with_span.contains("Position:"));
         }
-        assert_eq!(
-            module[1]
-                .0
-                .dump_with_span(module[1].1)
-                .matches("Position:")
-                .count(),
-            2
-        );
+        let unit_dump = module[1].0.dump_with_span(module[1].1);
+        assert!(unit_dump.contains("Name position:"));
+        assert!(unit_dump.contains("Type position:"));
     }
 
     #[test]

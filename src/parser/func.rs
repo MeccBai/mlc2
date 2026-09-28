@@ -5,7 +5,7 @@ use crate::lexer::{TokenPack, token::Token};
 use super::{
     FunctionDecl, Param, ParseError,
     out::{Span, TempFuncSymbol, TempInterface, TempInterfaceSymbol},
-    split::{generic_params, ident, keyword, operator, path, type_parser},
+    split::{generic_params, keyword, operator, path, spanned_ident, type_parser},
     stmt::scope_parser,
 };
 
@@ -27,10 +27,16 @@ where
         .ignore_then(just(TokenPack::Ident("self".to_owned())))
         .to(ParsedParam::Receiver { mutable: true });
 
-    let typed_param = ident()
+    let typed_param = spanned_ident()
         .then_ignore(operator(Token::Colon))
         .then(type_parser())
-        .map(|(name, ty)| ParsedParam::Typed(Param { name, ty: Some(ty) }));
+        .map(|((name, name_span), ty)| {
+            ParsedParam::Typed(Param {
+                name,
+                name_span,
+                ty: Some(ty),
+            })
+        });
 
     let variadic = keyword(Token::VarList).map_with(|_, extra| ParsedParam::Variadic(extra.span()));
 
@@ -44,7 +50,7 @@ fn signature_parser<'tokens, I>() -> impl Parser<
     I,
     (
         Vec<super::GenericParam>,
-        String,
+        super::Spanned<String>,
         Vec<ParsedParam>,
         Option<super::Spanned<super::TypeExpr>>,
     ),
@@ -60,7 +66,7 @@ where
         .delimited_by(keyword(Token::LParen), keyword(Token::RParen));
 
     generic_params()
-        .then(ident())
+        .then(spanned_ident())
         .then(params)
         .then(operator(Token::Arrow).ignore_then(type_parser()).or_not())
         .try_map(|(((generics, name), params), return_type), _| {
@@ -96,31 +102,35 @@ where
     keyword(Token::Function)
         .ignore_then(signature_parser())
         .then(body_parser())
-        .try_map(|((generics, name, params, return_type), body), span| {
-            let params = std::iter::Iterator::collect::<Result<Vec<_>, _>>(
-                params.into_iter().map(|param| match param {
-                    ParsedParam::Typed(param) => Ok(param),
-                    ParsedParam::Variadic(_) => Ok(Param {
-                        name: "...".to_owned(),
-                        ty: None,
+        .try_map(
+            |((generics, (name, name_span), params, return_type), body), span| {
+                let params = std::iter::Iterator::collect::<Result<Vec<_>, _>>(
+                    params.into_iter().map(|param| match param {
+                        ParsedParam::Typed(param) => Ok(param),
+                        ParsedParam::Variadic(name_span) => Ok(Param {
+                            name: "...".to_owned(),
+                            name_span,
+                            ty: None,
+                        }),
+                        ParsedParam::Receiver { .. } => {
+                            Err(Rich::custom(span, "self is only valid in an interface"))
+                        }
                     }),
-                    ParsedParam::Receiver { .. } => {
-                        Err(Rich::custom(span, "self is only valid in an interface"))
-                    }
-                }),
-            )?;
-            Ok(FunctionDecl {
-                symbol: TempFuncSymbol {
-                    visibility: Default::default(),
-                    name,
-                    generics,
-                    params,
-                    return_type,
-                    attributes: Vec::new(),
-                },
-                body,
-            })
-        })
+                )?;
+                Ok(FunctionDecl {
+                    symbol: TempFuncSymbol {
+                        visibility: Default::default(),
+                        name,
+                        name_span,
+                        generics,
+                        params,
+                        return_type,
+                        attributes: Vec::new(),
+                    },
+                    body,
+                })
+            },
+        )
         .labelled("function")
         .boxed()
 }
@@ -144,41 +154,45 @@ where
     owner
         .then_ignore(keyword(Token::Function))
         .then(signature_parser())
-        .try_map(|(owner, (generics, name, mut params, return_type)), span| {
-            let receiver = match params.first() {
-                Some(ParsedParam::Receiver { mutable }) => Some(*mutable),
-                _ => None,
-            };
-            let has_self = receiver.is_some();
-            let mutable = receiver.unwrap_or(false);
-            if has_self {
-                params.remove(0);
-            }
-            let params = std::iter::Iterator::collect::<Result<Vec<_>, _>>(
-                params.into_iter().map(|param| match param {
-                    ParsedParam::Typed(param) => Ok(param),
-                    ParsedParam::Variadic(_) => Ok(Param {
-                        name: "...".to_owned(),
-                        ty: None,
+        .try_map(
+            |(owner, (generics, (name, name_span), mut params, return_type)), span| {
+                let receiver = match params.first() {
+                    Some(ParsedParam::Receiver { mutable }) => Some(*mutable),
+                    _ => None,
+                };
+                let has_self = receiver.is_some();
+                let mutable = receiver.unwrap_or(false);
+                if has_self {
+                    params.remove(0);
+                }
+                let params = std::iter::Iterator::collect::<Result<Vec<_>, _>>(
+                    params.into_iter().map(|param| match param {
+                        ParsedParam::Typed(param) => Ok(param),
+                        ParsedParam::Variadic(name_span) => Ok(Param {
+                            name: "...".to_owned(),
+                            name_span,
+                            ty: None,
+                        }),
+                        ParsedParam::Receiver { .. } => Err(Rich::custom(
+                            span,
+                            "self must be the first interface parameter",
+                        )),
                     }),
-                    ParsedParam::Receiver { .. } => Err(Rich::custom(
-                        span,
-                        "self must be the first interface parameter",
-                    )),
-                }),
-            )?;
-            Ok(TempInterfaceSymbol {
-                visibility: Default::default(),
-                owner,
-                has_self,
-                mutable,
-                name,
-                generics,
-                params,
-                return_type,
-                attributes: Vec::new(),
-            })
-        })
+                )?;
+                Ok(TempInterfaceSymbol {
+                    visibility: Default::default(),
+                    owner,
+                    has_self,
+                    mutable,
+                    name,
+                    name_span,
+                    generics,
+                    params,
+                    return_type,
+                    attributes: Vec::new(),
+                })
+            },
+        )
         .labelled("interface symbol")
         .boxed()
 }

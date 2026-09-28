@@ -3,7 +3,10 @@ pub mod func;
 pub mod stmt;
 pub mod types;
 
-use crate::{ast::ImportModule, error::ice::ice};
+use crate::{
+    ast::{ImportModule, config::Config},
+    error::{CompileError, IllegalUseError},
+};
 
 pub use crate::lexer::Span;
 
@@ -25,11 +28,17 @@ pub enum TempVisibility {
 }
 
 impl TempVisibility {
-    pub fn normal_export(self) -> bool {
+    pub fn normal_export(self, config: &mut Config, span: &Span) -> bool {
         match self {
             Self::Export => true,
             Self::Private => false,
-            _ => ice("Unexpected visibility for unit type."),
+            _ => {
+                config.submit_error(
+                    CompileError::IllegalUse(IllegalUseError::IllegalVisibility),
+                    span.clone(),
+                );
+                false
+            }
         }
     }
 }
@@ -37,6 +46,7 @@ impl TempVisibility {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TempGenericParam {
     pub name: String,
+    pub name_span: Span,
     pub constraint: Option<Spanned<TempPath>>,
 }
 
@@ -49,16 +59,18 @@ impl TempGenericParam {
     }
 
     pub fn dump_with_span(&self) -> String {
-        match &self.constraint {
-            Some((_, span)) => format!("{} @ {span:?}", self.dump()),
-            None => self.dump(),
+        let mut output = format!("{} @ {:?}", self.name, self.name_span);
+        if let Some((path, span)) = &self.constraint {
+            output.push_str(&format!(": {} @ {span:?}", path.segments.join("::")));
         }
+        output
     }
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct TempUnitMember {
     pub name: String,
+    pub name_span: Span,
     pub ty: Spanned<TempType>,
     pub public: bool,
 }
@@ -74,7 +86,12 @@ impl TempUnitMember {
     }
 
     pub fn dump_with_span(&self) -> String {
-        format!("{}\n    Position: {:?}", self.dump(), self.ty.1)
+        format!(
+            "{}\n    Name position: {:?}\n    Type position: {:?}",
+            self.dump(),
+            self.name_span,
+            self.ty.1
+        )
     }
 }
 
@@ -82,6 +99,7 @@ impl TempUnitMember {
 pub struct TempUnit {
     pub visibility: TempVisibility,
     pub name: String,
+    pub name_span: Span,
     pub generics: Vec<TempGenericParam>,
     pub members: Vec<TempUnitMember>,
     pub attributes: Vec<String>,
@@ -132,6 +150,7 @@ impl TempUnit {
 pub struct TempUsing {
     pub visibility: TempVisibility,
     pub name: String,
+    pub name_span: Span,
     pub target: Spanned<TempType>,
 }
 
@@ -172,6 +191,7 @@ impl TempConstraints {
 pub struct TempGeneric {
     pub visibility: TempVisibility,
     pub name: String,
+    pub name_span: Span,
     pub requirements: Vec<Spanned<TempConstraints>>,
     pub attributes: Vec<String>,
 }
@@ -205,7 +225,8 @@ impl TempGeneric {
 pub struct TempEnum {
     pub visibility: TempVisibility,
     pub name: String,
-    pub variants: Vec<String>,
+    pub name_span: Span,
+    pub variants: Vec<Spanned<String>>,
     pub attributes: Vec<String>,
 }
 
@@ -213,7 +234,13 @@ impl TempEnum {
     pub fn dump(&self) -> String {
         format!(
             "Enum: {}\n    Visibility: {:?}\n    Variants: {:?}\n    Attributes: {:?}",
-            self.name, self.visibility, self.variants, self.attributes
+            self.name,
+            self.visibility,
+            self.variants
+                .iter()
+                .map(|(name, _)| name)
+                .collect::<Vec<_>>(),
+            self.attributes
         )
     }
 }
@@ -221,6 +248,7 @@ impl TempEnum {
 #[derive(Debug, Clone, PartialEq)]
 pub struct TempVar {
     pub name: String,
+    pub name_span: Span,
     pub ty: Option<Spanned<TempType>>,
     pub initializer: Spanned<TempExpr>,
     pub constant: bool,

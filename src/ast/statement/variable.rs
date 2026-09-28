@@ -19,6 +19,7 @@ impl Variable {
     }
 
     pub fn new(config: &mut Config, temp_var: TempVar, symbols: &mut SymbolTable) -> Rc<Self> {
+        let initializer_span = temp_var.initializer.1;
         let init_val = Expression::new(config, temp_var.initializer, symbols, None);
 
         let ty = match temp_var.ty {
@@ -26,7 +27,18 @@ impl Variable {
                 Some(ty) => ty,
                 None => TypeIndex::empty(),
             },
-            None => init_val.type_inference(config, symbols)
+            None => {
+                let inferred = init_val.type_inference(config, symbols);
+                if inferred.is_empty() {
+                    config.submit_error(
+                        crate::error::CompileError::Resolve(
+                            crate::error::ResolveError::MissingType,
+                        ),
+                        initializer_span,
+                    );
+                }
+                inferred
+            }
         };
 
         Rc::new(Self {

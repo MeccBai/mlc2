@@ -12,7 +12,9 @@ use super::{
         TempInterface, TempModule, TempPath, TempType, TempUnit, TempUnitMember, TempUsing,
         TempVar, TempVisibility,
     },
-    split::{attributes, generic_params, ident, keyword, operator, path, type_parser, visibility},
+    split::{
+        attributes, generic_params, keyword, operator, path, spanned_ident, type_parser, visibility,
+    },
 };
 
 enum RawItem {
@@ -20,21 +22,21 @@ enum RawItem {
     Function(TempFunc),
     Interface(TempInterface),
     Unit {
-        name: String,
+        name: Spanned<String>,
         generics: Vec<TempGenericParam>,
         members: Vec<TempUnitMember>,
     },
     Using {
-        name: String,
+        name: Spanned<String>,
         ty: Spanned<TempType>,
     },
     Generic {
-        name: String,
+        name: Spanned<String>,
         requirements: Vec<Spanned<TempConstraints>>,
     },
     Enum {
-        name: String,
-        variants: Vec<String>,
+        name: Spanned<String>,
+        variants: Vec<Spanned<String>>,
     },
 }
 
@@ -51,13 +53,18 @@ where
     let member = keyword(Token::Public)
         .or_not()
         .map(|public| public.is_some())
-        .then(ident())
+        .then(spanned_ident())
         .then_ignore(operator(Token::Colon))
         .then(type_parser())
         .then_ignore(keyword(Token::Semicolon))
-        .map(|((public, name), ty)| TempUnitMember { name, ty, public });
+        .map(|((public, (name, name_span)), ty)| TempUnitMember {
+            name,
+            name_span,
+            ty,
+            public,
+        });
     let unit = keyword(Token::Unit)
-        .ignore_then(ident())
+        .ignore_then(spanned_ident())
         .then(generic_params())
         .then(
             member
@@ -73,7 +80,7 @@ where
         });
 
     let using = keyword(Token::Using)
-        .ignore_then(ident())
+        .ignore_then(spanned_ident())
         .then_ignore(operator(Token::Assign))
         .then(type_parser())
         .then_ignore(keyword(Token::Semicolon))
@@ -86,9 +93,9 @@ where
     let interface = interface_parser().map(RawItem::Interface);
 
     let enum_ = keyword(Token::Enum)
-        .ignore_then(ident())
+        .ignore_then(spanned_ident())
         .then(
-            ident()
+            spanned_ident()
                 .separated_by(operator(Token::Comma))
                 .at_least(1)
                 .allow_trailing()
@@ -103,13 +110,14 @@ where
             keyword(Token::Variable).to(false),
             keyword(Token::Constant).to(true),
         )))
-        .then(ident())
+        .then(spanned_ident())
         .then(operator(Token::Colon).ignore_then(type_parser()).or_not())
         .then(operator(Token::Assign).ignore_then(super::expr::expression_parser()))
         .then_ignore(keyword(Token::Semicolon))
-        .map(|(((constant, name), ty), initializer)| {
+        .map(|(((constant, (name, name_span)), ty), initializer)| {
             TempGlobalStmt::Variable(TempVar {
                 name,
+                name_span,
                 ty,
                 initializer,
                 constant,
@@ -148,30 +156,43 @@ where
                     TempGlobalStmt::Interface(interface)
                 }
                 RawItem::Unit {
-                    name,
+                    name: (name, name_span),
                     generics,
                     members,
                 } => TempGlobalStmt::Unit(TempUnit {
                     visibility,
                     name,
+                    name_span,
                     generics,
                     members,
                     attributes,
                 }),
-                RawItem::Using { name, ty } => TempGlobalStmt::Using(TempUsing {
+                RawItem::Using {
+                    name: (name, name_span),
+                    ty,
+                } => TempGlobalStmt::Using(TempUsing {
                     visibility,
                     name,
+                    name_span,
                     target: ty,
                 }),
-                RawItem::Generic { name, requirements } => TempGlobalStmt::Generic(TempGeneric {
+                RawItem::Generic {
+                    name: (name, name_span),
+                    requirements,
+                } => TempGlobalStmt::Generic(TempGeneric {
                     visibility,
                     name,
+                    name_span,
                     requirements,
                     attributes,
                 }),
-                RawItem::Enum { name, variants } => TempGlobalStmt::Enum(TempEnum {
+                RawItem::Enum {
+                    name: (name, name_span),
+                    variants,
+                } => TempGlobalStmt::Enum(TempEnum {
                     visibility,
                     name,
+                    name_span,
                     variants,
                     attributes,
                 }),

@@ -30,6 +30,14 @@ where
     select! { TokenPack::Ident(name) => name }.labelled("identifier")
 }
 
+pub fn spanned_ident<'tokens, I>()
+-> impl Parser<'tokens, I, Spanned<String>, extra::Err<ParseError<'tokens>>> + Clone
+where
+    I: ValueInput<'tokens, Token = TokenPack, Span = Span>,
+{
+    ident().map_with(|name, extra| (name, extra.span()))
+}
+
 pub fn path<'tokens, I>() -> impl Parser<'tokens, I, Path, extra::Err<ParseError<'tokens>>> + Clone
 where
     I: ValueInput<'tokens, Token = TokenPack, Span = Span>,
@@ -78,13 +86,17 @@ pub fn generic_params<'tokens, I>()
 where
     I: ValueInput<'tokens, Token = TokenPack, Span = Span>,
 {
-    ident()
+    spanned_ident()
         .then(
             operator(Token::Colon)
                 .ignore_then(path().map_with(|path, extra| (path, extra.span())))
                 .or_not(),
         )
-        .map(|(name, constraint)| GenericParam { name, constraint })
+        .map(|((name, name_span), constraint)| GenericParam {
+            name,
+            name_span,
+            constraint,
+        })
         .separated_by(operator(Token::Comma))
         .at_least(1)
         .allow_trailing()

@@ -1,4 +1,5 @@
 use crate::ast::config::Config;
+use crate::parser::out::{Span, TempEnum};
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct EnumType {
@@ -7,11 +8,19 @@ pub struct EnumType {
 }
 
 impl EnumType {
-    pub fn new(config: &Config, name: String, variants: Vec<String>) -> Self {
-        Self {
-            name: config.symbol_name(&name),
-            variants,
-        }
+    pub fn new(config: &Config, prototype: TempEnum) -> (Self, Span) {
+        let name_span = prototype.name_span;
+        (
+            Self {
+                name: config.symbol_name(&prototype.name),
+                variants: prototype
+                    .variants
+                    .into_iter()
+                    .map(|(name, _)| name)
+                    .collect(),
+            },
+            name_span,
+        )
     }
 
     pub fn format(&self) -> String {

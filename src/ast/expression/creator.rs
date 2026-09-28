@@ -1,9 +1,12 @@
 use std::collections::HashMap;
 use std::rc::Rc;
 
+use super::operators::Operator;
 use super::{
     CompAtom, Composite, ConstValue, Expression, FuncCall, InitialList, MemberAccess, UnaryExpr,
 };
+use crate::ast::symbol_name::SymbolName;
+use crate::ast::types::CompileType;
 use crate::ast::{
     EnumBool, FuncIndex, SymbolTable, TypeIndex, arena::InterfaceIndex, config::Config,
     expression::Expression::InitListE, statement::Variable, types::resolve_type,
@@ -19,10 +22,6 @@ use crate::parser::out::{
 impl Expression {
     pub fn null() -> Self {
         Expression::ConstValueE(ConstValue::null())
-    }
-
-    pub fn type_inference(&self, config: &mut Config, symbols: &mut SymbolTable) -> TypeIndex {
-        todo!()
     }
 
     pub fn search_variable(
@@ -56,21 +55,26 @@ impl Expression {
                 base,
                 indirect,
                 name,
+                ..
             } => {
                 let owner = Expression::new(config, *base, symbols, context);
                 let owner_type = owner.type_inference(config, symbols);
-                let owner_type = if indirect {
-                    owner_type.deref(&mut symbols.types).unwrap_or_else(|| {
+                let owner_type = if indirect && !owner_type.is_empty() {
+                    if !owner_type.is_ref(&symbols.types) {
                         config.submit_error(
                             CompileError::IllegalUse(IllegalUseError::MemberAccessViolation),
                             span,
                         );
-                        TypeIndex::empty()
-                    })
+                        return (owner, InterfaceIndex::empty());
+                    }
+                    owner_type.deref(&mut symbols.types).unwrap()
                 } else {
                     owner_type
                 };
-                let interface_name = format!("{}::{}", owner_type.format(&symbols.types), name);
+                if owner_type.is_empty() {
+                    return (owner, InterfaceIndex::empty());
+                }
+                let interface_name = SymbolName::member(&owner_type.format(&symbols.types), &name);
                 (
                     owner,
                     symbols
@@ -98,7 +102,7 @@ impl Expression {
         let (expr, span) = temp_expr;
         match expr {
             Path(path) => {
-                let name = path.join();
+                let name = SymbolName::path(&path.segments);
                 let interface = symbols.interfaces.get_by_name(&name);
                 match interface {
                     Some(interface_index) => EnumBool::True(interface_index),
@@ -137,7 +141,7 @@ impl Expression {
                 TempLiteralKind::String => Self::InitListE(InitialList::from_string(text)),
             },
             Path(path) => {
-                let var_name = path.join();
+                let var_name = SymbolName::path(&path.segments);
                 match Self::search_variable(&var_name, symbols, &context) {
                     Some(var) => Self::VarValueE(var),
                     None => {
@@ -151,6 +155,16 @@ impl Expression {
             }
             Unary { op, value } => {
                 let expr = Self::new(config, *value, symbols, context);
+                if op == Operator::Dereference {
+                    let ty = expr.type_inference(config, symbols);
+                    if !ty.is_empty() && !ty.is_ref(&symbols.types) {
+                        config.submit_error(
+                            CompileError::IllegalUse(IllegalUseError::InvalidDereference),
+                            span,
+                        );
+                        return Self::null();
+                    }
+                }
                 Expression::UnaryExprE(UnaryExpr {
                     op,
                     value: Box::new(CompAtom::from_expr(expr)),
@@ -202,8 +216,32 @@ impl Expression {
                 base,
                 indirect,
                 name,
+                name_span,
             } => {
                 let owner = Expression::new(config, *base, symbols, context);
+                let mut owner_type = owner.type_inference(config, symbols);
+                if !owner_type.is_empty() && indirect {
+                    if !owner_type.is_ref(&symbols.types) {
+                        config.submit_error(
+                            CompileError::IllegalUse(IllegalUseError::MemberAccessViolation),
+                            span,
+                        );
+                        return Self::null();
+                    }
+                    owner_type = owner_type.deref(&mut symbols.types).unwrap();
+                }
+                if !owner_type.is_empty()
+                    && !matches!(
+                        symbols.types.get(owner_type),
+                        CompileType::Unit(unit) if unit.get_member(&name).is_some()
+                    )
+                {
+                    config.submit_error(
+                        CompileError::IllegalUse(IllegalUseError::MemberAccessViolation),
+                        name_span,
+                    );
+                    return Self::null();
+                }
                 Self::MemberAccessE(MemberAccess {
                     base: Box::new(CompAtom::from_expr(owner)),
                     indirect,
@@ -238,10 +276,11 @@ impl Expression {
                     })
                     .collect::<Vec<_>>();
 
-                let ty = if values.is_empty() {
-                    TypeIndex::empty()
+                let ty = if let Some(first) = values.first() {
+                    first.type_inference(config, symbols)
                 } else {
-                    values[0].type_inference(config, symbols)
+                    config.submit_error(CompileError::Resolve(ResolveError::MissingType), span);
+                    TypeIndex::empty()
                 };
 
                 InitListE(InitialList::Array {
@@ -250,5 +289,62 @@ impl Expression {
                 })
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::error::{ErrorHandle, ErrorInfo};
+    use crate::parser::out::TempLiteralKind;
+
+    fn setup() -> (Config, SymbolTable) {
+        let config = Config::new(
+            Vec::new(),
+            "test".into(),
+            "test".into(),
+            ErrorHandle::new("test".into()),
+        );
+        (config, SymbolTable::new())
+    }
+
+    #[test]
+    fn empty_array_reports_missing_type() {
+        let (mut config, mut symbols) = setup();
+        let span = (0..2).into();
+        Expression::new(&mut config, (Array(Vec::new()), span), &mut symbols, None);
+        assert!(config.error_handle().errors.contains(&ErrorInfo::new(
+            CompileError::Resolve(ResolveError::MissingType),
+            span,
+        )));
+    }
+
+    #[test]
+    fn dereferencing_non_reference_reports_error() {
+        let (mut config, mut symbols) = setup();
+        let span = (0..2).into();
+        let value = (
+            Literal {
+                kind: TempLiteralKind::Integer,
+                text: "1".into(),
+            },
+            (1..2).into(),
+        );
+        Expression::new(
+            &mut config,
+            (
+                Unary {
+                    op: Operator::Dereference,
+                    value: Box::new(value),
+                },
+                span,
+            ),
+            &mut symbols,
+            None,
+        );
+        assert!(config.error_handle().errors.contains(&ErrorInfo::new(
+            CompileError::IllegalUse(IllegalUseError::InvalidDereference),
+            span,
+        )));
     }
 }

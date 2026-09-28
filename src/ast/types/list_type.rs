@@ -1,5 +1,6 @@
 use crate::ast::arena::{GenericIndex, TypeArena, get_ident};
 use crate::ast::config::Config;
+use crate::ast::symbol_name::SymbolName;
 use crate::ast::types::CompileType::List;
 use crate::ast::{SymbolTable, TypeIndex};
 use crate::parser::out::Span;
@@ -36,7 +37,7 @@ impl ListType {
     }
 
     pub fn format(&self, arena: &TypeArena) -> String {
-        format!("[{},{}]", self.element_type.format(arena), self.length)
+        SymbolName::array(&self.element_type.format(arena), self.length)
     }
 
     pub fn dump(&self, arena: &TypeArena) -> String {
@@ -52,10 +53,9 @@ impl ListType {
         arena: &TypeArena,
         params: &HashMap<GenericIndex, TypeIndex>,
     ) -> String {
-        format!(
-            "[{},{}]",
-            self.element_type.generic_instance_name(arena, params),
-            self.length
+        SymbolName::array(
+            &self.element_type.generic_instance_name(arena, params),
+            self.length,
         )
     }
 

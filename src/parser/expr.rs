@@ -6,12 +6,12 @@ use crate::lexer::{TokenPack, token::Token};
 use super::{
     Expr, LiteralKind, ParseError, Spanned,
     out::Span,
-    split::{keyword, operator, path, type_parser},
+    split::{keyword, operator, path, spanned_ident, type_parser},
 };
 
 enum Postfix {
     Call(Vec<Spanned<Expr>>),
-    Member(bool, String),
+    Member(bool, Spanned<String>),
     Index(Spanned<Expr>),
 }
 
@@ -167,7 +167,7 @@ where
             operator(Token::Dot).to(false),
             operator(Token::Arrow).to(true),
         ))
-        .then(super::split::ident())
+        .then(spanned_ident())
         .map(|(access, name)| Postfix::Member(access, name));
 
         let index = expr
@@ -183,10 +183,11 @@ where
                         callee: Box::new(base),
                         args,
                     },
-                    Postfix::Member(indirect, name) => Expr::Member {
+                    Postfix::Member(indirect, (name, name_span)) => Expr::Member {
                         base: Box::new(base),
                         indirect,
                         name,
+                        name_span,
                     },
                     Postfix::Index(index) => Expr::Binary {
                         operands: vec![base, index],

@@ -1,10 +1,13 @@
-pub mod operators;
 pub mod creator;
+pub mod operators;
 
 use std::rc::Rc;
 
-use crate::ast::arena::InterfaceIndex;
+use crate::ast::arena::{InterfaceIndex, get_ident};
+use crate::ast::config::Config;
 use crate::ast::statement::Variable;
+use crate::ast::types::CompileType::{self, List};
+use crate::ast::types::ListType;
 use crate::ast::types::base_type::DataType;
 use crate::ast::{EnumBool, FuncIndex, SymbolTable, TypeIndex};
 use crate::error::ice::ice;
@@ -20,20 +23,6 @@ pub enum CompAtom {
     ConstValueA(ConstValue),
     UnaryExprA(UnaryExpr),
     MemberAccessA(MemberAccess),
-}
-
-impl CompAtom {
-    pub fn from_expr(expr: Expression) -> Self {
-        match expr {
-            Expression::CompositeE(composite) => CompAtom::CompositeA(composite),
-            Expression::FuncCallE(func_call) => CompAtom::FuncCallA(func_call),
-            Expression::ConstValueE(const_value) => CompAtom::ConstValueA(const_value),
-            Expression::VarValueE(var) => CompAtom::VarValueA(var),
-            Expression::UnaryExprE(unary) => CompAtom::UnaryExprA(unary),
-            Expression::MemberAccessE(access) => CompAtom::MemberAccessA(access),
-            Expression::InitListE(_) => ice("InitialList cannot be computed."),
-        }
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -139,4 +128,107 @@ pub enum Expression {
     ConstValueE(ConstValue),
     UnaryExprE(UnaryExpr),
     MemberAccessE(MemberAccess),
+}
+impl CompAtom {
+    pub fn from_expr(expr: Expression) -> Self {
+        match expr {
+            Expression::CompositeE(composite) => CompAtom::CompositeA(composite),
+            Expression::FuncCallE(func_call) => CompAtom::FuncCallA(func_call),
+            Expression::ConstValueE(const_value) => CompAtom::ConstValueA(const_value),
+            Expression::VarValueE(var) => CompAtom::VarValueA(var),
+            Expression::UnaryExprE(unary) => CompAtom::UnaryExprA(unary),
+            Expression::MemberAccessE(access) => CompAtom::MemberAccessA(access),
+            Expression::InitListE(_) => ice("InitialList cannot be computed."),
+        }
+    }
+
+    pub fn to_expression(self) -> Expression {
+        match self {
+            CompAtom::CompositeA(composite) => Expression::CompositeE(composite),
+            CompAtom::FuncCallA(func_call) => Expression::FuncCallE(func_call),
+            CompAtom::ConstValueA(const_value) => Expression::ConstValueE(const_value),
+            CompAtom::VarValueA(var) => Expression::VarValueE(var),
+            CompAtom::UnaryExprA(unary) => Expression::UnaryExprE(unary),
+            CompAtom::MemberAccessA(access) => Expression::MemberAccessE(access),
+        }
+    }
+
+    pub fn type_inference(&self, config: &mut Config, symbols: &mut SymbolTable) -> TypeIndex {
+        match self {
+            CompAtom::VarValueA(var) => var.var_type,
+            CompAtom::CompositeA(composite) => composite.type_inference(config, symbols),
+            CompAtom::FuncCallA(func_call) => func_call.type_inference(symbols),
+            CompAtom::ConstValueA(const_value) => const_value.ty,
+            CompAtom::UnaryExprA(unary) => unary.type_inference(config, symbols),
+            CompAtom::MemberAccessA(access) => access.type_inference(config, symbols),
+        }
+    }
+}
+
+impl Expression {
+    pub fn type_inference(&self, config: &mut Config, symbols: &mut SymbolTable) -> TypeIndex {
+        match self {
+            Expression::VarValueE(var) => var.var_type,
+            Expression::ConstValueE(const_value) => const_value.ty,
+            Expression::UnaryExprE(unary) => unary.type_inference(config, symbols),
+            Expression::MemberAccessE(access) => access.type_inference(config, symbols),
+            Expression::InitListE(init_list) => match init_list {
+                InitialList::List { onwer, values } => match onwer {
+                    Some(ty) => *ty,
+                    None => TypeIndex::empty(),
+                },
+                InitialList::Array { ty, values } => ty.clone(),
+                InitialList::String { value } => {
+                    let string_type = symbols.get_base(DataType::Integer, 8, true);
+                    let ty = List(ListType::new(string_type, value.len()));
+                    let name = ty.format(&symbols.types);
+                    let ident = get_ident(&name);
+                    symbols.types.insert(ident, ty)
+                }
+            },
+            Expression::CompositeE(composite) => composite.type_inference(config, symbols),
+            Expression::FuncCallE(func_call) => func_call.type_inference(symbols),
+        }
+    }
+}
+
+impl Composite {
+    fn type_inference(&self, config: &mut Config, symbols: &mut SymbolTable) -> TypeIndex {
+        self.members.first().map_or(TypeIndex::empty(), |member| {
+            member.type_inference(config, symbols)
+        })
+    }
+}
+
+impl FuncCall {
+    fn type_inference(&self, symbols: &SymbolTable) -> TypeIndex {
+        match self.func {
+            EnumBool::True(index) => symbols.interfaces.get(index).ret_type,
+            EnumBool::False(index) => symbols.functions.get(index).ret_type,
+        }
+        .unwrap_or(TypeIndex::empty())
+    }
+}
+
+impl UnaryExpr {
+    fn type_inference(&self, config: &mut Config, symbols: &mut SymbolTable) -> TypeIndex {
+        let value_type = self.value.type_inference(config, symbols);
+        match self.op {
+            Operator::AddressOf => value_type.make_ref(&mut symbols.types),
+            Operator::Dereference => value_type.deref(&mut symbols.types).unwrap(),
+            _ => value_type,
+        }
+    }
+}
+
+impl MemberAccess {
+    fn type_inference(&self, config: &mut Config, symbols: &mut SymbolTable) -> TypeIndex {
+        let base_type = self.base.type_inference(config, symbols);
+        match symbols.types.get(base_type) {
+            CompileType::Unit(unit) => unit
+                .get_member(&self.name)
+                .map_or(TypeIndex::empty(), |member| member.member_type),
+            _ => TypeIndex::empty(),
+        }
+    }
 }

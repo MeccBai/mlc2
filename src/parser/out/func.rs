@@ -1,8 +1,9 @@
-use super::{Spanned, TempGenericParam, TempPath, TempScope, TempType, TempVisibility};
+use super::{Span, Spanned, TempGenericParam, TempPath, TempScope, TempType, TempVisibility};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct TempParam {
     pub name: String,
+    pub name_span: Span,
     pub ty: Option<Spanned<TempType>>,
 }
 
@@ -25,6 +26,7 @@ pub struct TempFunc {
 pub struct TempFuncSymbol {
     pub visibility: TempVisibility,
     pub name: String,
+    pub name_span: Span,
     pub generics: Vec<TempGenericParam>,
     pub params: Vec<TempParam>,
     pub return_type: Option<Spanned<TempType>>,
@@ -44,6 +46,7 @@ pub struct TempInterfaceSymbol {
     pub has_self: bool,
     pub mutable: bool,
     pub name: String,
+    pub name_span: Span,
     pub generics: Vec<TempGenericParam>,
     pub params: Vec<TempParam>,
     pub return_type: Option<Spanned<TempType>>,

@@ -92,8 +92,7 @@ fn main() {
 
     let config = Config::new(vec!["".to_string()], "".to_string(), "".to_string(), err_h);
 
-    let ast =
-        ast::AbstractSyntaxTree::new(config, module.into_iter().map(|(stmt, _)| stmt).collect());
+    let ast = ast::AbstractSyntaxTree::new(config, module);
 
     //if let Some(module) = module {
     //    for (item, _) in &module {

@@ -51,6 +51,10 @@ impl<T> ArenaIndex<T> {
     pub fn empty() -> Self {
         Self::new(usize::MAX)
     }
+
+    pub fn is_empty(self) -> bool {
+        self.index == usize::MAX
+    }
 }
 
 pub struct NamedArena<T> {

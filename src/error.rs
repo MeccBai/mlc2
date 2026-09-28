@@ -40,6 +40,8 @@ pub enum IllegalUseError {
     NonGenericInstantiation,
     RequirementUnmet,
     MemberAccessViolation,
+    InvalidDereference,
+    IllegalVisibility,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

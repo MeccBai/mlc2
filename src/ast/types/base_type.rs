@@ -43,19 +43,7 @@ impl BaseType {
     }
 
     pub fn name(&self) -> String {
-        match self.data_type {
-            DataType::Integer => {
-                if self.signed {
-                    format!("i{}", self.size())
-                } else {
-                    format!("u{}", self.size())
-                }
-            }
-            DataType::Float => {
-                format!("f{}", self.size())
-            }
-            DataType::Boolean => "bool".to_string(),
-        }
+        SymbolName::base_type(self.data_type.clone(), self.signed, self.bits)
     }
 
     pub fn format(&self) -> String {
@@ -124,3 +112,4 @@ impl BaseType {
         }
     }
 }
+use crate::ast::symbol_name::SymbolName;
