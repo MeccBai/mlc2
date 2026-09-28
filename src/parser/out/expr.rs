@@ -1,5 +1,5 @@
-use super::{Spanned, TempPath};
-use crate::ast::expr::operators::Operator;
+use super::{Spanned, TempPath, TempType};
+use crate::ast::expression::operators::Operator;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TempLiteralKind {
@@ -36,7 +36,7 @@ pub enum TempExpr {
         name: String,
     },
     Init {
-        target: Option<Box<Spanned<TempExpr>>>,
+        target: Option<Spanned<TempType>>,
         values: Vec<Spanned<TempExpr>>,
     },
     Array(Vec<Spanned<TempExpr>>),

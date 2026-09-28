@@ -1,4 +1,6 @@
+use colored::Colorize;
+
 pub fn ice(reason: &str) -> ! {
-    println!("Internal Compiler Error: \n{}", reason);
+    println!("{} \n{}", "Internal Compiler Error:".red(), reason);
     panic!()
 }

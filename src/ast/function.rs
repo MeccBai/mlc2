@@ -1,10 +1,11 @@
 use std::collections::HashMap;
 
 use crate::ast::arena::{FuncIndex, InterfaceIndex, get_ident};
-use crate::ast::stmt::Statement;
+use crate::ast::statement::Statement;
 use crate::ast::types::resolve_type;
 use crate::ast::{Config, GenericIndex, SymbolTable, TypeIndex};
 use crate::error::{CompileError, ResolveError};
+use crate::lexer::Span;
 use crate::parser::Scope;
 use crate::parser::out::{TempFuncSymbol, TempInterfaceSymbol, TempType, TempVisibility};
 

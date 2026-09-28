@@ -13,6 +13,7 @@ use super::{
 enum ParsedParam {
     Receiver { mutable: bool },
     Typed(Param),
+    Variadic(Span),
 }
 
 fn parameter_parser<'tokens, I>()
@@ -31,7 +32,9 @@ where
         .then(type_parser())
         .map(|(name, ty)| ParsedParam::Typed(Param { name, ty: Some(ty) }));
 
-    choice((mutable_self, immutable_self, typed_param))
+    let variadic = keyword(Token::VarList).map_with(|_, extra| ParsedParam::Variadic(extra.span()));
+
+    choice((mutable_self, immutable_self, typed_param, variadic))
         .labelled("function parameter")
         .boxed()
 }
@@ -60,7 +63,17 @@ where
         .then(ident())
         .then(params)
         .then(operator(Token::Arrow).ignore_then(type_parser()).or_not())
-        .map(|(((generics, name), params), return_type)| (generics, name, params, return_type))
+        .try_map(|(((generics, name), params), return_type), _| {
+            if let Some(ParsedParam::Variadic(span)) = params
+                .iter()
+                .rev()
+                .skip(1)
+                .find(|param| matches!(param, ParsedParam::Variadic(_)))
+            {
+                return Err(Rich::custom(*span, "... must be the last parameter"));
+            }
+            Ok((generics, name, params, return_type))
+        })
         .boxed()
 }
 
@@ -87,6 +100,10 @@ where
             let params = std::iter::Iterator::collect::<Result<Vec<_>, _>>(
                 params.into_iter().map(|param| match param {
                     ParsedParam::Typed(param) => Ok(param),
+                    ParsedParam::Variadic(_) => Ok(Param {
+                        name: "...".to_owned(),
+                        ty: None,
+                    }),
                     ParsedParam::Receiver { .. } => {
                         Err(Rich::custom(span, "self is only valid in an interface"))
                     }
@@ -140,6 +157,10 @@ where
             let params = std::iter::Iterator::collect::<Result<Vec<_>, _>>(
                 params.into_iter().map(|param| match param {
                     ParsedParam::Typed(param) => Ok(param),
+                    ParsedParam::Variadic(_) => Ok(Param {
+                        name: "...".to_owned(),
+                        ty: None,
+                    }),
                     ParsedParam::Receiver { .. } => Err(Rich::custom(
                         span,
                         "self must be the first interface parameter",

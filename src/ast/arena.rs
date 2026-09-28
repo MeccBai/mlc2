@@ -1,5 +1,4 @@
-use crate::ast::func::{FuncBody, FuncSymbol};
-use crate::ast::func::{Interface, InterfaceSymbol};
+use crate::ast::function::{FuncSymbol, InterfaceSymbol};
 use crate::ast::generic::GenericRequire;
 use crate::ast::types::CompileType;
 use std::collections::HashMap;

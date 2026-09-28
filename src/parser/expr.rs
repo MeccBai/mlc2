@@ -1,18 +1,17 @@
 use chumsky::{input::ValueInput, prelude::*};
 
-use crate::ast::expr::operators::Operator;
+use crate::ast::expression::operators::Operator;
 use crate::lexer::{TokenPack, token::Token};
 
 use super::{
     Expr, LiteralKind, ParseError, Spanned,
     out::Span,
-    split::{keyword, operator, path},
+    split::{keyword, operator, path, type_parser},
 };
 
 enum Postfix {
     Call(Vec<Spanned<Expr>>),
     Member(bool, String),
-    Init(Vec<Spanned<Expr>>),
     Index(Spanned<Expr>),
 }
 
@@ -135,14 +134,29 @@ where
             })
             .map_with(|expr, extra| (expr, extra.span()));
 
+        let typed_init = type_parser()
+            .then(init_list.clone())
+            .map(|(target, values)| Expr::Init {
+                target: Some(target),
+                values,
+            })
+            .map_with(|expr, extra| (expr, extra.span()));
+
         let array = list
             .clone()
             .delimited_by(keyword(Token::LeftBracket), keyword(Token::RightBracket))
             .map(Expr::Array)
             .map_with(|expr, extra| (expr, extra.span()));
 
-        let atom =
-            choice((literal, path_expr, parenthesized, bare_init, array)).labelled("expression");
+        let atom = choice((
+            literal,
+            typed_init,
+            path_expr,
+            parenthesized,
+            bare_init,
+            array,
+        ))
+        .labelled("expression");
 
         let call = list
             .clone()
@@ -156,14 +170,13 @@ where
         .then(super::split::ident())
         .map(|(access, name)| Postfix::Member(access, name));
 
-        let postfix_init = init_list.map(Postfix::Init);
         let index = expr
             .clone()
             .delimited_by(keyword(Token::LeftBracket), keyword(Token::RightBracket))
             .map(Postfix::Index);
 
         let postfix = atom.foldl_with(
-            choice((call, member, postfix_init, index)).repeated(),
+            choice((call, member, index)).repeated(),
             |base, postfix, extra| {
                 let expr = match postfix {
                     Postfix::Call(args) => Expr::Call {
@@ -174,10 +187,6 @@ where
                         base: Box::new(base),
                         indirect,
                         name,
-                    },
-                    Postfix::Init(values) => Expr::Init {
-                        target: Some(Box::new(base)),
-                        values,
                     },
                     Postfix::Index(index) => Expr::Binary {
                         operands: vec![base, index],

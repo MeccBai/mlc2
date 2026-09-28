@@ -28,6 +28,9 @@ pub enum ResolveError {
     UnknownGeneric,
     UnknownConstraint,
     MissingType,
+    UnknownVariable,
+    UnknownFunction,
+    UnknownInterface,
     Constraint(ConstraintError),
 }
 
@@ -36,6 +39,7 @@ pub enum IllegalUseError {
     GenericCountMismatch,
     NonGenericInstantiation,
     RequirementUnmet,
+    MemberAccessViolation,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

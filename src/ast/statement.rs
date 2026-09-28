@@ -1,6 +1,6 @@
 use crate::ast::TypeIndex;
-use crate::ast::expr::{Expression, FunctionCall};
-use std::sync::Arc;
+use crate::ast::expression::{Expression, FuncCall};
+use std::rc::Rc;
 pub mod variable;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -13,7 +13,7 @@ pub struct Variable {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Assignment {
-    pub variable: Arc<Variable>,
+    pub variable: Rc<Variable>,
     pub value: Box<Expression>,
 }
 
@@ -56,9 +56,9 @@ pub struct AnonymousBlock {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Statement {
-    VariableDecl(Variable),
+    VariableDecl(Rc<Variable>),
     Assignment(Assignment),
-    FuncCall(FunctionCall),
+    FuncCall(FuncCall),
     IfBlock(IfStatement),
     WhileBlock(WhileStatement),
     ForBlock(ForStatement),
@@ -68,5 +68,3 @@ pub enum Statement {
     Continue,
     Break,
 }
-
-

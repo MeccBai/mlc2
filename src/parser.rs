@@ -51,6 +51,56 @@ mod tests {
     }
 
     #[test]
+    fn variadic_marker_is_the_last_function_or_interface_parameter() {
+        let module = parse_ok(
+            "func tt(...) -> int; func mixed(a:i32, ...) -> int; Point::func method(self, a:i32, ...); generic G { func required(self, ...); };",
+        );
+
+        let TempGlobalStmt::Func(first) = &module[0].0 else {
+            panic!("expected a function");
+        };
+        assert_eq!(first.symbol.params[0].name, "...");
+        assert!(first.symbol.params[0].ty.is_none());
+
+        let TempGlobalStmt::Func(mixed) = &module[1].0 else {
+            panic!("expected a function");
+        };
+        assert_eq!(mixed.symbol.params.len(), 2);
+        assert_eq!(mixed.symbol.params[1].name, "...");
+        assert!(mixed.symbol.params[1].ty.is_none());
+
+        let TempGlobalStmt::Interface(method) = &module[2].0 else {
+            panic!("expected an interface");
+        };
+        assert!(method.symbol.has_self);
+        assert_eq!(method.symbol.params[1].name, "...");
+        assert!(method.symbol.params[1].ty.is_none());
+
+        let TempGlobalStmt::Generic(generic) = &module[3].0 else {
+            panic!("expected a generic requirement");
+        };
+        let out::TempConstraints::Interface(required) = &generic.requirements[0].0 else {
+            panic!("expected an interface requirement");
+        };
+        assert_eq!(required.params[0].name, "...");
+        assert!(required.params[0].ty.is_none());
+    }
+
+    #[test]
+    fn rejects_parameters_after_variadic_marker() {
+        for source in [
+            "func tt(..., a:i32);",
+            "func tt(a:i32, ..., b:i32);",
+            "Point::func tt(..., a:i32);",
+            "generic G { func tt(..., a:i32); };",
+        ] {
+            let lexed = tokenize(source).unwrap();
+            let (_, errors) = parse(&lexed.tokens, source.len());
+            assert!(!errors.is_empty(), "{source} should be rejected");
+        }
+    }
+
+    #[test]
     fn only_interfaces_accept_pub_and_api_visibility() {
         for declaration in [
             "import std::io;",
@@ -185,7 +235,7 @@ mod tests {
 
     #[test]
     fn temp_expressions_flatten_type_preserving_operators_across_precedence() {
-        use crate::ast::expr::operators::Operator;
+        use crate::ast::expression::operators::Operator;
 
         let module = parse_ok("func main() { var x = a + b - c * d; var y = object.field; }");
         let TempGlobalStmt::Func(function) = &module[0].0 else {
@@ -217,7 +267,7 @@ mod tests {
 
     #[test]
     fn binary_flattening_preserves_parentheses_and_member_access_kind() {
-        use crate::ast::expr::operators::Operator;
+        use crate::ast::expression::operators::Operator;
 
         let module = parse_ok("func main() { var x = a - (b - c); var y = ptr->field + 1; }");
         let TempGlobalStmt::Func(function) = &module[0].0 else {
@@ -262,8 +312,56 @@ mod tests {
     }
 
     #[test]
+    fn initializer_target_is_a_type_not_an_expression() {
+        let source = "func main() { var a = {1, 2}; var b = P{1, 2}; var c = Box<i32>{3}; }";
+        let module = parse_ok(source);
+        let TempGlobalStmt::Func(function) = &module[0].0 else {
+            panic!("expected a function");
+        };
+        let statements = &function.body.as_ref().unwrap().statements;
+
+        assert!(matches!(
+            &statements[0].0,
+            TempStmt::Variable {
+                value: Some((TempExpr::Init { target: None, .. }, _)),
+                ..
+            }
+        ));
+        assert!(matches!(
+            &statements[1].0,
+            TempStmt::Variable {
+                value: Some((TempExpr::Init { target: Some((TempType::Path(path), span)), .. }, _)),
+                ..
+            } if path.segments == ["P"] && &source[span.into_range()] == "P"
+        ));
+        assert!(matches!(
+            &statements[2].0,
+            TempStmt::Variable {
+                value: Some((TempExpr::Init {
+                    target: Some((TempType::Generic { base, args }, span)),
+                    ..
+                }, _)),
+                ..
+            } if base.segments == ["Box"] && args.len() == 1
+                && &source[span.into_range()] == "Box<i32>"
+        ));
+    }
+
+    #[test]
+    fn initializer_rejects_an_expression_as_target() {
+        for source in [
+            "func main() { var x = make_point(){1, 2}; }",
+            "func main() { var x = (P){1, 2}; }",
+        ] {
+            let lexed = tokenize(source).unwrap();
+            let (_, errors) = parse(&lexed.tokens, source.len());
+            assert!(!errors.is_empty(), "{source} should be rejected");
+        }
+    }
+
+    #[test]
     fn comparisons_form_type_changing_binary_boundaries() {
-        use crate::ast::expr::operators::Operator;
+        use crate::ast::expression::operators::Operator;
 
         let module = parse_ok("func main() { var x = a + b * c < d + e; var y = a & b == c; }");
         let TempGlobalStmt::Func(function) = &module[0].0 else {
@@ -294,7 +392,7 @@ mod tests {
 
     #[test]
     fn logical_operators_keep_boolean_boundaries() {
-        use crate::ast::expr::operators::Operator;
+        use crate::ast::expression::operators::Operator;
 
         let module = parse_ok("func main() { var x = a < b && c < d; }");
         let TempGlobalStmt::Func(function) = &module[0].0 else {
@@ -313,7 +411,7 @@ mod tests {
 
     #[test]
     fn indexing_is_a_type_changing_binary_subexpression() {
-        use crate::ast::expr::operators::Operator;
+        use crate::ast::expression::operators::Operator;
 
         let module = parse_ok(
             "func main() { var x = values[i + 1] * 2; var y = matrix[row][column]; var z = [7, 8][0]; }",
@@ -375,7 +473,7 @@ mod tests {
         assert!(matches!(
             value,
             TempExpr::Unary {
-                op: crate::ast::expr::operators::Operator::AddressOf,
+                op: crate::ast::expression::operators::Operator::AddressOf,
                 ..
             }
         ));
@@ -384,7 +482,7 @@ mod tests {
             TempStmt::Assignment {
                 target: (
                     TempExpr::Unary {
-                        op: crate::ast::expr::operators::Operator::Dereference,
+                        op: crate::ast::expression::operators::Operator::Dereference,
                         ..
                     },
                     _

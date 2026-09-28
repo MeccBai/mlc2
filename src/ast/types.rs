@@ -44,16 +44,18 @@ impl CompileType {
 }
 
 impl TypeArena {
-    pub fn new() -> Self {
+    pub fn new() -> (Self, HashMap<usize, TypeIndex>) {
+        let mut view = HashMap::<usize, TypeIndex>::new();
         let mut arena = Self::empty();
-        for ty in BaseType::base_types() {
+        for (index, ty) in BaseType::base_types() {
             let name = match &ty {
                 Base(base) => get_ident(&base.name()),
-                _ => unreachable!(),
+                _ => ice("New type arena cannot contain other types."),
             };
-            arena.insert(name, ty);
+            let ty_index = arena.insert(name, ty);
+            view.insert(index, ty_index);
         }
-        arena
+        (arena, view)
     }
 }
 
@@ -109,7 +111,7 @@ impl TypeIndex {
             List(list) => list.format(arena),
             Enum(enum_type) => enum_type.name.clone(),
             _ => {
-                ice("Type Index cannot contain a Generic type. This is a bug in the compiler.");
+                ice("Cannot format a Generic type.");
             }
         }
     }
@@ -202,6 +204,14 @@ impl TypeIndex {
                     "TypeIndex is not a Generic type. Cannot get generic instance name of a non-generic type.",
                 )
             }
+        }
+    }
+
+    pub fn deref(&self, arena: &mut TypeArena) -> Option<TypeIndex> {
+        let ty = arena.get(*self);
+        match ty {
+            Ref(ref_type) => ref_type.clone().deref(arena),
+            _ => ice("Non-ref type cannot be de referenced."),
         }
     }
 }

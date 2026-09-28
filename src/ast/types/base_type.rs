@@ -1,11 +1,13 @@
+use crate::error::ice::ice;
+
 use super::CompileType;
 use std::collections::HashSet;
-use std::sync::Arc;
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub enum DataType {
     Integer,
     Float,
+    Boolean,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
@@ -29,7 +31,11 @@ impl BaseType {
     }
 
     pub fn size(&self) -> usize {
-        self.bits / 8
+        match self.data_type {
+            DataType::Integer => self.bits / 8,
+            DataType::Float => self.bits / 8,
+            DataType::Boolean => 1,
+        }
     }
 
     pub fn align(&self) -> usize {
@@ -48,6 +54,7 @@ impl BaseType {
             DataType::Float => {
                 format!("f{}", self.size())
             }
+            DataType::Boolean => "bool".to_string(),
         }
     }
 
@@ -67,7 +74,7 @@ impl BaseType {
         })
     }
 
-    pub fn base_types() -> [CompileType; 10] {
+    pub fn base_types() -> Vec<(usize, CompileType)> {
         [
             Self::new(DataType::Integer, true, 8),
             Self::new(DataType::Integer, true, 16),
@@ -79,6 +86,41 @@ impl BaseType {
             Self::new(DataType::Integer, false, 64),
             Self::new(DataType::Float, true, 32),
             Self::new(DataType::Float, true, 64),
+            Self::new(DataType::Boolean, false, 1),
         ]
+        .into_iter()
+        .zip(0..100)
+        .map(|(ty, index)| (index, ty))
+        .collect::<Vec<_>>()
+    }
+
+    pub fn to_index(data_type: DataType, bits: usize, signed: bool) -> usize {
+        match data_type {
+            DataType::Integer => {
+                if signed {
+                    match bits {
+                        8 => 0,
+                        16 => 1,
+                        32 => 2,
+                        64 => 3,
+                        _ => ice("Invalid integer size"),
+                    }
+                } else {
+                    match bits {
+                        8 => 4,
+                        16 => 5,
+                        32 => 6,
+                        64 => 7,
+                        _ => ice("Invalid unsigned integer size"),
+                    }
+                }
+            }
+            DataType::Float => match bits {
+                32 => 8,
+                64 => 9,
+                _ => ice("Invalid float size"),
+            },
+            DataType::Boolean => 10,
+        }
     }
 }

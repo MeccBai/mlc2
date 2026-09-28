@@ -1,30 +1,31 @@
 pub mod arena;
 pub mod config;
-pub mod expr;
-pub mod func;
+pub mod expression;
+pub mod function;
 mod generic;
-pub mod stmt;
+pub mod statement;
 pub(crate) mod types;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
+use std::rc::Rc;
 
 use crate::ast::arena::{InterfaceArena, get_ident};
-use crate::ast::func::FuncSymbol;
-use crate::ast::func::{Interface, InterfaceSymbol};
+use crate::ast::function::{FuncSymbol, Interface, InterfaceSymbol};
 use crate::ast::generic::GenericTable;
-use crate::ast::stmt::Variable;
+use crate::ast::statement::Variable;
 use crate::ast::types::CompileType::{Base, Enum, List, Ref, Unit};
+use crate::ast::types::base_type::DataType;
 use crate::ast::types::{BaseType, CompileType};
 use crate::ast::types::{EnumType, UnitType};
-use crate::error::ErrorHandle;
 use crate::error::ice::ice;
+use crate::error::{CompileError, ErrorHandle, ResolveError};
 use crate::parser::TempGlobalStmt;
 use crate::parser::out::{
     TempEnum, TempFunc, TempGeneric, TempInterface, TempUnit, TempUsing, TempVar,
 };
 use arena::{FuncArena, FuncIndex, GenericIndex, TypeArena, TypeIndex};
 use config::Config;
-use func::FuncBody;
+use function::FuncBody;
 use generic::GenericRequire;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -69,48 +70,59 @@ pub struct AbstractSyntaxTree {
 
 pub struct SymbolTable {
     pub types: TypeArena,
+    pub base_type_view: HashMap<usize, TypeIndex>,
     pub functions: FuncArena,
     pub interfaces: InterfaceArena,
     pub generics: GenericTable,
-    pub globals: Vec<Variable>,
+    pub globals: HashMap<String, Rc<Variable>>,
 }
 
 impl SymbolTable {
     pub fn new() -> Self {
+        let (types, view) = TypeArena::new();
         let mut temp = Self {
-            types: TypeArena::new(),
+            types: types,
             functions: FuncArena::empty(),
             interfaces: InterfaceArena::empty(),
             generics: GenericTable::new(),
-            globals: Vec::new(),
+            globals: HashMap::new(),
+            base_type_view: view,
         };
         let base_types = BaseType::base_types();
         base_types
             .into_iter()
-            .for_each(|base_type| match base_type {
+            .for_each(|(_, base_type)| match base_type {
                 Base(base) => {
                     let name = base.name();
                     let ident = arena::get_ident(&name);
-                    let ret_type = temp.types.get_by_ident(ident).unwrap();
+                    let ret_type = temp.types.get_by_ident(ident.clone()).unwrap();
                     let func = FuncSymbol {
-                        name: base.name(),
-                        params: Vec::new(),
+                        name: name,
+                        params: vec![(TypeIndex::empty(), "...".to_string())],
                         ret_type: Some(ret_type),
                         generics: Vec::new(),
                         attributes: Vec::new(),
                         generic_map: HashMap::new(),
                         exported: false,
                     };
-                    let ident = get_ident(&name);
                     temp.functions.insert(ident, func);
                 }
                 _ => ice("Expected a Base type."),
             });
         temp
     }
+
+    pub fn get_base(&self, data: DataType, bits: usize, signed: bool) -> TypeIndex {
+        let index = BaseType::to_index(data, bits, signed);
+        match self.base_type_view.get(&index) {
+            Some(&ty_index) => ty_index,
+            None => ice("Base type not found in type arena."),
+        }
+    }
 }
 
-enum Bool<T, F> {
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum EnumBool<T, F> {
     True(T),
     False(F),
 }
@@ -179,9 +191,9 @@ impl AbstractSyntaxTree {
                 let ident = get_ident(&temp_unit.name);
                 let temp = UnitType::empty();
                 if temp_unit.generics.is_empty() {
-                    Bool::True(symbols.types.insert(ident, CompileType::Unit(temp)))
+                    EnumBool::True(symbols.types.insert(ident, CompileType::Unit(temp)))
                 } else {
-                    Bool::False(symbols.generics.units.insert(ident, temp))
+                    EnumBool::False(symbols.generics.units.insert(ident, temp))
                 }
             })
             .collect::<Vec<_>>();
@@ -196,11 +208,11 @@ impl AbstractSyntaxTree {
             .into_iter()
             .zip(units.into_iter())
             .for_each(|(index, temp)| match index {
-                Bool::True(unit_index) => {
+                EnumBool::True(unit_index) => {
                     let unit = UnitType::new(&mut config, temp, &mut symbols);
                     symbols.types.set(&unit_index, Unit(unit));
                 }
-                Bool::False(unit_index) => {
+                EnumBool::False(unit_index) => {
                     let unit = UnitType::new(&mut config, temp, &mut symbols);
                     symbols.generics.units.set(&unit_index, unit);
                 }
@@ -230,8 +242,13 @@ impl AbstractSyntaxTree {
 
         symbols.globals = globals
             .into_iter()
-            .map(|temp_variable| Variable::new(&mut config, temp_variable, &mut symbols))
-            .collect::<Vec<Variable>>();
+            .map(|temp_variable| {
+                (
+                    temp_variable.name.clone(),
+                    Variable::new(&mut config, temp_variable, &mut symbols),
+                )
+            })
+            .collect::<HashMap<String, Rc<Variable>>>();
 
         temp_funcs.into_iter().for_each(|(index, temp_body)| {
             let func_body = FuncBody::new(&mut config, index, temp_body, &mut symbols);

@@ -23,15 +23,14 @@ impl RefType {
         format!("{}{}", level, type_name)
     }
 
-    pub fn deref(&self, arena: &mut TypeArena) -> Option<TypeIndex> {
-        let new_type = self.clone();
-        if new_type.level > 1 {
-            let deref_type = RefType::new(new_type.base, new_type.level - 1);
-            let type_str = deref_type.format(arena);
+    pub fn deref(mut self, arena: &mut TypeArena) -> Option<TypeIndex> {
+        if self.level > 1 {
+            self.level -= 1;
+            let type_str = self.format(arena);
             let ident: Ident = get_ident(&type_str);
-            Some(arena.insert(ident, CompileType::Ref(deref_type)))
-        } else if new_type.level == 1 {
-            Some(new_type.base)
+            Some(arena.insert(ident, Ref(self)))
+        } else if self.level == 1 {
+            Some(self.base)
         } else {
             None
         }
