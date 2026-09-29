@@ -1,4 +1,4 @@
-use super::{Span, Spanned, TempExpr, TempType};
+use super::{Spanned, TempExpr, TempVar};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum TempMatchPattern {
@@ -13,13 +13,7 @@ pub struct TempScope {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum TempStmt {
-    Variable {
-        constant: bool,
-        name: String,
-        name_span: Span,
-        ty: Option<Spanned<TempType>>,
-        value: Option<Spanned<TempExpr>>,
-    },
+    Variable(TempVar),
     Assignment {
         target: Spanned<TempExpr>,
         value: Spanned<TempExpr>,
@@ -40,8 +34,7 @@ pub enum TempStmt {
         branches: Vec<(TempMatchPattern, TempScope)>,
     },
     For {
-        binding: String,
-        binding_span: Span,
+        binding: Spanned<String>,
         /// Inclusive lower bound of the `[start, end)` iteration range.
         start: Spanned<TempExpr>,
         /// Exclusive upper bound of the `[start, end)` iteration range.

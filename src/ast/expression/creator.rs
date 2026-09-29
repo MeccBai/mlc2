@@ -1,3 +1,10 @@
+#[cfg(test)]
+mod call_tests;
+mod generic_call;
+mod lookup;
+#[cfg(test)]
+mod reference_tests;
+
 use std::collections::HashMap;
 use std::rc::Rc;
 
@@ -8,12 +15,13 @@ use super::{
 use crate::ast::symbol_name::SymbolName;
 use crate::ast::types::CompileType;
 use crate::ast::{
-    EnumBool, FuncIndex, SymbolTable, TypeIndex, arena::InterfaceIndex, config::Config,
-    expression::Expression::InitListE, statement::Variable, types::resolve_type,
+    EnumBool, SymbolTable, TypeIndex, config::Config, expression::Expression::InitListE,
+    statement::Variable, types::resolve_type,
 };
-use crate::error::{CompileError, IllegalUseError, ResolveError, ice::ice};
+use crate::error::{CompileError, IllegalUseError, ResolveError};
+
 use crate::parser::out::{
-    Spanned, TempExpr,
+    Spanned, TempCallee, TempExpr,
     TempExpr::{Array, Binary, Call, Group, Init, Literal, Member, Path, Unary},
     TempLiteralKind,
     TempLiteralKind::{Boolean, Float, Integer, Null},
@@ -22,107 +30,6 @@ use crate::parser::out::{
 impl Expression {
     pub fn null() -> Self {
         Expression::ConstValueE(ConstValue::null())
-    }
-
-    pub fn search_variable(
-        name: &String,
-        symbols: &SymbolTable,
-        context: &Option<&HashMap<String, Rc<Variable>>>,
-    ) -> Option<Rc<Variable>> {
-        if let Some(ctx) = context {
-            match ctx.get(name) {
-                Some(var) => return Some(Rc::clone(var)),
-                None => {}
-            }
-        }
-
-        if let Some(var) = symbols.globals.get(name) {
-            return Some(Rc::clone(var));
-        }
-
-        None
-    }
-
-    pub fn search_interface(
-        config: &mut Config,
-        temp_expr: Spanned<TempExpr>,
-        symbols: &mut SymbolTable,
-        context: Option<&HashMap<String, Rc<Variable>>>,
-    ) -> (Expression, InterfaceIndex) {
-        let (expr, span) = temp_expr;
-        match expr {
-            Member {
-                base,
-                indirect,
-                name,
-                ..
-            } => {
-                let owner = Expression::new(config, *base, symbols, context);
-                let owner_type = owner.type_inference(config, symbols);
-                let owner_type = if indirect && !owner_type.is_empty() {
-                    if !owner_type.is_ref(&symbols.types) {
-                        config.submit_error(
-                            CompileError::IllegalUse(IllegalUseError::MemberAccessViolation),
-                            span,
-                        );
-                        return (owner, InterfaceIndex::empty());
-                    }
-                    owner_type.deref(&mut symbols.types).unwrap()
-                } else {
-                    owner_type
-                };
-                if owner_type.is_empty() {
-                    return (owner, InterfaceIndex::empty());
-                }
-                let interface_name = SymbolName::member(&owner_type.format(&symbols.types), &name);
-                (
-                    owner,
-                    symbols
-                        .interfaces
-                        .get_by_name(&interface_name)
-                        .unwrap_or_else(|| {
-                            config.submit_error(
-                                CompileError::Resolve(ResolveError::UnknownInterface),
-                                span,
-                            );
-                            InterfaceIndex::empty()
-                        }),
-                )
-            }
-            _ => ice("Interface search is not implemented yet."),
-        }
-    }
-
-    pub fn search_function(
-        config: &mut Config,
-        temp_expr: Spanned<TempExpr>,
-        symbols: &mut SymbolTable,
-        context: Option<&HashMap<String, Rc<Variable>>>,
-    ) -> EnumBool<InterfaceIndex, FuncIndex> {
-        let (expr, span) = temp_expr;
-        match expr {
-            Path(path) => {
-                let name = SymbolName::path(&path.segments);
-                let interface = symbols.interfaces.get_by_name(&name);
-                match interface {
-                    Some(interface_index) => EnumBool::True(interface_index),
-                    None => {
-                        let func = symbols.functions.get_by_name(&name);
-                        match func {
-                            Some(func_index) => EnumBool::False(func_index),
-                            None => {
-                                config.submit_error(
-                                    CompileError::Resolve(ResolveError::UnknownFunction),
-                                    span,
-                                );
-                                EnumBool::False(FuncIndex::empty())
-                            }
-                        }
-                    }
-                }
-            }
-            _ => ice("Interface search is not implemented yet."),
-        }
     }
 
     pub fn new(
@@ -188,30 +95,57 @@ impl Expression {
                 })
             }
             Group(inner) => Expression::new(config, *inner, symbols, context),
-            Call { callee, args } => {
-                if let Member { .. } = callee.0 {
-                    let (owner, interface) =
-                        Self::search_interface(config, *callee, symbols, context);
-                    let mut params = vec![owner];
-                    params.reserve(args.len() + 1);
-                    args.into_iter().for_each(|arg| {
-                        params.push(Expression::new(config, arg, symbols, context));
-                    });
-                    Self::FuncCallE(FuncCall {
-                        func: EnumBool::True(interface),
-                        args: params,
-                    })
-                } else {
-                    let function = Self::search_function(config, *callee, symbols, context);
-                    Self::FuncCallE(FuncCall {
-                        func: function,
-                        args: args
-                            .into_iter()
-                            .map(|arg| Expression::new(config, arg, symbols, context))
-                            .collect::<Vec<_>>(),
-                    })
+            Call { callee, args } => match callee {
+                TempCallee::GenericPath {
+                    path,
+                    args: generic_args,
+                } => {
+                    Self::new_generic_call(config, path, generic_args, args, span, symbols, context)
                 }
-            }
+                TempCallee::Expr(callee) => {
+                    if matches!(callee.0, Member { .. }) {
+                        let (owner, interface) =
+                            match Self::search_interface(config, *callee, symbols, context) {
+                                Some((owner, interface)) => (owner, interface),
+                                None => {
+                                    config.submit_error(
+                                        CompileError::Resolve(ResolveError::UnknownInterface),
+                                        span,
+                                    );
+                                    return Self::null();
+                                }
+                            };
+                        let mut params = vec![owner];
+                        params.reserve(args.len() + 1);
+                        args.into_iter().for_each(|arg| {
+                            params.push(Expression::new(config, arg, symbols, context));
+                        });
+                        Self::FuncCallE(FuncCall {
+                            func: EnumBool::True(interface),
+                            args: params,
+                        })
+                    } else {
+                        let function =
+                            match Self::search_function(config, *callee, symbols, context) {
+                                Some(f) => f,
+                                None => {
+                                    config.submit_error(
+                                        CompileError::Resolve(ResolveError::UnknownFunction),
+                                        span,
+                                    );
+                                    return Self::null();
+                                }
+                            };
+                        Self::FuncCallE(FuncCall {
+                            func: function,
+                            args: args
+                                .into_iter()
+                                .map(|arg| Expression::new(config, arg, symbols, context))
+                                .collect::<Vec<_>>(),
+                        })
+                    }
+                }
+            },
             Member {
                 base,
                 indirect,
@@ -295,6 +229,7 @@ impl Expression {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::error::ResolveError::UnknownFunction;
     use crate::error::{ErrorHandle, ErrorInfo};
     use crate::parser::out::TempLiteralKind;
 
@@ -346,5 +281,73 @@ mod tests {
             CompileError::IllegalUse(IllegalUseError::InvalidDereference),
             span,
         )));
+    }
+
+    #[test]
+    fn unknown_generic_callee_reports_unknown_function() {
+        let (mut config, mut symbols) = setup();
+        let span = (0..8).into();
+        let callee = TempCallee::GenericPath {
+            path: crate::parser::out::TempPath {
+                segments: vec!["identity".into()],
+            },
+            args: vec![(
+                crate::parser::out::TempType::Path(crate::parser::out::TempPath {
+                    segments: vec!["i32".into()],
+                }),
+                span,
+            )],
+        };
+        Expression::new(
+            &mut config,
+            (
+                Call {
+                    callee,
+                    args: Vec::new(),
+                },
+                span,
+            ),
+            &mut symbols,
+            None,
+        );
+        assert!(config.error_handle().errors.contains(&ErrorInfo::new(
+            CompileError::Resolve(UnknownFunction),
+            span,
+        )));
+    }
+
+    #[test]
+    fn registered_generic_function_is_found_in_generic_table() {
+        let (mut config, mut symbols) = setup();
+        let span = (0..8).into();
+        let requirement = symbols.generics.requires.insert(
+            "any".into(),
+            crate::ast::generic::GenericRequire::empty("any".into()),
+        );
+        let index = symbols.generics.functions.insert(
+            "identity".into(),
+            crate::ast::function::FuncSymbol {
+                name: "identity".into(),
+                params: Vec::new(),
+                ret_type: None,
+                generics: vec!["T".into()],
+                generic_map: HashMap::from([("T".into(), requirement)]),
+                attributes: Vec::new(),
+                exported: false,
+            },
+        );
+        let result = Expression::search_generic_function(
+            &mut config,
+            (
+                Path(crate::parser::out::TempPath {
+                    segments: vec!["identity".into()],
+                }),
+                span,
+            ),
+            &mut symbols,
+            None,
+        );
+        assert_eq!(result, Some(EnumBool::False(index)));
+        assert!(config.error_handle().errors.is_empty());
     }
 }

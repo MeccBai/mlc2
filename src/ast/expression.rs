@@ -190,6 +190,110 @@ impl Expression {
             Expression::FuncCallE(func_call) => func_call.type_inference(symbols),
         }
     }
+
+    pub fn is_null(&self) -> bool {
+        match self {
+            Expression::ConstValueE(const_value) => const_value.ty.is_empty(),
+            _ => false,
+        }
+    }
+
+    pub fn type_check(
+        &self,
+        target: TypeIndex,
+        config: &mut Config,
+        symbols: &mut SymbolTable,
+    ) -> bool {
+        match self {
+            Expression::VarValueE(var) => target.type_check(true, &var.var_type, &symbols.types),
+            Expression::ConstValueE(const_value) => {
+                target.type_check(true, &const_value.ty, &symbols.types)
+            }
+            Expression::UnaryExprE(unary) => {
+                unary
+                    .type_inference(config, symbols)
+                    .type_check(true, &target, &symbols.types)
+            }
+            Expression::MemberAccessE(access) => {
+                access
+                    .type_inference(config, symbols)
+                    .type_check(false, &target, &symbols.types)
+            }
+            Expression::InitListE(init_list) => match init_list {
+                InitialList::List { onwer, values } => match onwer {
+                    Some(ty) => *ty == target,
+                    None => {
+                        let check_list_types = match symbols.types.get(target) {
+                            CompileType::Unit(unit) => {
+                                let members: Vec<_> = unit
+                                    .members
+                                    .iter()
+                                    .map(|member| member.member_type.clone())
+                                    .collect();
+                                Some(members)
+                            }
+                            _ => None,
+                        };
+                        match check_list_types {
+                            Some(list_types) => {
+                                if list_types.len() != values.len() {
+                                    return false;
+                                }
+                                values.iter().zip(list_types.iter()).all(|(value, ty)| {
+                                    ty.type_check(
+                                        true,
+                                        &value.type_inference(config, symbols),
+                                        &symbols.types,
+                                    )
+                                })
+                            }
+                            None => false,
+                        }
+                    }
+                },
+                InitialList::Array { ty, values } => {
+                    if target.type_check(true, ty, &symbols.types) {
+                        return false;
+                    }
+                    let element_type = match symbols.types.get(*ty) {
+                        CompileType::List(list_type) => list_type.element_type,
+                        _ => return false,
+                    };
+                    values.iter().all(|value| {
+                        element_type.type_check(
+                            true,
+                            &value.type_inference(config, symbols),
+                            &symbols.types,
+                        )
+                    })
+                }
+                InitialList::String { value } => {
+                    let string_type = symbols.get_base(DataType::Integer, 8, true);
+                    let target = symbols.types.get(target);
+
+                    let list = match target {
+                        CompileType::List(list_type) => list_type,
+                        _ => return false,
+                    };
+
+                    if list.length != value.len() {
+                        return false;
+                    }
+
+                    list.element_type
+                        .type_check(false, &string_type, &symbols.types)
+                }
+            },
+            Expression::CompositeE(composite) => composite
+                .type_inference(config, symbols)
+                .type_check(false, &target, &symbols.types),
+            Expression::FuncCallE(func_call) => {
+                func_call
+                    .type_inference(symbols)
+                    .type_check(false, &target, &symbols.types)
+            }
+        }
+    }
 }
 
 impl Composite {
@@ -214,7 +318,8 @@ impl UnaryExpr {
     fn type_inference(&self, config: &mut Config, symbols: &mut SymbolTable) -> TypeIndex {
         let value_type = self.value.type_inference(config, symbols);
         match self.op {
-            Operator::AddressOf => value_type.make_ref(&mut symbols.types),
+            Operator::AddressOf => value_type.make_ref(&mut symbols.types, false),
+            Operator::MutableAddressOf => value_type.make_ref(&mut symbols.types, true),
             Operator::Dereference => value_type.deref(&mut symbols.types).unwrap(),
             _ => value_type,
         }

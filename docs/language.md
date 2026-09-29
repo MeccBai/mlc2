@@ -8,8 +8,9 @@ var b:i32 = 10; //手动指定
 const c:i32 = 10;//常量定义
 
 var value:i32 = 1;
-var reference:$i32 = @value; // $T 是引用类型，@ 创建引用
-$reference = 10;             // $expr 解引用，此时 value == 10
+var reference:$i32 = @value; // @ 默认创建不可变引用
+var mutable_reference:$mut i32 = @mut value; // 可变引用必须显式标记
+$mutable_reference = 10;    // $expr 解引用，此时 value == 10
 
 global var counter:i32 = 0;
 global const limit:i32 = 10;

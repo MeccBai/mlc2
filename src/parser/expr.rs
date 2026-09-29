@@ -5,7 +5,7 @@ use crate::lexer::{TokenPack, token::Token};
 
 use super::{
     Expr, LiteralKind, ParseError, Spanned,
-    out::Span,
+    out::{Span, TempCallee},
     split::{keyword, operator, path, spanned_ident, type_parser},
 };
 
@@ -180,7 +180,7 @@ where
             |base, postfix, extra| {
                 let expr = match postfix {
                     Postfix::Call(args) => Expr::Call {
-                        callee: Box::new(base),
+                        callee: TempCallee::Expr(Box::new(base)),
                         args,
                     },
                     Postfix::Member(indirect, (name, name_span)) => Expr::Member {
@@ -202,7 +202,15 @@ where
             operator(Token::Minus).to(Operator::Negate),
             operator(Token::LogicalNot).to(Operator::LogicalNot),
             operator(Token::BitNot).to(Operator::BitNot),
-            operator(Token::AddressOf).to(Operator::AddressOf),
+            operator(Token::AddressOf)
+                .then(keyword(Token::Mut).or_not())
+                .map(|(_, mutable)| {
+                    if mutable.is_some() {
+                        Operator::MutableAddressOf
+                    } else {
+                        Operator::AddressOf
+                    }
+                }),
             operator(Token::Dereference).to(Operator::Dereference),
         ));
 
@@ -283,7 +291,7 @@ where
                 let callee = (Expr::Path(callee), callee_span);
                 (
                     Expr::Call {
-                        callee: Box::new(callee),
+                        callee: TempCallee::Expr(Box::new(callee)),
                         args,
                     },
                     extra.span(),

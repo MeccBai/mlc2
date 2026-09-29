@@ -32,8 +32,9 @@ impl SymbolName {
         format!("\0unit::{}", Self::member(unit, param))
     }
 
-    pub fn reference(base: &str, level: usize) -> String {
-        format!("{}{base}", "$".repeat(level))
+    pub fn reference(base: &str, level: usize, mut_base: bool) -> String {
+        let mutability = if mut_base { "mut " } else { "" };
+        format!("{}{}{base}", "$".repeat(level), mutability)
     }
 
     pub fn array(element: &str, length: usize) -> String {
@@ -65,7 +66,8 @@ mod tests {
             SymbolName::generic_instance("Box", &["i32".into()]),
             "Box<i32>"
         );
-        assert_eq!(SymbolName::reference("i32", 2), "$$i32");
+        assert_eq!(SymbolName::reference("i32", 2, false), "$$i32");
+        assert_eq!(SymbolName::reference("i32", 2, true), "$$mut i32");
         assert_eq!(SymbolName::array("i32", 4), "[i32,4]");
         assert_eq!(SymbolName::base_type(DataType::Integer, true, 32), "i32");
     }

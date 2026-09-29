@@ -124,3 +124,8 @@ pub type FuncIndex = ArenaIndex<FuncSymbol>;
 
 pub type InterfaceArena = NamedArena<InterfaceSymbol>;
 pub type InterfaceIndex = ArenaIndex<InterfaceSymbol>;
+
+
+impl FuncIndex {
+    
+}

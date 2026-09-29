@@ -18,6 +18,7 @@ pub enum Operator {
 
     Index,
     AddressOf,
+    MutableAddressOf,
     Dot,
     Dereference,
     Arrow,

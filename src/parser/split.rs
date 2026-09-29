@@ -128,8 +128,12 @@ where
             });
 
         let reference = operator(Token::Dereference)
-            .ignore_then(ty.clone())
-            .map(|inner| TypeExpr::Reference(Box::new(inner)));
+            .then(keyword(Token::Mut).or_not())
+            .then(ty.clone())
+            .map(|((_, mutable), inner)| TypeExpr::Reference {
+                inner: Box::new(inner),
+                mutable: mutable.is_some(),
+            });
 
         choice((reference, named))
             .map_with(|ty, extra| (ty, extra.span()))

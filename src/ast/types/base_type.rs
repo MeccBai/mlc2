@@ -1,6 +1,7 @@
 use crate::error::ice::ice;
 
 use super::CompileType;
+use crate::ast::symbol_name::SymbolName;
 use std::collections::HashSet;
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
@@ -111,5 +112,27 @@ impl BaseType {
             DataType::Boolean => 10,
         }
     }
+
+    pub fn type_check(&self, tolerance: bool, other: &BaseType) -> bool {
+        match (self.data_type.clone(), other.data_type.clone()) {
+            (DataType::Integer, DataType::Integer) => {
+                if tolerance {
+                    self.bits <= other.bits
+                } 
+                else {
+                    self.bits == other.bits && self.signed == other.signed
+                }
+            }
+            (DataType::Float, DataType::Float) => {
+                if tolerance {
+                    self.bits <= other.bits
+                } 
+                else {
+                    self.bits == other.bits
+                }
+            }
+            (DataType::Boolean, DataType::Boolean) => true,
+            _ => false,
+        }
+    }
 }
-use crate::ast::symbol_name::SymbolName;

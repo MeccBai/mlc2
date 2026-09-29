@@ -8,18 +8,23 @@ use std::collections::HashMap;
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct RefType {
     pub base: TypeIndex,
+    pub mut_base: bool,
     pub level: usize,
 }
 
 const REF_SIZE: usize = 8;
 
 impl RefType {
-    pub fn new(base: TypeIndex, level: usize) -> Self {
-        Self { base, level }
+    pub fn new(base: TypeIndex, level: usize, mut_base: bool) -> Self {
+        Self {
+            base,
+            level,
+            mut_base,
+        }
     }
 
     pub fn format(&self, arena: &TypeArena) -> String {
-        SymbolName::reference(&self.base.format(arena), self.level)
+        SymbolName::reference(&self.base.format(arena), self.level, self.mut_base)
     }
 
     pub fn deref(mut self, arena: &mut TypeArena) -> Option<TypeIndex> {
@@ -51,7 +56,11 @@ impl RefType {
         arena: &TypeArena,
         params: &HashMap<GenericIndex, TypeIndex>,
     ) -> String {
-        SymbolName::reference(&self.base.generic_instance_name(arena, params), self.level)
+        SymbolName::reference(
+            &self.base.generic_instance_name(arena, params),
+            self.level,
+            self.mut_base,
+        )
     }
 
     pub fn instantiation(
@@ -65,7 +74,7 @@ impl RefType {
         let child = self
             .base
             .instantiation(config, params, symbols, actives, span)?;
-        let instance = RefType::new(child, self.level);
+        let instance = RefType::new(child, self.level, self.mut_base);
 
         let name = instance.format(&symbols.types);
         let ident = get_ident(&name);
@@ -75,5 +84,18 @@ impl RefType {
         }
 
         Some(symbols.types.insert(ident, Ref(instance)))
+    }
+
+    pub fn type_check(&self, other: &RefType, symbols: &TypeArena) -> bool {
+        if self.base != other.base {
+            return false;
+        }
+        if self.level != other.level {
+            return false;
+        }
+        if self.mut_base == true && other.mut_base == false {
+            return false;
+        }
+        true
     }
 }

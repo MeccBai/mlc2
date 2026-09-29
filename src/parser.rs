@@ -206,10 +206,10 @@ mod tests {
         let TempGlobalStmt::Func(function) = &module[0].0 else {
             panic!("expected a function");
         };
-        let Some(TempStmt::Variable {
-            value: Some((TempExpr::Call { callee, args }, _)),
+        let Some(TempStmt::Variable(out::TempVar {
+            initializer: (TempExpr::Call { callee, args }, _),
             ..
-        }) = function
+        })) = function
             .body
             .as_ref()
             .and_then(|body| body.statements.first())
@@ -217,12 +217,39 @@ mod tests {
         else {
             panic!("expected the pipeline to lower to a call");
         };
-
         assert_eq!(args.len(), 3);
         assert!(matches!(
-            &callee.0,
-            TempExpr::Path(TempPath { segments }) if segments == &["std", "sum"]
+            callee,
+            out::TempCallee::Expr(expr)
+                if matches!(&expr.0, TempExpr::Path(TempPath { segments })
+                    if segments == &["std", "sum"])
         ));
+    }
+
+    #[test]
+    fn local_and_global_variables_share_temp_var_and_for_binding_keeps_span() {
+        let source = "global var globalValue:i32 = 1; func main() { var localValue:i32 = 2; for index in [0, 2] {} }";
+        let module = parse_ok(source);
+        let TempGlobalStmt::Variable(global) = &module[0].0 else {
+            panic!("expected global variable");
+        };
+        assert_eq!(&source[global.name_span.into_range()], "globalValue");
+
+        let TempGlobalStmt::Func(function) = &module[1].0 else {
+            panic!("expected function");
+        };
+        let statements = &function.body.as_ref().unwrap().statements;
+        let TempStmt::Variable(local) = &statements[0].0 else {
+            panic!("expected local variable");
+        };
+        assert_eq!(&source[local.name_span.into_range()], "localValue");
+        assert_eq!(&source[local.initializer.1.into_range()], "2");
+
+        let TempStmt::For { binding, .. } = &statements[1].0 else {
+            panic!("expected for statement");
+        };
+        assert_eq!(binding.0, "index");
+        assert_eq!(&source[binding.1.into_range()], "index");
     }
 
     #[test]
@@ -244,24 +271,24 @@ mod tests {
         let statements = &function.body.as_ref().unwrap().statements;
         assert!(matches!(
             &statements[0].0,
-            TempStmt::Variable {
-                value: Some((TempExpr::Binary { operands, operators }, _)),
+            TempStmt::Variable(out::TempVar {
+                initializer: (TempExpr::Binary { operands, operators }, _),
                 ..
-            } if operators == &[Operator::Add, Operator::Subtract, Operator::Multiply]
+            }) if operators == &[Operator::Add, Operator::Subtract, Operator::Multiply]
                 && operands.len() == 4
         ));
         assert!(matches!(
             &statements[1].0,
-            TempStmt::Variable {
-                value: Some((
+            TempStmt::Variable(out::TempVar {
+                initializer: (
                     TempExpr::Member {
                         indirect: false,
                         ..
                     },
                     _
-                )),
+                ),
                 ..
-            }
+            })
         ));
     }
 
@@ -276,20 +303,20 @@ mod tests {
         let statements = &function.body.as_ref().unwrap().statements;
         assert!(matches!(
             &statements[0].0,
-            TempStmt::Variable {
-                value: Some((TempExpr::Binary { operands, operators }, _)),
+            TempStmt::Variable(out::TempVar {
+                initializer: (TempExpr::Binary { operands, operators }, _),
                 ..
-            } if operators == &[Operator::Subtract]
+            }) if operators == &[Operator::Subtract]
                 && matches!(&operands[1].0, TempExpr::Group(inner)
                     if matches!(&inner.0, TempExpr::Binary { operators, .. }
                         if operators == &[Operator::Subtract]))
         ));
         assert!(matches!(
             &statements[1].0,
-            TempStmt::Variable {
-                value: Some((TempExpr::Binary { operands, .. }, _)),
+            TempStmt::Variable(out::TempVar {
+                initializer: (TempExpr::Binary { operands, .. }, _),
                 ..
-            } if matches!(&operands[0].0, TempExpr::Member { indirect: true, .. })
+            }) if matches!(&operands[0].0, TempExpr::Member { indirect: true, .. })
         ));
     }
 
@@ -299,10 +326,10 @@ mod tests {
         let TempGlobalStmt::Func(function) = &module[0].0 else {
             panic!("expected a function");
         };
-        let TempStmt::Variable {
-            value: Some((TempExpr::Binary { operands, .. }, _)),
+        let TempStmt::Variable(out::TempVar {
+            initializer: (TempExpr::Binary { operands, .. }, _),
             ..
-        } = &function.body.as_ref().unwrap().statements[0].0
+        }) = &function.body.as_ref().unwrap().statements[0].0
         else {
             panic!("expected a flattened binary expression");
         };
@@ -322,27 +349,27 @@ mod tests {
 
         assert!(matches!(
             &statements[0].0,
-            TempStmt::Variable {
-                value: Some((TempExpr::Init { target: None, .. }, _)),
+            TempStmt::Variable(out::TempVar {
+                initializer: (TempExpr::Init { target: None, .. }, _),
                 ..
-            }
+            })
         ));
         assert!(matches!(
             &statements[1].0,
-            TempStmt::Variable {
-                value: Some((TempExpr::Init { target: Some((TempType::Path(path), span)), .. }, _)),
+            TempStmt::Variable(out::TempVar {
+                initializer: (TempExpr::Init { target: Some((TempType::Path(path), span)), .. }, _),
                 ..
-            } if path.segments == ["P"] && &source[span.into_range()] == "P"
+            }) if path.segments == ["P"] && &source[span.into_range()] == "P"
         ));
         assert!(matches!(
             &statements[2].0,
-            TempStmt::Variable {
-                value: Some((TempExpr::Init {
+            TempStmt::Variable(out::TempVar {
+                initializer: (TempExpr::Init {
                     target: Some((TempType::Generic { base, args }, span)),
                     ..
-                }, _)),
+                }, _),
                 ..
-            } if base.segments == ["Box"] && args.len() == 1
+            }) if base.segments == ["Box"] && args.len() == 1
                 && &source[span.into_range()] == "Box<i32>"
         ));
     }
@@ -370,10 +397,10 @@ mod tests {
         let statements = &function.body.as_ref().unwrap().statements;
         assert!(matches!(
             &statements[0].0,
-            TempStmt::Variable {
-                value: Some((TempExpr::Binary { operands, operators }, _)),
+            TempStmt::Variable(out::TempVar {
+                initializer: (TempExpr::Binary { operands, operators }, _),
                 ..
-            } if operators == &[Operator::Less]
+            }) if operators == &[Operator::Less]
                 && matches!(&operands[0].0, TempExpr::Binary { operators, .. }
                     if operators == &[Operator::Add, Operator::Multiply])
                 && matches!(&operands[1].0, TempExpr::Binary { operators, .. }
@@ -381,10 +408,10 @@ mod tests {
         ));
         assert!(matches!(
             &statements[1].0,
-            TempStmt::Variable {
-                value: Some((TempExpr::Binary { operands, operators }, _)),
+            TempStmt::Variable(out::TempVar {
+                initializer: (TempExpr::Binary { operands, operators }, _),
                 ..
-            } if operators == &[Operator::BitAnd]
+            }) if operators == &[Operator::BitAnd]
                 && matches!(&operands[1].0, TempExpr::Binary { operators, .. }
                     if operators == &[Operator::Equal])
         ));
@@ -400,10 +427,10 @@ mod tests {
         };
         assert!(matches!(
             &function.body.as_ref().unwrap().statements[0].0,
-            TempStmt::Variable {
-                value: Some((TempExpr::Binary { operands, operators }, _)),
+            TempStmt::Variable(out::TempVar {
+                initializer: (TempExpr::Binary { operands, operators }, _),
                 ..
-            } if operators == &[Operator::LogicalAnd]
+            }) if operators == &[Operator::LogicalAnd]
                 && operands.iter().all(|(operand, _)| matches!(operand,
                     TempExpr::Binary { operators, .. } if operators == &[Operator::Less]))
         ));
@@ -422,10 +449,10 @@ mod tests {
         let statements = &function.body.as_ref().unwrap().statements;
         assert!(matches!(
             &statements[0].0,
-            TempStmt::Variable {
-                value: Some((TempExpr::Binary { operands, operators }, _)),
+            TempStmt::Variable(out::TempVar {
+                initializer: (TempExpr::Binary { operands, operators }, _),
                 ..
-            } if operators == &[Operator::Multiply]
+            }) if operators == &[Operator::Multiply]
                 && matches!(&operands[0].0, TempExpr::Binary { operands, operators }
                     if operators == &[Operator::Index]
                         && matches!(&operands[1].0, TempExpr::Binary { operators, .. }
@@ -433,19 +460,19 @@ mod tests {
         ));
         assert!(matches!(
             &statements[1].0,
-            TempStmt::Variable {
-                value: Some((TempExpr::Binary { operands, operators }, _)),
+            TempStmt::Variable(out::TempVar {
+                initializer: (TempExpr::Binary { operands, operators }, _),
                 ..
-            } if operators == &[Operator::Index]
+            }) if operators == &[Operator::Index]
                 && matches!(&operands[0].0, TempExpr::Binary { operators, .. }
                     if operators == &[Operator::Index])
         ));
         assert!(matches!(
             &statements[2].0,
-            TempStmt::Variable {
-                value: Some((TempExpr::Binary { operands, operators }, _)),
+            TempStmt::Variable(out::TempVar {
+                initializer: (TempExpr::Binary { operands, operators }, _),
                 ..
-            } if operators == &[Operator::Index]
+            }) if operators == &[Operator::Index]
                 && matches!(&operands[0].0, TempExpr::Array(values) if values.len() == 2)
         ));
     }
@@ -461,15 +488,15 @@ mod tests {
         };
         let statements = &function.body.as_ref().unwrap().statements;
 
-        let TempStmt::Variable {
+        let TempStmt::Variable(out::TempVar {
             ty: Some((ty, _)),
-            value: Some((value, _)),
+            initializer: (value, _),
             ..
-        } = &statements[1].0
+        }) = &statements[1].0
         else {
             panic!("expected a referenced variable");
         };
-        assert!(matches!(ty, TempType::Reference(_)));
+        assert!(matches!(ty, TempType::Reference { mutable: false, .. }));
         assert!(matches!(
             value,
             TempExpr::Unary {
@@ -492,12 +519,52 @@ mod tests {
         ));
         assert!(matches!(
             &statements[3].0,
-            TempStmt::Variable { value: Some((TempExpr::Array(values), _)), .. }
+            TempStmt::Variable(out::TempVar { initializer: (TempExpr::Array(values), _), .. })
                 if values.len() == 3
         ));
         assert!(matches!(
             &statements[4].0,
-            TempStmt::For { binding, .. } if binding == "i"
+            TempStmt::For { binding, .. } if binding.0 == "i"
+        ));
+    }
+
+    #[test]
+    fn address_of_defaults_to_immutable_and_mut_requires_keyword() {
+        use crate::ast::expression::operators::Operator;
+
+        let module =
+            parse_ok("func main() { var a = 1; var x:$i32 = @a; var y:$mut i32 = @mut a; }");
+        let TempGlobalStmt::Func(function) = &module[0].0 else {
+            panic!("expected function");
+        };
+        let statements = &function.body.as_ref().unwrap().statements;
+        assert!(matches!(
+            &statements[1].0,
+            TempStmt::Variable(out::TempVar {
+                ty: Some((TempType::Reference { mutable: false, .. }, _)),
+                initializer: (
+                    TempExpr::Unary {
+                        op: Operator::AddressOf,
+                        ..
+                    },
+                    _
+                ),
+                ..
+            })
+        ));
+        assert!(matches!(
+            &statements[2].0,
+            TempStmt::Variable(out::TempVar {
+                ty: Some((TempType::Reference { mutable: true, .. }, _)),
+                initializer: (
+                    TempExpr::Unary {
+                        op: Operator::MutableAddressOf,
+                        ..
+                    },
+                    _
+                ),
+                ..
+            })
         ));
     }
 

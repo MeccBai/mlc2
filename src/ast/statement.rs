@@ -2,6 +2,7 @@ use crate::ast::TypeIndex;
 use crate::ast::expression::{Expression, FuncCall};
 use std::rc::Rc;
 pub mod variable;
+pub mod creator;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Variable {
@@ -65,6 +66,7 @@ pub enum Statement {
     ReturnBlock(ReturnStatement),
     MatchBlock(MatchStatement),
     AnonymousBlock(AnonymousBlock),
+    Expression(Expression),
     Continue,
     Break,
 }

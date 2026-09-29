@@ -18,7 +18,10 @@ pub enum TempType {
         base: TempPath,
         args: Vec<Spanned<TempType>>,
     },
-    Reference(Box<Spanned<TempType>>),
+    Reference {
+        inner: Box<Spanned<TempType>>,
+        mutable: bool,
+    },
 }
 
 impl TempType {
@@ -33,7 +36,13 @@ impl TempType {
                     .collect::<Vec<_>>()
                     .join(", ")
             ),
-            Self::Reference(inner) => format!("${}", inner.0.dump()),
+            Self::Reference { inner, mutable } => {
+                if *mutable {
+                    format!("$mut {}", inner.0.dump())
+                } else {
+                    format!("${}", inner.0.dump())
+                }
+            }
         }
     }
 }

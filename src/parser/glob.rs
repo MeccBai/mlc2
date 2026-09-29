@@ -121,7 +121,6 @@ where
                 ty,
                 initializer,
                 constant,
-                generics: Vec::new(),
             })
         })
         .map_with(|item, extra| (item, extra.span()));

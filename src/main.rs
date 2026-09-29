@@ -1,76 +1,19 @@
+#![allow(unused)]
+
 use crate::ast::config::Config;
 use crate::ast::types::CompileType::Generic;
 use crate::lexer::tokenize;
 
+
 mod ast;
-pub mod build;
+mod build;
 mod error;
 mod lexer;
+mod llvm;
 mod parser;
 
 fn main() {
-    let code = r#"
-        import std::io;
-        import std::generic;
-
-        generic type1 {
-            std::generic::is_integer;
-            std::generic::max_bits<16>;
-        };
-
-        generic type2 {
-            pub func add(self, param1:i8) -> i8;
-        };
-
-        unit a<T:type1> {
-            x:i8;
-            b:$T;
-        };
-
-        a::func add(self, param1:i8) -> i8 {
-            return self->x + param1;
-        }
-
-        func<T:type1> test(a:T) -> i8 {
-            return a + 1;
-        }
-
-        using u8_unit = a<u8>;
-
-        export func test1(a:u8,b:u8,c:u8) -> i8 {
-            var d = a + b + c;
-            return d;
-        }
-
-        export func test2(a:u8,b:u8) -> i8 {
-            var d = a + b;
-            return d;
-        }
-
-        func main() -> i8 {
-            // 这是一个注释
-            var cc = u8_unit {0,null};
-            match (1) {
-                1 => {
-                    cc->x = 1;
-                },
-                2 => {
-                    cc->x = 2;
-                },
-                _ => {
-                    cc->x = 3;
-                }
-            }
-
-            var sum =  {
-                5,
-                {1,2,3} |> test1
-            } |> test2 ;
-
-
-            std::io::print("Hello, world!");
-        }
-    "#;
+    let code = include_str!("..\\example\\main.vl");
 
     let err_h = error::ErrorHandle::new("test".to_string());
 

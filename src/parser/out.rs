@@ -10,7 +10,7 @@ use crate::{
 
 pub use crate::lexer::Span;
 
-pub use expr::{TempExpr, TempLiteralKind};
+pub use expr::{TempCallee, TempExpr, TempLiteralKind};
 pub use func::{TempFunc, TempFuncSymbol, TempInterface, TempInterfaceSymbol, TempParam};
 pub use stmt::{TempMatchPattern, TempScope, TempStmt};
 pub use types::{TempPath, TempType};
@@ -252,7 +252,6 @@ pub struct TempVar {
     pub ty: Option<Spanned<TempType>>,
     pub initializer: Spanned<TempExpr>,
     pub constant: bool,
-    pub generics: Vec<TempGenericParam>,
 }
 
 impl TempVar {

@@ -1,10 +1,10 @@
 use std::collections::HashMap;
 
 use crate::ast::arena::{FuncIndex, InterfaceIndex, get_ident};
-use crate::ast::statement::Statement;
 use crate::ast::symbol_name::SymbolName;
 use crate::ast::types::resolve_type;
 use crate::ast::{Config, GenericIndex, SymbolTable, TypeIndex};
+use crate::ast::{EnumBool, statement::Statement};
 use crate::error::{CompileError, ResolveError};
 use crate::lexer::Span;
 use crate::parser::Scope;
@@ -12,7 +12,7 @@ use crate::parser::out::{TempFuncSymbol, TempInterfaceSymbol, TempType, TempVisi
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FuncBody {
-    pub name: FuncIndex,
+    pub symbol: FuncIndex,
     pub body: Vec<Statement>,
 }
 
@@ -112,7 +112,20 @@ impl FuncBody {
         prototype: Option<Scope>,
         symbols: &mut SymbolTable,
     ) -> Self {
-        todo!("Implement FuncBody::new")
+        let body = if let Some(prototype) = prototype {
+            prototype
+                .statements
+                .into_iter()
+                .map(|stmt| Statement::new(config, stmt, symbols, None))
+                .collect()
+        } else {
+            Vec::new()
+        };
+
+        Self {
+            symbol: index,
+            body,
+        }
     }
 }
 
@@ -196,7 +209,20 @@ impl Interface {
         prototype: Option<Scope>,
         symbols: &mut SymbolTable,
     ) -> Self {
-        todo!("Implement FuncBody::new")
+        let body = if let Some(prototype) = prototype {
+            prototype
+                .statements
+                .into_iter()
+                .map(|stmt| Statement::new(config, stmt, symbols, None))
+                .collect()
+        } else {
+            Vec::new()
+        };
+
+        Self {
+            symbol: index,
+            body,
+        }
     }
 }
 

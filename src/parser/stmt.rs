@@ -5,7 +5,7 @@ use crate::lexer::{TokenPack, token::Token};
 use super::{
     MatchPattern, ParseError, Scope, Spanned, Statement,
     expr::expression_parser,
-    out::Span,
+    out::{Span, TempVar},
     split::{ident, keyword, operator, spanned_ident, type_parser},
 };
 
@@ -36,15 +36,15 @@ where
         .then(declared_type)
         .then(initializer)
         .then_ignore(semicolon.clone())
-        .map(
-            |(((constant, (name, name_span)), ty), value)| Statement::Variable {
+        .map(|(((constant, (name, name_span)), ty), initializer)| {
+            Statement::Variable(TempVar {
                 constant,
                 name,
                 name_span,
                 ty,
-                value: Some(value),
-            },
-        );
+                initializer,
+            })
+        });
 
         let return_ = keyword(Token::Return)
             .ignore_then(expression.clone().or_not())
@@ -103,15 +103,12 @@ where
             .then_ignore(keyword(Token::In))
             .then(for_bounds)
             .then(scope.clone())
-            .map(
-                |(((binding, binding_span), (start, end)), scope)| Statement::For {
-                    binding,
-                    binding_span,
-                    start,
-                    end,
-                    scope,
-                },
-            );
+            .map(|((binding, (start, end)), scope)| Statement::For {
+                binding,
+                start,
+                end,
+                scope,
+            });
 
         let assignment = expression
             .clone()

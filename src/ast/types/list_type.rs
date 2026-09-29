@@ -8,8 +8,8 @@ use std::collections::HashMap;
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct ListType {
-    element_type: TypeIndex,
-    length: usize,
+    pub element_type: TypeIndex,
+    pub length: usize,
 }
 
 impl ListType {
@@ -80,5 +80,13 @@ impl ListType {
         }
 
         Some(symbols.types.insert(ident, List(instance)))
+    }
+
+    pub fn type_check(&self, other: &ListType, symbols: &TypeArena) -> bool {
+        if self.length != other.length {
+            return false;
+        }
+        self.element_type
+            .type_check(true, &other.element_type, symbols)
     }
 }

@@ -41,7 +41,11 @@ pub enum IllegalUseError {
     RequirementUnmet,
     MemberAccessViolation,
     InvalidDereference,
+    UnsupportedGenericCall,
     IllegalVisibility,
+    CannotInferenceType,
+    VariableMustBeInitialized,
+    TypeMismatched { expected: String, found: String },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

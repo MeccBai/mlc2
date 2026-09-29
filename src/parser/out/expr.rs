@@ -11,6 +11,31 @@ pub enum TempLiteralKind {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub enum TempCallee {
+    Expr(Box<Spanned<TempExpr>>),
+    GenericPath {
+        path: TempPath,
+        args: Vec<Spanned<TempType>>,
+    },
+}
+
+impl TempCallee {
+    pub fn dump(&self) -> String {
+        match self {
+            Self::Expr(expr) => expr.0.dump(),
+            Self::GenericPath { path, args } => format!(
+                "{}<{}>",
+                path.segments.join("::"),
+                args.iter()
+                    .map(|(ty, _)| ty.dump())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum TempExpr {
     Literal {
         kind: TempLiteralKind,
@@ -27,7 +52,7 @@ pub enum TempExpr {
         operators: Vec<Operator>,
     },
     Call {
-        callee: Box<Spanned<TempExpr>>,
+        callee: TempCallee,
         args: Vec<Spanned<TempExpr>>,
     },
     Member {
@@ -68,7 +93,7 @@ impl TempExpr {
             }
             Self::Call { callee, args } => format!(
                 "{}({})",
-                callee.0.dump(),
+                callee.dump(),
                 args.iter()
                     .map(|(arg, _)| arg.dump())
                     .collect::<Vec<_>>()
@@ -104,5 +129,36 @@ impl TempExpr {
                     .join(", ")
             ),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn call_dump_includes_explicit_type_arguments() {
+        let span = (0..1).into();
+        let call = TempExpr::Call {
+            callee: TempCallee::GenericPath {
+                path: TempPath {
+                    segments: vec!["identity".into()],
+                },
+                args: vec![(
+                    TempType::Path(TempPath {
+                        segments: vec!["i32".into()],
+                    }),
+                    span,
+                )],
+            },
+            args: vec![(
+                TempExpr::Literal {
+                    kind: TempLiteralKind::Integer,
+                    text: "1".into(),
+                },
+                span,
+            )],
+        };
+        assert_eq!(call.dump(), "identity<i32>(1)");
     }
 }

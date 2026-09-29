@@ -1,8 +1,12 @@
-mod instance;
+
+
+use chumsky::primitive::todo;
 
 use crate::ast::arena::{
-    ArenaIndex, FuncArena, GenericArena, GenericIndex, InterfaceArena, NamedArena,
+    ArenaIndex, FuncArena, FuncIndex, GenericArena, GenericIndex, InterfaceArena, InterfaceIndex,
+    NamedArena,
 };
+use crate::ast::generic;
 use crate::ast::symbol_name::SymbolName;
 use crate::ast::types::CompileType::{Base, Enum};
 use crate::ast::types::{CompileType, UnitType, resolve_type};
@@ -348,6 +352,38 @@ impl TypeIndex {
                 ref_type.instantiation(config, params, symbols, actives, span)
             }
         }
+    }
+}
+
+impl FuncIndex {
+    pub fn instantiation(
+        self,
+        config: &mut Config,
+        params: &HashMap<GenericIndex, TypeIndex>,
+        symbols: &mut crate::ast::SymbolTable,
+        span: Span,
+    ) -> FuncIndex {
+        let func = symbols.generics.functions.get(self);
+
+        let generic_params = func
+            .generic_map
+            .iter()
+            .map(|gen_index| todo!())
+            .collect::<Vec<_>>();
+
+        todo!()
+    }
+}
+
+impl InterfaceIndex {
+    pub fn instantiation(
+        self,
+        config: &mut Config,
+        params: &HashMap<GenericIndex, TypeIndex>,
+        symbols: &mut crate::ast::SymbolTable,
+        span: Span,
+    ) -> InterfaceIndex {
+        todo!()
     }
 }
 

@@ -53,6 +53,8 @@ impl CompileType {
             Generic(_) => ice("Cannot format a Generic type."),
         }
     }
+
+    
 }
 
 impl TypeArena {
@@ -227,21 +229,36 @@ impl TypeIndex {
         }
     }
 
-    pub fn make_ref(&self, arena: &mut TypeArena) -> TypeIndex {
+    pub fn make_ref(&self, arena: &mut TypeArena, mut_base: bool) -> TypeIndex {
         let ty = arena.get(*self);
         match ty {
             Ref(ref_type) => {
-                let new_ref = RefType::new(ref_type.base, ref_type.level + 1);
+                let new_ref = RefType::new(ref_type.base, ref_type.level + 1, mut_base);
                 let type_str = new_ref.format(arena);
                 let ident = get_ident(&type_str);
                 arena.insert(ident, Ref(new_ref))
             }
             _ => {
-                let new_ref = RefType::new(*self, 1);
+                let new_ref = RefType::new(*self, 1, mut_base);
                 let type_str = new_ref.format(arena);
                 let ident = get_ident(&type_str);
                 arena.insert(ident, Ref(new_ref))
             }
+        }
+    }
+
+    pub fn type_check(&self, tolerance: bool, other: &TypeIndex, arena: &TypeArena) -> bool {
+        if self == other {
+            return true;
+        }
+
+        let target = arena.get(*self);
+        let other = arena.get(*other);
+        match (target, other) {
+            (Base(base), Base(other)) => base.type_check(tolerance, other),
+            (Ref(ref_t), Ref(ref2)) => ref_t.type_check(ref2, arena),
+            (List(list), List(list2)) => list.type_check(list2, arena),
+            _ => false,
         }
     }
 }
@@ -302,17 +319,17 @@ pub fn resolve_type(
             }
             unit.instantiation(config, &params, symbols, None, span)
         }
-        TempType::Reference(ref_type) => {
-            let base = resolve_type(config, *ref_type, symbols)?;
+        TempType::Reference { inner, mutable } => {
+            let base = resolve_type(config, *inner, symbols)?;
             let ty = symbols.types.get(base);
 
             if let CompileType::Ref(ref_type) = ty {
-                let new_ref = RefType::new(ref_type.base, ref_type.level + 1);
+                let new_ref = RefType::new(ref_type.base, ref_type.level + 1, mutable);
                 let type_str = new_ref.format(&symbols.types);
                 let ident = get_ident(&type_str);
                 Some(symbols.types.insert(ident, CompileType::Ref(new_ref)))
             } else {
-                let new_ref = RefType::new(base, 1);
+                let new_ref = RefType::new(base, 1, mutable);
                 let type_str = new_ref.format(&symbols.types);
                 let ident = get_ident(&type_str);
                 Some(symbols.types.insert(ident, CompileType::Ref(new_ref)))
