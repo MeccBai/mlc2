@@ -5,11 +5,14 @@
 ```
 var a = 10; //自动推断
 var b:i32 = 10; //手动指定
+val fixed:i32 = 10; //声明时初始化，之后不可赋值
 const c:i32 = 10;//常量定义
 
 var value:i32 = 1;
 var reference:$i32 = @value; // @ 默认创建不可变引用
 var mutable_reference:$mut i32 = @mut value; // 可变引用必须显式标记
+val fixed_value:i32 = 1;
+var fixed_reference:$i32 = @fixed_value; // val 只能产生不可变引用
 $mutable_reference = 10;    // $expr 解引用，此时 value == 10
 
 global var counter:i32 = 0;
@@ -161,13 +164,13 @@ generic type3 {
 ## Attribute 与 C ABI
 
 ```
-[[c_abi]]
+#[c_abi]#
 export func device_entry(value:i32) -> i32 {
     return value;
 }
 ```
 
-`[[c_abi]]` 指定 C ABI；是否对链接器可见仍由 `export`（或同时具有
+`#[c_abi]#` 指定 C ABI；是否对链接器可见仍由 `export`（或同时具有
 `pub + export` 语义的 `api`）决定。
 
 ## 语义控制

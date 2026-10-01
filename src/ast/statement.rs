@@ -1,20 +1,21 @@
 use crate::ast::TypeIndex;
 use crate::ast::expression::{Expression, FuncCall};
 use std::rc::Rc;
-pub mod variable;
+mod control;
 pub mod creator;
+mod exits;
+pub mod variable;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Variable {
     pub name: String,
     pub var_type: TypeIndex,
     pub init_val: Box<Expression>,
-    pub immutable: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Assignment {
-    pub variable: Rc<Variable>,
+    pub variable: Box<Expression>,
     pub value: Box<Expression>,
 }
 
@@ -42,7 +43,13 @@ pub struct ForStatement {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MatchStatement {
     pub value: Box<Expression>,
-    pub branches: Vec<(Expression, Vec<Statement>)>,
+    pub branches: Vec<(MatchPattern, Vec<Statement>)>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MatchPattern {
+    Default,
+    Value(Expression),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -57,6 +64,7 @@ pub struct AnonymousBlock {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Statement {
+    Poison,
     VariableDecl(Rc<Variable>),
     Assignment(Assignment),
     FuncCall(FuncCall),

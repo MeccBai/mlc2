@@ -3,6 +3,14 @@ use crate::ast::types::base_type::DataType;
 pub struct SymbolName;
 
 impl SymbolName {
+    /// A callable without an owner stays in the compilation unit's namespace.
+    pub fn callable(owner: Option<&str>, name: &str) -> String {
+        match owner {
+            Some(owner) => Self::member(owner, name),
+            None => name.to_owned(),
+        }
+    }
+
     pub fn path(segments: &[String]) -> String {
         segments.join("::")
     }
@@ -30,6 +38,14 @@ impl SymbolName {
 
     pub fn unconstrained_unit_param(unit: &str, param: &str) -> String {
         format!("\0unit::{}", Self::member(unit, param))
+    }
+
+    pub fn generic_param(kind: &str, owner: &str, param: &str) -> String {
+        format!("\0{kind}::{}", Self::member(owner, param))
+    }
+
+    pub fn generic_type(index: crate::ast::GenericIndex) -> String {
+        format!("\0generic:{index:?}")
     }
 
     pub fn reference(base: &str, level: usize, mut_base: bool) -> String {
@@ -62,6 +78,8 @@ mod tests {
             "sys::project::Point"
         );
         assert_eq!(SymbolName::member("Point", "get"), "Point::get");
+        assert_eq!(SymbolName::callable(None, "get"), "get");
+        assert_eq!(SymbolName::callable(Some("Point"), "get"), "Point::get");
         assert_eq!(
             SymbolName::generic_instance("Box", &["i32".into()]),
             "Box<i32>"

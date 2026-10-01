@@ -29,7 +29,7 @@
 
 | Token | SymbolName     | Token | SymbolName   | Token | SymbolName   |
 |-------|----------------|-------|--------------|-------|--------------|
-| `[[`  | AttributeStart | `]]`  | AttributeEnd | `\|>` | Pipe         |
+| `#[`  | AttributeStart | `]#`  | AttributeEnd | `\|>` | Pipe         |
 | `=>`  | FatArrow       | `_`   | Default      | `(`   | LParen       |
 | `)`   | RParen         | `{`   | LBrace       | `}`   | RBrace       |
 | `;`   | Semicolon      | `[`   | LeftBracket  | `]`   | RightBracket |

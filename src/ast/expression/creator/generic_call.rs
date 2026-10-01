@@ -18,12 +18,23 @@ impl Expression {
         args: Vec<Spanned<TempExpr>>,
         span: Span,
         symbols: &mut SymbolTable,
-        context: Option<&HashMap<String, Rc<Variable>>>,
+        context: Option<&crate::ast::symbols::StatementContext>,
     ) -> Self {
         let params = generic_args
             .into_iter()
-            .map(|arg| resolve_type(config, arg, symbols).unwrap_or(TypeIndex::empty()))
+            .map(|arg| {
+                resolve_type(
+                    config,
+                    arg,
+                    symbols,
+                    context.map(|ctx| ctx as &dyn crate::ast::types::TypeContext),
+                )
+                .unwrap_or(TypeIndex::empty())
+            })
             .collect::<Vec<_>>();
+        if config.is_poisoned() {
+            return Self::Poison;
+        }
 
         let func = match Self::search_generic_function(config, (Path(path), span), symbols, context)
         {
@@ -36,6 +47,15 @@ impl Expression {
                 let symbol = symbols.generics.interfaces.get(interface);
 
                 let generics_names = &symbol.generics;
+                if generics_names.len() != params.len() {
+                    config.submit_error(
+                        CompileError::IllegalUse(
+                            crate::error::IllegalUseError::GenericCountMismatch,
+                        ),
+                        span,
+                    );
+                    return Self::Poison;
+                }
 
                 let generic_map = generics_names
                     .iter()
@@ -56,11 +76,26 @@ impl Expression {
                     })
                     .collect::<HashMap<_, _>>();
 
-                EnumBool::True(interface.instantiation(config, &generic_map, symbols, span))
+                EnumBool::True(interface.instantiation(
+                    config,
+                    &generic_map,
+                    symbols,
+                    context.and_then(|ctx| ctx.instantiation_actives()),
+                    span,
+                ))
             }
             EnumBool::False(func_index) => {
                 let symbol = symbols.generics.functions.get(func_index);
                 let generics_names = &symbol.generics;
+                if generics_names.len() != params.len() {
+                    config.submit_error(
+                        CompileError::IllegalUse(
+                            crate::error::IllegalUseError::GenericCountMismatch,
+                        ),
+                        span,
+                    );
+                    return Self::Poison;
+                }
                 let generic_map = generics_names
                     .iter()
                     .zip(params.iter())
@@ -79,15 +114,29 @@ impl Expression {
                         (gen_index, ty.clone())
                     })
                     .collect::<HashMap<_, _>>();
-                EnumBool::False(func_index.instantiation(config, &generic_map, symbols, span))
+                EnumBool::False(func_index.instantiation(
+                    config,
+                    &generic_map,
+                    symbols,
+                    context.and_then(|ctx| ctx.instantiation_actives()),
+                    span,
+                ))
             }
         };
 
+        if config.is_poisoned() {
+            return Self::Poison;
+        }
         let args = args
             .into_iter()
             .map(|arg| Expression::new(config, arg, symbols, context))
             .collect::<Vec<_>>();
 
+        if let EnumBool::False(index) = func {
+            if !Self::check_function_args(config, index, &args, symbols, span) {
+                return Self::Poison;
+            }
+        }
         Self::FuncCallE(FuncCall { func, args })
     }
 }

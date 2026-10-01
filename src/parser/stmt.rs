@@ -1,16 +1,17 @@
 use chumsky::{input::ValueInput, prelude::*};
 
-use crate::lexer::{TokenPack, token::Token};
+use crate::ast::types::ValueType;
+use crate::lexer::{token::Token, TokenPack};
 
 use super::{
-    MatchPattern, ParseError, Scope, Spanned, Statement,
     expr::expression_parser,
     out::{Span, TempVar},
     split::{ident, keyword, operator, spanned_ident, type_parser},
+    MatchPattern, ParseError, Scope, Spanned, Statement,
 };
 
-pub fn statement_parser<'tokens, I>()
--> impl Parser<'tokens, I, Spanned<Statement>, extra::Err<ParseError<'tokens>>> + Clone
+pub fn statement_parser<'tokens, I>(
+) -> impl Parser<'tokens, I, Spanned<Statement>, extra::Err<ParseError<'tokens>>> + Clone
 where
     I: ValueInput<'tokens, Token = TokenPack, Span = Span>,
 {
@@ -29,16 +30,17 @@ where
         let initializer = operator(Token::Assign).ignore_then(expression.clone());
 
         let variable = choice((
-            keyword(Token::Variable).to(false),
-            keyword(Token::Constant).to(true),
+            keyword(Token::Variable).to(ValueType::Flex),
+            keyword(Token::Value).to(ValueType::Final),
+            keyword(Token::Constant).to(ValueType::Constant),
         ))
         .then(spanned_ident())
         .then(declared_type)
         .then(initializer)
         .then_ignore(semicolon.clone())
-        .map(|(((constant, (name, name_span)), ty), initializer)| {
+        .map(|(((value_type, (name, name_span)), ty), initializer)| {
             Statement::Variable(TempVar {
-                constant,
+                value_type,
                 name,
                 name_span,
                 ty,
@@ -141,8 +143,8 @@ where
     .boxed()
 }
 
-pub fn scope_parser<'tokens, I>()
--> impl Parser<'tokens, I, Scope, extra::Err<ParseError<'tokens>>> + Clone
+pub fn scope_parser<'tokens, I>(
+) -> impl Parser<'tokens, I, Scope, extra::Err<ParseError<'tokens>>> + Clone
 where
     I: ValueInput<'tokens, Token = TokenPack, Span = Span>,
 {

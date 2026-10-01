@@ -1,10 +1,6 @@
-use std::collections::HashMap;
-use std::rc::Rc;
-
-use crate::ast::arena::{FuncIndex, InterfaceIndex, get_ident};
+use crate::ast::arena::{FuncIndex, InterfaceIndex};
 use crate::ast::config::Config;
 use crate::ast::expression::Expression;
-use crate::ast::statement::Variable;
 use crate::ast::symbol_name::SymbolName;
 use crate::ast::{EnumBool, SymbolTable};
 use crate::error::{CompileError, IllegalUseError, ResolveError, ice::ice};
@@ -14,31 +10,15 @@ use crate::parser::out::{
 };
 
 impl Expression {
-    pub fn search_variable(
-        name: &String,
-        symbols: &SymbolTable,
-        context: &Option<&HashMap<String, Rc<Variable>>>,
-    ) -> Option<Rc<Variable>> {
-        if let Some(ctx) = context {
-            match ctx.get(name) {
-                Some(var) => return Some(Rc::clone(var)),
-                None => {}
-            }
-        }
-
-        if let Some(var) = symbols.globals.get(name) {
-            return Some(Rc::clone(var));
-        }
-
-        None
-    }
-
     pub fn search_interface(
         config: &mut Config,
         temp_expr: Spanned<TempExpr>,
         symbols: &mut SymbolTable,
-        context: Option<&HashMap<String, Rc<Variable>>>,
+        context: Option<&crate::ast::symbols::StatementContext>,
     ) -> Option<(Expression, InterfaceIndex)> {
+        if config.is_poisoned() {
+            return None;
+        }
         let (expr, span) = temp_expr;
         match expr {
             Member {
@@ -64,20 +44,16 @@ impl Expression {
                 if owner_type.is_empty() {
                     return None;
                 }
-                let interface_name = SymbolName::member(&owner_type.format(&symbols.types), &name);
-                Some((
-                    owner,
-                    symbols
-                        .interfaces
-                        .get_by_name(&interface_name)
-                        .unwrap_or_else(|| {
-                            config.submit_error(
-                                CompileError::Resolve(ResolveError::UnknownInterface),
-                                span,
-                            );
-                            InterfaceIndex::empty()
-                        }),
-                ))
+                let owner_type =
+                    owner_type.into(crate::ast::types::ValueType::Flex, &mut symbols.types);
+                let interface_name =
+                    SymbolName::callable(Some(&owner_type.format(&symbols.types)), &name);
+                let Some(index) = symbols.interfaces.get_by_name(&interface_name) else {
+                    config
+                        .submit_error(CompileError::Resolve(ResolveError::UnknownInterface), span);
+                    return None;
+                };
+                Some((owner, index))
             }
             _ => ice("Interface search cannot be performed on non-member expressions."),
         }
@@ -87,58 +63,53 @@ impl Expression {
         config: &mut Config,
         temp_expr: Spanned<TempExpr>,
         symbols: &mut SymbolTable,
-        context: Option<&HashMap<String, Rc<Variable>>>,
+        context: Option<&crate::ast::symbols::StatementContext>,
     ) -> Option<EnumBool<InterfaceIndex, FuncIndex>> {
-        let (expr, span) = temp_expr;
-        match expr {
-            Path(path) => {
-                let name = SymbolName::path(&path.segments);
-                let interface = symbols.interfaces.get_by_name(&name);
-                match interface {
-                    Some(interface_index) => Some(EnumBool::True(interface_index)),
-                    None => {
-                        let func = symbols.functions.get_by_name(&name);
-                        match func {
-                            Some(func_index) => Some(EnumBool::False(func_index)),
-                            None => {
-                                config.submit_error(
-                                    CompileError::Resolve(ResolveError::UnknownFunction),
-                                    span,
-                                );
-                                Some(EnumBool::False(FuncIndex::empty()))
-                            }
-                        }
-                    }
-                }
-            }
-            _ => ice("Function search cannot be performed on non-path expressions."),
-        }
+        Self::search_path_callable(config, temp_expr, symbols, context, false)
     }
 
     pub fn search_generic_function(
         config: &mut Config,
         temp_expr: Spanned<TempExpr>,
         symbols: &mut SymbolTable,
-        context: Option<&HashMap<String, Rc<Variable>>>,
+        context: Option<&crate::ast::symbols::StatementContext>,
     ) -> Option<EnumBool<InterfaceIndex, FuncIndex>> {
-        let (expr, span) = temp_expr;
-        match expr {
-            Path(path) => {
-                let name = SymbolName::path(&path.segments);
-                let ident = get_ident(&name);
-                let interface = symbols.generics.interfaces.get_by_name(&ident);
-                if let Some(interface) = interface {
-                    return Some(EnumBool::True(interface));
-                };
-                let function = symbols.generics.functions.get_by_name(&ident);
-                if let Some(func) = function {
-                    Some(EnumBool::False(func))
-                } else {
-                    config.submit_error(CompileError::Resolve(ResolveError::UnknownFunction), span);
-                    None
-                }
-            }
-            _ => ice("Generic function search cannot be performed on non-path expressions."),
+        Self::search_path_callable(config, temp_expr, symbols, context, true)
+    }
+
+    fn search_path_callable(
+        config: &mut Config,
+        temp_expr: Spanned<TempExpr>,
+        symbols: &SymbolTable,
+        context: Option<&crate::ast::symbols::StatementContext>,
+        requires_generic: bool,
+    ) -> Option<EnumBool<InterfaceIndex, FuncIndex>> {
+        if config.is_poisoned() {
+            return None;
         }
+        let (Path(path), span) = temp_expr else {
+            ice("Callable path search requires a path.")
+        };
+        use crate::ast::symbols::PathSymbol;
+        let error = match symbols.resolve_path(config, &path, context) {
+            Some(PathSymbol::Interface { index, generic }) if generic == requires_generic => {
+                return Some(EnumBool::True(index));
+            }
+            Some(PathSymbol::Function { index, generic }) if generic == requires_generic => {
+                return Some(EnumBool::False(index));
+            }
+            Some(PathSymbol::Interface { .. } | PathSymbol::Function { .. }) => {
+                CompileError::IllegalUse(IllegalUseError::UnsupportedGenericCall)
+            }
+            Some(PathSymbol::GenericParameter(_)) => {
+                CompileError::IllegalUse(IllegalUseError::TypeUsedAsValue)
+            }
+            Some(PathSymbol::Variable(_) | PathSymbol::EnumValue(_)) => {
+                CompileError::IllegalUse(IllegalUseError::SymbolNotCallable)
+            }
+            None => CompileError::Resolve(ResolveError::UnknownFunction),
+        };
+        config.submit_error(error, span);
+        None
     }
 }

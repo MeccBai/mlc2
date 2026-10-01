@@ -20,9 +20,9 @@ pub enum Token {
     #[regex(r#""([^"\\]|\\.)*""#)]
     StringLiteral,
 
-    #[token("[[")]
+    #[token("#[")]
     AttributeStart,
-    #[token("]]")]
+    #[token("]#")]
     AttributeEnd,
     #[token("|>")]
     Pipe,
@@ -107,6 +107,8 @@ pub enum Token {
     Function,
     #[token("var")]
     Variable,
+    #[token("val")]
+    Value,
     #[token("const")]
     Constant,
     #[token("mut")]

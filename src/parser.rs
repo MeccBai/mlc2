@@ -137,17 +137,24 @@ mod tests {
 
     #[test]
     fn parses_global_variables_without_export_visibility() {
-        let module = parse_ok("global var counter:i32 = 0; global const limit:i32 = 10;");
+        let module = parse_ok(
+            "global var counter:i32 = 0; global const limit:i32 = 10; global val fixed:i32 = 3;",
+        );
 
         assert!(matches!(
             &module[0].0,
             TempGlobalStmt::Variable(variable)
-                if variable.name == "counter" && !variable.constant
+                if variable.name == "counter" && variable.value_type == crate::ast::types::ValueType::Flex
         ));
         assert!(matches!(
             &module[1].0,
             TempGlobalStmt::Variable(variable)
-                if variable.name == "limit" && variable.constant
+                if variable.name == "limit" && variable.value_type == crate::ast::types::ValueType::Constant
+        ));
+        assert!(matches!(
+            &module[2].0,
+            TempGlobalStmt::Variable(variable)
+                if variable.name == "fixed" && variable.value_type == crate::ast::types::ValueType::Final
         ));
     }
 
@@ -156,16 +163,18 @@ mod tests {
         for source in [
             "func main() { var x:i32; }",
             "func main() { const x:i32; }",
+            "func main() { val x:i32; }",
             "global var x:i32;",
             "global const x:i32;",
+            "global val x:i32;",
         ] {
             let lexed = tokenize(source).unwrap();
             let (_, errors) = parse(&lexed.tokens, source.len());
             assert!(!errors.is_empty(), "{source} should be rejected");
         }
 
-        parse_ok("func main() { var x:i32 = 1; const y = 2; }");
-        parse_ok("global var x:i32 = 1; global const y = 2;");
+        parse_ok("func main() { var x:i32 = 1; val z = 3; const y = 2; }");
+        parse_ok("global var x:i32 = 1; global val z = 3; global const y = 2;");
     }
 
     #[test]
@@ -558,7 +567,7 @@ mod tests {
                 ty: Some((TempType::Reference { mutable: true, .. }, _)),
                 initializer: (
                     TempExpr::Unary {
-                        op: Operator::MutableAddressOf,
+                        op: Operator::MutOf,
                         ..
                     },
                     _
@@ -572,7 +581,7 @@ mod tests {
     fn parses_explicit_generics_method_mutability_enum_and_c_abi() {
         let module = parse_ok(
             "generic number { std::generic::is_integer; }; \
-             [[c_abi]] func<T:number> identity(value:T) -> T { return value; } \
+             #[c_abi]# func<T:number> identity(value:T) -> T { return value; } \
              unit Point { x:i32; }; Point::func set(mut self, value:i32) {} \
              enum State { Waiting, Running };",
         );

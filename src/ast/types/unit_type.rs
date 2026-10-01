@@ -4,12 +4,18 @@ use crate::ast::generic::GenericRequire;
 use crate::ast::symbol_name::SymbolName;
 use crate::ast::types::CompileType::Unit;
 use crate::ast::types::resolve_type;
-use crate::ast::{GenericIndex, SymbolTable, TypeArena, TypeIndex};
+use crate::ast::{
+    GenericIndex, TypeArena, TypeIndex,
+    symbols::{EnumBool, SymbolTable},
+};
 use crate::error::ice::ice;
 use crate::error::{CompileError, IllegalUseError, ResolveError};
 use crate::parser::out::{Span, TempUnit};
 use std::collections::HashMap;
 use std::hash::Hash;
+
+mod application;
+pub use application::UnitApplication;
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct UnitMember {
@@ -20,6 +26,7 @@ pub struct UnitMember {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UnitType {
+    pub application: Option<UnitApplication>,
     pub name: String,
     pub members: Vec<UnitMember>,
     pub attributes: Vec<String>,
@@ -36,6 +43,7 @@ impl UnitType {
     ) -> (Self, Span) {
         let name_span = prototype.name_span;
         let mut this = UnitType {
+            application: None,
             name: prototype.name,
             attributes: prototype.attributes,
             members: Vec::new(),
@@ -44,42 +52,28 @@ impl UnitType {
             exported: prototype.visibility.normal_export(config, &name_span),
         };
 
-        let mut generic_map = HashMap::<String, GenericIndex>::new();
-
-        this.generics = prototype
-            .generics
-            .into_iter()
-            .filter_map(|generic| {
-                let index = if let Some((path, span)) = generic.constraint {
-                    let constraint = SymbolName::path(&path.segments);
-                    let ident = get_ident(&constraint);
-                    let Some(index) = symbols.generics.requires.get_by_ident(ident) else {
-                        config.submit_error(
-                            CompileError::Resolve(ResolveError::UnknownConstraint),
-                            span,
-                        );
-                        return None;
-                    };
-                    index
-                } else {
-                    let name = SymbolName::unconstrained_unit_param(&this.name, &generic.name);
-                    symbols
-                        .generics
-                        .requires
-                        .insert(get_ident(&name), GenericRequire::empty(name))
-                };
-                generic_map.insert(generic.name.clone(), index);
-                Some(generic.name)
-            })
-            .collect::<Vec<_>>();
-
+        let (generics, generic_map, _bindings) = crate::ast::function::bindings::generics(
+            config,
+            "unit",
+            &this.name,
+            prototype.generics,
+            symbols,
+        );
+        this.generics = generics;
         this.generic_map = generic_map;
+
+        // Publish the generic header before resolving recursive member types.
+        if !this.generics.is_empty() {
+            if let Some(index) = symbols.generics.units.get_by_name(&this.name) {
+                symbols.generics.units.set(&index, this.clone());
+            }
+        }
 
         this.members = prototype
             .members
             .into_iter()
             .filter_map(|member| {
-                let ty_index = resolve_type(config, member.ty, symbols)?;
+                let ty_index = resolve_type(config, member.ty, symbols, Some(&this))?;
                 Some(UnitMember {
                     name: member.name,
                     member_type: ty_index,
@@ -93,6 +87,7 @@ impl UnitType {
 
     pub fn empty() -> Self {
         Self {
+            application: None,
             name: String::new(),
             members: Vec::new(),
             attributes: Vec::new(),
@@ -145,10 +140,17 @@ impl UnitType {
         config: &mut Config,
         params: &HashMap<GenericIndex, TypeIndex>,
         symbols: &mut SymbolTable,
-        actives: Option<&mut HashMap<String, TypeIndex>>,
+        actives: Option<&crate::ast::function::InstantiationActives>,
         span: Span,
     ) -> Option<TypeIndex> {
-        if self.generics.len() != params.len() {
+        if let Some(application) = self.application {
+            return application.instantiation(config, params, symbols, actives, span);
+        }
+        if self
+            .generics
+            .iter()
+            .any(|name| !params.contains_key(&self.generic_map[name]))
+        {
             config.submit_error(
                 CompileError::IllegalUse(IllegalUseError::GenericCountMismatch),
                 span,
@@ -160,6 +162,25 @@ impl UnitType {
                 span,
             );
             return None;
+        }
+
+        let arguments = self
+            .generics
+            .iter()
+            .map(|name| params[&self.generic_map[name]])
+            .collect::<Vec<_>>();
+        if arguments.iter().any(|ty| ty.is_generic(&symbols.types)) {
+            let template = symbols
+                .generics
+                .units
+                .get_by_name(&self.name)
+                .unwrap_or_else(|| {
+                    symbols
+                        .generics
+                        .units
+                        .insert(self.name.clone(), self.clone())
+                });
+            return Some(Self::pending_application(template, arguments, symbols));
         }
 
         for generic in &self.generics {
@@ -190,14 +211,18 @@ impl UnitType {
             return Some(instance_index);
         }
 
-        let temp_instance = UnitType::empty();
+        let mut temp_instance = UnitType::empty();
+        temp_instance.name = instance_name.clone();
 
         let holder_index = symbols.types.insert(ident, Unit(temp_instance));
 
-        let mut binding = HashMap::<String, TypeIndex>::new();
-        let temp_actives = actives.unwrap_or(&mut binding);
+        let binding = crate::ast::function::InstantiationActives::default();
+        let temp_actives = actives.unwrap_or(&binding);
 
-        temp_actives.insert(instance_name.clone(), holder_index);
+        temp_actives.borrow_mut().insert(
+            instance_name.clone(),
+            crate::ast::function::instantiate::InstanceIndex::Type(holder_index),
+        );
 
         let new_members = self
             .members
@@ -220,9 +245,14 @@ impl UnitType {
                     Some(member.clone())
                 }
             })
-            .collect::<Option<Vec<UnitMember>>>()?;
+            .collect::<Option<Vec<UnitMember>>>();
+        let Some(new_members) = new_members else {
+            temp_actives.borrow_mut().remove(&instance_name);
+            return None;
+        };
 
         let instance = UnitType {
+            application: None,
             name: instance_name,
             members: new_members,
             attributes: self.attributes.clone(),
@@ -231,12 +261,13 @@ impl UnitType {
             exported: self.exported,
         };
 
+        temp_actives.borrow_mut().remove(&instance.name);
         symbols.types.set(&holder_index, Unit(instance));
         Some(holder_index)
     }
 
     pub fn has_generic(&self) -> bool {
-        !self.generics.is_empty()
+        self.application.is_some() || !self.generics.is_empty()
     }
 
     pub fn generic_instance_name(
@@ -244,6 +275,14 @@ impl UnitType {
         arena: &TypeArena,
         params: &HashMap<GenericIndex, TypeIndex>,
     ) -> String {
+        if let Some(application) = &self.application {
+            let arguments = application
+                .arguments
+                .iter()
+                .map(|ty| ty.generic_instance_name(arena, params))
+                .collect::<Vec<_>>();
+            return SymbolName::generic_instance(&application.template_name, &arguments);
+        }
         let elements = self
             .generics
             .iter()
@@ -320,7 +359,7 @@ mod tests {
                 span,
             )],
         };
-        assert!(resolve_type(&mut config, (arg, span), &mut symbols).is_some());
+        assert!(resolve_type(&mut config, (arg, span), &mut symbols, None).is_some());
         assert!(config.error_handle().errors.is_empty());
     }
 }

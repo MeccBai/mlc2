@@ -1,10 +1,10 @@
 use chumsky::{input::ValueInput, prelude::*};
 
+use crate::ast::types::ValueType;
 use crate::ast::ImportModule;
-use crate::lexer::{TokenPack, token::Token};
+use crate::lexer::{token::Token, TokenPack};
 
 use super::{
-    ParseError, Spanned,
     func::{function_parser, interface_parser},
     generic::generic_parser,
     out::{
@@ -15,6 +15,7 @@ use super::{
     split::{
         attributes, generic_params, keyword, operator, path, spanned_ident, type_parser, visibility,
     },
+    ParseError, Spanned,
 };
 
 enum RawItem {
@@ -40,8 +41,8 @@ enum RawItem {
     },
 }
 
-pub fn item_parser<'tokens, I>()
--> impl Parser<'tokens, I, Spanned<TempGlobalStmt>, extra::Err<ParseError<'tokens>>> + Clone
+pub fn item_parser<'tokens, I>(
+) -> impl Parser<'tokens, I, Spanned<TempGlobalStmt>, extra::Err<ParseError<'tokens>>> + Clone
 where
     I: ValueInput<'tokens, Token = TokenPack, Span = Span>,
 {
@@ -107,20 +108,21 @@ where
 
     let global_variable = keyword(Token::Global)
         .ignore_then(choice((
-            keyword(Token::Variable).to(false),
-            keyword(Token::Constant).to(true),
+            keyword(Token::Variable).to(ValueType::Flex),
+            keyword(Token::Value).to(ValueType::Final),
+            keyword(Token::Constant).to(ValueType::Constant),
         )))
         .then(spanned_ident())
         .then(operator(Token::Colon).ignore_then(type_parser()).or_not())
         .then(operator(Token::Assign).ignore_then(super::expr::expression_parser()))
         .then_ignore(keyword(Token::Semicolon))
-        .map(|(((constant, (name, name_span)), ty), initializer)| {
+        .map(|(((value_type, (name, name_span)), ty), initializer)| {
             TempGlobalStmt::Variable(TempVar {
                 name,
                 name_span,
                 ty,
                 initializer,
-                constant,
+                value_type,
             })
         })
         .map_with(|item, extra| (item, extra.span()));
@@ -205,8 +207,8 @@ where
         .boxed()
 }
 
-pub fn module_parser<'tokens, I>()
--> impl Parser<'tokens, I, TempModule, extra::Err<ParseError<'tokens>>> + Clone
+pub fn module_parser<'tokens, I>(
+) -> impl Parser<'tokens, I, TempModule, extra::Err<ParseError<'tokens>>> + Clone
 where
     I: ValueInput<'tokens, Token = TokenPack, Span = Span>,
 {

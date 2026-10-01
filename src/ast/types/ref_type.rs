@@ -1,7 +1,10 @@
 use crate::ast::arena::{GenericIndex, Ident, TypeArena, TypeIndex, get_ident};
 use crate::ast::config::Config;
 use crate::ast::symbol_name::SymbolName;
-use crate::ast::types::CompileType::{self, Ref};
+use crate::ast::{
+    symbols::{EnumBool, SymbolTable},
+    types::CompileType::{self, Ref},
+};
 use crate::parser::out::Span;
 use std::collections::HashMap;
 
@@ -67,8 +70,8 @@ impl RefType {
         self,
         config: &mut Config,
         params: &HashMap<GenericIndex, TypeIndex>,
-        symbols: &mut crate::ast::SymbolTable,
-        actives: Option<&mut HashMap<String, TypeIndex>>,
+        symbols: &mut SymbolTable,
+        actives: Option<&crate::ast::function::InstantiationActives>,
         span: Span,
     ) -> Option<TypeIndex> {
         let child = self

@@ -4,7 +4,6 @@ use crate::ast::config::Config;
 use crate::ast::types::CompileType::Generic;
 use crate::lexer::tokenize;
 
-
 mod ast;
 mod build;
 mod error;
@@ -35,7 +34,11 @@ fn main() {
 
     let config = Config::new(vec!["".to_string()], "".to_string(), "".to_string(), err_h);
 
+    let time_now = std::time::Instant::now();
     let ast = ast::AbstractSyntaxTree::new(config, module);
+    let elapsed = time_now.elapsed();
+    
+    std::println!("AST construction took: {:.2?}", elapsed);
 
     //if let Some(module) = module {
     //    for (item, _) in &module {

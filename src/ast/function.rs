@@ -3,12 +3,19 @@ use std::collections::HashMap;
 use crate::ast::arena::{FuncIndex, InterfaceIndex, get_ident};
 use crate::ast::symbol_name::SymbolName;
 use crate::ast::types::resolve_type;
-use crate::ast::{Config, GenericIndex, SymbolTable, TypeIndex};
-use crate::ast::{EnumBool, statement::Statement};
+use crate::ast::{Config, GenericIndex, TypeIndex};
+use crate::ast::{
+    statement::Statement,
+    symbols::{EnumBool, SymbolTable},
+};
 use crate::error::{CompileError, ResolveError};
 use crate::lexer::Span;
 use crate::parser::Scope;
 use crate::parser::out::{TempFuncSymbol, TempInterfaceSymbol, TempType, TempVisibility};
+
+pub(crate) mod bindings;
+pub(crate) mod instantiate;
+pub use instantiate::InstantiationActives;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FuncBody {
@@ -59,44 +66,24 @@ impl FuncSymbol {
         symbols: &mut SymbolTable,
     ) -> (Self, Span) {
         let name_span = prototype.name_span;
-        let params = prototype
-            .params
-            .into_iter()
-            .filter_map(|param| {
-                let ty = resolve_type(config, param.ty?, symbols)?;
-                Some((ty, param.name))
-            })
-            .collect();
-        let ret_type = prototype
-            .return_type
-            .and_then(|ty| resolve_type(config, ty, symbols));
-
-        let mut generic_map = HashMap::<String, GenericIndex>::new();
-
-        let generics = prototype
-            .generics
-            .into_iter()
-            .filter_map(|generic| {
-                let (path, span) = generic.constraint?;
-                let constraint = SymbolName::path(&path.segments);
-                let ident = get_ident(&constraint);
-                let Some(index) = symbols.generics.requires.get_by_ident(ident) else {
-                    config
-                        .submit_error(CompileError::Resolve(ResolveError::UnknownConstraint), span);
-                    return None;
-                };
-                generic_map.insert(generic.name.clone(), index);
-                Some(generic.name)
-            })
-            .collect::<Vec<_>>();
+        let name = SymbolName::callable(None, &prototype.name);
+        let (generics, generic_map, types) =
+            bindings::generics(config, "func", &name, prototype.generics, symbols);
+        let (params, ret_type) = bindings::signature(
+            config,
+            prototype.params,
+            prototype.return_type,
+            &types,
+            symbols,
+        );
 
         (
             Self {
-                name: prototype.name,
+                name,
                 params,
                 ret_type,
-                generics: generics,
-                generic_map: generic_map,
+                generics,
+                generic_map,
                 attributes: prototype.attributes,
                 exported: prototype.visibility.normal_export(config, &name_span),
             },
@@ -113,11 +100,17 @@ impl FuncBody {
         symbols: &mut SymbolTable,
     ) -> Self {
         let body = if let Some(prototype) = prototype {
-            prototype
-                .statements
-                .into_iter()
-                .map(|stmt| Statement::new(config, stmt, symbols, None))
-                .collect()
+            let symbol = symbols.functions.get(index).clone();
+            let mut context = bindings::context(
+                config,
+                EnumBool::False(index),
+                &symbol.params,
+                &symbol.generic_map,
+                &HashMap::new(),
+                None,
+                (0..0).into(),
+            );
+            Statement::parse_scope(config, prototype, symbols, &mut context)
         } else {
             Vec::new()
         };
@@ -140,17 +133,20 @@ impl InterfaceSymbol {
         symbols: &mut SymbolTable,
     ) -> (Self, Span) {
         let name_span = prototype.name_span;
-        let params = prototype
-            .params
-            .into_iter()
-            .filter_map(|param| {
-                let ty = resolve_type(config, param.ty?, symbols)?;
-                Some((ty, param.name))
-            })
-            .collect();
-        let ret_type = prototype
-            .return_type
-            .and_then(|ty| resolve_type(config, ty, symbols));
+        let owner_name = prototype
+            .owner
+            .as_ref()
+            .map(|(path, _)| config.symbol_name(&SymbolName::path(&path.segments)));
+        let name = SymbolName::callable(owner_name.as_deref(), &prototype.name);
+        let (generics, generic_map, types) =
+            bindings::generics(config, "interface", &name, prototype.generics, symbols);
+        let (params, ret_type) = bindings::signature(
+            config,
+            prototype.params,
+            prototype.return_type,
+            &types,
+            symbols,
+        );
 
         let (public, exported) = match prototype.visibility {
             TempVisibility::Public => (true, true),
@@ -159,33 +155,26 @@ impl InterfaceSymbol {
             TempVisibility::Api => (true, true),
         };
 
-        let mut generic_map = HashMap::<String, GenericIndex>::new();
-
-        let generics = prototype
-            .generics
-            .into_iter()
-            .filter_map(|generic| {
-                let (path, span) = generic.constraint?;
-                let constraint = SymbolName::path(&path.segments);
-                let ident = get_ident(&constraint);
-                let Some(index) = symbols.generics.requires.get_by_ident(ident) else {
-                    config
-                        .submit_error(CompileError::Resolve(ResolveError::UnknownConstraint), span);
-                    return None;
-                };
-                generic_map.insert(generic.name.clone(), index);
-                Some(generic.name)
-            })
-            .collect::<Vec<_>>();
-
         let owner = prototype
             .owner
-            .and_then(|(path, span)| resolve_type(config, (TempType::Path(path), span), symbols))
+            .and_then(|(path, span)| {
+                crate::ast::types::resolve_type_with_bindings(
+                    config,
+                    (TempType::Path(path), span),
+                    symbols,
+                    &types,
+                )
+            })
             .unwrap_or(TypeIndex::empty());
+        let name = if owner.is_empty() {
+            name
+        } else {
+            SymbolName::callable(Some(&owner.format(&symbols.types)), &prototype.name)
+        };
 
         (
             Self {
-                name: prototype.name,
+                name,
                 params,
                 ret_type,
                 generics: generics,
@@ -210,11 +199,27 @@ impl Interface {
         symbols: &mut SymbolTable,
     ) -> Self {
         let body = if let Some(prototype) = prototype {
-            prototype
-                .statements
-                .into_iter()
-                .map(|stmt| Statement::new(config, stmt, symbols, None))
-                .collect()
+            let symbol = symbols.interfaces.get(index).clone();
+            let receiver = if symbol.has_self {
+                let value = if symbol.mutable {
+                    crate::ast::types::ValueType::Flex
+                } else {
+                    crate::ast::types::ValueType::Final
+                };
+                Some(symbol.owner.into_value_type(value, &mut symbols.types))
+            } else {
+                None
+            };
+            let mut context = bindings::context(
+                config,
+                EnumBool::True(index),
+                &symbol.params,
+                &symbol.generic_map,
+                &HashMap::new(),
+                receiver,
+                (0..0).into(),
+            );
+            Statement::parse_scope(config, prototype, symbols, &mut context)
         } else {
             Vec::new()
         };

@@ -18,7 +18,7 @@ pub enum Operator {
 
     Index,
     AddressOf,
-    MutableAddressOf,
+    MutOf,
     Dot,
     Dereference,
     Arrow,
@@ -47,5 +47,9 @@ impl Operator {
                 | Self::LogicalOr
                 | Self::Index
         )
+    }
+
+    pub fn is_logical(&self) -> bool {
+        matches!(self, Self::LogicalAnd | Self::LogicalOr | Self::LogicalNot)
     }
 }

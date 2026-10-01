@@ -148,8 +148,30 @@ where
             .map(Expr::Array)
             .map_with(|expr, extra| (expr, extra.span()));
 
+        let generic_call = path()
+            .then(
+                type_parser()
+                    .separated_by(operator(Token::Comma))
+                    .at_least(1)
+                    .collect::<Vec<_>>()
+                    .delimited_by(operator(Token::LAngle), operator(Token::RAngle)),
+            )
+            .then(
+                list.clone()
+                    .delimited_by(keyword(Token::LParen), keyword(Token::RParen)),
+            )
+            .map(|((path, generic_args), args)| Expr::Call {
+                callee: TempCallee::GenericPath {
+                    path,
+                    args: generic_args,
+                },
+                args,
+            })
+            .map_with(|expr, extra| (expr, extra.span()));
+
         let atom = choice((
             literal,
+            generic_call,
             typed_init,
             path_expr,
             parenthesized,
@@ -206,7 +228,7 @@ where
                 .then(keyword(Token::Mut).or_not())
                 .map(|(_, mutable)| {
                     if mutable.is_some() {
-                        Operator::MutableAddressOf
+                        Operator::MutOf
                     } else {
                         Operator::AddressOf
                     }

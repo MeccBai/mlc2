@@ -1,7 +1,13 @@
 #[cfg(test)]
+mod access_tests;
+#[cfg(test)]
 mod call_tests;
+mod calls;
+mod function_args;
 mod generic_call;
 mod lookup;
+#[cfg(test)]
+mod poison_tests;
 #[cfg(test)]
 mod reference_tests;
 
@@ -10,10 +16,11 @@ use std::rc::Rc;
 
 use super::operators::Operator;
 use super::{
-    CompAtom, Composite, ConstValue, Expression, FuncCall, InitialList, MemberAccess, UnaryExpr,
+    Access, CompAtom, Composite, ConstValue, Expression, FuncCall, InitialList, UnaryExpr,
 };
 use crate::ast::symbol_name::SymbolName;
 use crate::ast::types::CompileType;
+use crate::ast::types::ListType;
 use crate::ast::{
     EnumBool, SymbolTable, TypeIndex, config::Config, expression::Expression::InitListE,
     statement::Variable, types::resolve_type,
@@ -36,7 +43,24 @@ impl Expression {
         config: &mut Config,
         temp_expr: Spanned<TempExpr>,
         symbols: &mut SymbolTable,
-        context: Option<&HashMap<String, Rc<Variable>>>,
+        context: Option<&crate::ast::symbols::StatementContext>,
+    ) -> Self {
+        if config.is_poisoned() {
+            return Self::Poison;
+        }
+        let expression = Self::create(config, temp_expr, symbols, context);
+        if config.is_poisoned() {
+            Self::Poison
+        } else {
+            expression
+        }
+    }
+
+    fn create(
+        config: &mut Config,
+        temp_expr: Spanned<TempExpr>,
+        symbols: &mut SymbolTable,
+        context: Option<&crate::ast::symbols::StatementContext>,
     ) -> Self {
         let (expr, span) = temp_expr;
 
@@ -48,20 +72,38 @@ impl Expression {
                 TempLiteralKind::String => Self::InitListE(InitialList::from_string(text)),
             },
             Path(path) => {
-                let var_name = SymbolName::path(&path.segments);
-                match Self::search_variable(&var_name, symbols, &context) {
-                    Some(var) => Self::VarValueE(var),
-                    None => {
-                        config.submit_error(
-                            CompileError::Resolve(ResolveError::UnknownVariable),
-                            span,
-                        );
-                        Self::VarValueE(Variable::empty())
+                use crate::ast::symbols::PathSymbol;
+                let error = match symbols.resolve_path(config, &path, context) {
+                    Some(PathSymbol::Variable(variable)) => return Self::VarValueE(variable),
+                    Some(PathSymbol::EnumValue(value)) => {
+                        return Self::ConstValueE(ConstValue {
+                            value: value.value.to_string(),
+                            ty: value.enum_type,
+                        });
                     }
-                }
+                    Some(PathSymbol::GenericParameter(_)) => {
+                        CompileError::IllegalUse(IllegalUseError::TypeUsedAsValue)
+                    }
+                    Some(PathSymbol::Interface { .. } | PathSymbol::Function { .. }) => {
+                        CompileError::IllegalUse(IllegalUseError::UnsupportedSymbolValue)
+                    }
+                    None => CompileError::Resolve(ResolveError::UnknownVariable),
+                };
+                config.submit_error(error, span);
+                Self::Poison
             }
             Unary { op, value } => {
                 let expr = Self::new(config, *value, symbols, context);
+                if expr.is_poisoned() {
+                    return Self::Poison;
+                }
+                if op == Operator::MutOf && !expr.assignable(config, symbols) {
+                    config.submit_error(
+                        CompileError::IllegalUse(IllegalUseError::InvalidAssignment),
+                        span,
+                    );
+                    return Self::null();
+                }
                 if op == Operator::Dereference {
                     let ty = expr.type_inference(config, symbols);
                     if !ty.is_empty() && !ty.is_ref(&symbols.types) {
@@ -72,15 +114,39 @@ impl Expression {
                         return Self::null();
                     }
                 }
-                Expression::UnaryExprE(UnaryExpr {
+                let value = CompAtom::from_expr(expr);
+
+                Expression::UnaryExprE(UnaryExpr::Operator {
                     op,
-                    value: Box::new(CompAtom::from_expr(expr)),
+                    value: Box::new(value),
                 })
             }
             Binary {
-                operands,
+                mut operands,
                 operators,
             } => {
+                if operators == [Operator::Index] && operands.len() == 2 {
+                    let index = Self::new(config, operands.pop().unwrap(), symbols, context);
+                    let base = Self::new(config, operands.pop().unwrap(), symbols, context);
+                    let base_type = base.type_inference(config, symbols);
+                    let index_type = index.type_inference(config, symbols);
+                    if (!base_type.is_empty()
+                        && !matches!(
+                            symbols.types.get(base_type).unqualified(),
+                            CompileType::List(_)
+                        ))
+                        || (!index_type.is_empty() && !index_type.is_integer(&symbols.types))
+                    {
+                        config.submit_error(
+                            CompileError::IllegalUse(IllegalUseError::InvalidIndexAccess),
+                            span,
+                        );
+                    }
+                    return Self::UnaryExprE(UnaryExpr::Access(Access::Index {
+                        base: Box::new(base),
+                        index: Box::new(index),
+                    }));
+                }
                 let expressions = operands
                     .into_iter()
                     .map(|operand| {
@@ -88,6 +154,19 @@ impl Expression {
                         CompAtom::from_expr(expr)
                     })
                     .collect::<Vec<_>>();
+
+                if config.is_poisoned() {
+                    return Self::Poison;
+                }
+                expressions.iter().for_each(|expr| {
+                    let ty = expr.type_inference(config, symbols);
+                    if !ty.is_empty() && ty.is_ref(&symbols.types) {
+                        config.submit_error(
+                            CompileError::IllegalUse(IllegalUseError::CannotInferenceType),
+                            span,
+                        );
+                    }
+                });
 
                 Expression::CompositeE(Composite {
                     members: expressions,
@@ -104,45 +183,9 @@ impl Expression {
                 }
                 TempCallee::Expr(callee) => {
                     if matches!(callee.0, Member { .. }) {
-                        let (owner, interface) =
-                            match Self::search_interface(config, *callee, symbols, context) {
-                                Some((owner, interface)) => (owner, interface),
-                                None => {
-                                    config.submit_error(
-                                        CompileError::Resolve(ResolveError::UnknownInterface),
-                                        span,
-                                    );
-                                    return Self::null();
-                                }
-                            };
-                        let mut params = vec![owner];
-                        params.reserve(args.len() + 1);
-                        args.into_iter().for_each(|arg| {
-                            params.push(Expression::new(config, arg, symbols, context));
-                        });
-                        Self::FuncCallE(FuncCall {
-                            func: EnumBool::True(interface),
-                            args: params,
-                        })
+                        Self::new_interface_call(config, *callee, args, span, symbols, context)
                     } else {
-                        let function =
-                            match Self::search_function(config, *callee, symbols, context) {
-                                Some(f) => f,
-                                None => {
-                                    config.submit_error(
-                                        CompileError::Resolve(ResolveError::UnknownFunction),
-                                        span,
-                                    );
-                                    return Self::null();
-                                }
-                            };
-                        Self::FuncCallE(FuncCall {
-                            func: function,
-                            args: args
-                                .into_iter()
-                                .map(|arg| Expression::new(config, arg, symbols, context))
-                                .collect::<Vec<_>>(),
-                        })
+                        Self::new_function_call(config, *callee, args, span, symbols, context)
                     }
                 }
             },
@@ -153,6 +196,9 @@ impl Expression {
                 name_span,
             } => {
                 let owner = Expression::new(config, *base, symbols, context);
+                if owner.is_poisoned() {
+                    return Self::Poison;
+                }
                 let mut owner_type = owner.type_inference(config, symbols);
                 if !owner_type.is_empty() && indirect {
                     if !owner_type.is_ref(&symbols.types) {
@@ -166,7 +212,7 @@ impl Expression {
                 }
                 if !owner_type.is_empty()
                     && !matches!(
-                        symbols.types.get(owner_type),
+                        symbols.types.get(owner_type).unqualified(),
                         CompileType::Unit(unit) if unit.get_member(&name).is_some()
                     )
                 {
@@ -176,11 +222,11 @@ impl Expression {
                     );
                     return Self::null();
                 }
-                Self::MemberAccessE(MemberAccess {
+                Self::UnaryExprE(UnaryExpr::Access(Access::Member {
                     base: Box::new(CompAtom::from_expr(owner)),
                     indirect,
                     name,
-                })
+                }))
             }
             Init { target, values } => {
                 let values = values
@@ -192,7 +238,12 @@ impl Expression {
                     .collect::<Vec<_>>();
 
                 let ty = match target {
-                    Some(t) => resolve_type(config, t, symbols),
+                    Some(t) => resolve_type(
+                        config,
+                        t,
+                        symbols,
+                        context.map(|context| context as &dyn crate::ast::types::TypeContext),
+                    ),
                     None => None,
                 };
 
@@ -211,7 +262,16 @@ impl Expression {
                     .collect::<Vec<_>>();
 
                 let ty = if let Some(first) = values.first() {
-                    first.type_inference(config, symbols)
+                    let element_type = first
+                        .type_inference(config, symbols)
+                        .into(crate::ast::types::ValueType::Flex, &mut symbols.types);
+                    if element_type.is_empty() {
+                        TypeIndex::empty()
+                    } else {
+                        let list = ListType::new(element_type, values.len());
+                        let name = list.format(&symbols.types);
+                        symbols.types.insert(name, CompileType::List(list))
+                    }
                 } else {
                     config.submit_error(CompileError::Resolve(ResolveError::MissingType), span);
                     TypeIndex::empty()

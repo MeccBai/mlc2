@@ -1,5 +1,3 @@
-
-
 use chumsky::primitive::todo;
 
 use crate::ast::arena::{
@@ -10,7 +8,11 @@ use crate::ast::generic;
 use crate::ast::symbol_name::SymbolName;
 use crate::ast::types::CompileType::{Base, Enum};
 use crate::ast::types::{CompileType, UnitType, resolve_type};
-use crate::ast::{SymbolTable, TypeIndex, config::Config};
+use crate::ast::{
+    TypeIndex,
+    config::Config,
+    symbols::{EnumBool, SymbolTable},
+};
 use crate::error::{CompileError, ConstraintError, IllegalUseError, ResolveError};
 use crate::parser::out::{Span, TempConstraints, TempGeneric, TempInterfaceSymbol, TempPath};
 use std::collections::HashMap;
@@ -33,12 +35,12 @@ impl InterfaceRequire {
         symbols: &mut SymbolTable,
         span: Span,
     ) -> Option<Self> {
-        let name = prototype.name;
+        let name = SymbolName::callable(None, &prototype.name);
 
         let temp_ret_temp = prototype.return_type;
 
         let ret_type = match temp_ret_temp {
-            Some(temp_ret) => Some(resolve_type(config, temp_ret, symbols)?),
+            Some(temp_ret) => Some(resolve_type(config, temp_ret, symbols, None)?),
             None => None,
         };
 
@@ -53,7 +55,7 @@ impl InterfaceRequire {
                         return None;
                     }
                 };
-                resolve_type(config, temp_ty, symbols).map(|ty| (ty, param.name))
+                resolve_type(config, temp_ty, symbols, None).map(|ty| (ty, param.name))
             })
             .collect::<Option<Vec<_>>>()?;
 
@@ -69,7 +71,7 @@ impl InterfaceRequire {
 
     pub fn check(&self, param: TypeIndex, symbols: &SymbolTable) -> bool {
         let param_name = param.format(&symbols.types);
-        let interface_name = SymbolName::member(&param_name, &self.name);
+        let interface_name = SymbolName::callable(Some(&param_name), &self.name);
         let interface = symbols.interfaces.get_by_name(&interface_name);
 
         let interface = match interface {
@@ -210,6 +212,7 @@ impl GenericTypeRequire {
     }
 }
 
+#[derive(Clone)]
 pub enum Constraints {
     Interface(InterfaceRequire),
     Type(GenericTypeRequire),
@@ -224,6 +227,7 @@ impl Constraints {
     }
 }
 
+#[derive(Clone)]
 pub struct GenericRequire {
     pub name: String,
     pub requires: Vec<Constraints>,
@@ -285,6 +289,8 @@ pub struct GenericTable {
     pub units: UnitArena,
     pub functions: FuncArena,
     pub interfaces: InterfaceArena,
+    pub function_templates: HashMap<FuncIndex, crate::parser::Scope>,
+    pub interface_templates: HashMap<InterfaceIndex, crate::parser::Scope>,
 }
 
 impl GenericTable {
@@ -294,6 +300,8 @@ impl GenericTable {
             units: UnitArena::empty(),
             functions: FuncArena::empty(),
             interfaces: InterfaceArena::empty(),
+            function_templates: HashMap::new(),
+            interface_templates: HashMap::new(),
         }
     }
 }
@@ -339,51 +347,31 @@ impl TypeIndex {
         config: &mut Config,
         params: &HashMap<GenericIndex, TypeIndex>,
         symbols: &mut SymbolTable,
-        actives: Option<&mut HashMap<String, TypeIndex>>,
+        actives: Option<&crate::ast::function::InstantiationActives>,
         span: Span,
     ) -> Option<TypeIndex> {
-        let ty = symbols.types.get(self).clone();
+        if config.is_poisoned() {
+            return None;
+        }
+        let value = self.value_type(&symbols.types);
+        let ty = symbols.types.get(self).unqualified().clone();
         match ty {
             Base(_) | Enum(_) => Some(self),
-            CompileType::Generic(generic) => generic.instantiation(config, params, symbols, span),
-            CompileType::Unit(unit) => unit.instantiation(config, params, symbols, actives, span),
-            CompileType::List(list) => list.instantiation(config, params, symbols, actives, span),
-            CompileType::Ref(ref_type) => {
-                ref_type.instantiation(config, params, symbols, actives, span)
-            }
+            CompileType::Generic(generic) => generic
+                .instantiation(config, params, symbols, span)
+                .map(|index| index.into_value_type(value, &mut symbols.types)),
+            CompileType::Unit(unit) if !unit.has_generic() => Some(self),
+            CompileType::Unit(unit) => unit
+                .instantiation(config, params, symbols, actives, span)
+                .map(|index| index.into_value_type(value, &mut symbols.types)),
+            CompileType::List(list) => list
+                .instantiation(config, params, symbols, actives, span)
+                .map(|index| index.into_value_type(value, &mut symbols.types)),
+            CompileType::Ref(ref_type) => ref_type
+                .instantiation(config, params, symbols, actives, span)
+                .map(|index| index.into_value_type(value, &mut symbols.types)),
+            CompileType::Qualified { .. } => unreachable!(),
         }
-    }
-}
-
-impl FuncIndex {
-    pub fn instantiation(
-        self,
-        config: &mut Config,
-        params: &HashMap<GenericIndex, TypeIndex>,
-        symbols: &mut crate::ast::SymbolTable,
-        span: Span,
-    ) -> FuncIndex {
-        let func = symbols.generics.functions.get(self);
-
-        let generic_params = func
-            .generic_map
-            .iter()
-            .map(|gen_index| todo!())
-            .collect::<Vec<_>>();
-
-        todo!()
-    }
-}
-
-impl InterfaceIndex {
-    pub fn instantiation(
-        self,
-        config: &mut Config,
-        params: &HashMap<GenericIndex, TypeIndex>,
-        symbols: &mut crate::ast::SymbolTable,
-        span: Span,
-    ) -> InterfaceIndex {
-        todo!()
     }
 }
 
@@ -409,7 +397,6 @@ mod tests {
 
     #[test]
     fn generic_requirement_errors_keep_their_original_span() {
-        let mut config = config();
         let cases = [
             (
                 "other::generic::is_integer",
@@ -429,6 +416,7 @@ mod tests {
             ),
         ];
         for (index, (name, argument, reason)) in cases.into_iter().enumerate() {
+            let mut config = config();
             let span: Span = (index * 10..index * 10 + 5).into();
             assert_eq!(
                 GenericTypeRequire::new(
@@ -442,8 +430,8 @@ mod tests {
                 CompileError::Resolve(ResolveError::Constraint(reason)),
                 span
             )));
+            assert_eq!(config.error_handle().errors.len(), 1);
         }
-        assert_eq!(config.error_handle().errors.len(), 4);
     }
 
     #[test]

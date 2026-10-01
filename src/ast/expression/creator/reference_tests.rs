@@ -6,8 +6,8 @@ use crate::ast::expression::Expression;
 use crate::ast::expression::operators::Operator;
 use crate::ast::statement::Variable;
 use crate::ast::types::base_type::DataType;
-use crate::ast::types::{CompileType, resolve_type};
-use crate::error::ErrorHandle;
+use crate::ast::types::{CompileType, ValueType, resolve_type};
+use crate::error::{CompileError, ErrorHandle, ErrorInfo, IllegalUseError};
 use crate::parser::out::{TempExpr, TempPath, TempType};
 
 #[test]
@@ -26,7 +26,6 @@ fn address_of_preserves_mutability_in_type_identity() {
             name: "a".into(),
             var_type: base_type,
             init_val: Box::new(Expression::null()),
-            immutable: false,
         }),
     );
     let span = (0..1).into();
@@ -53,7 +52,7 @@ fn address_of_preserves_mutability_in_type_identity() {
     };
 
     let immutable = reference_type(Operator::AddressOf, &mut config, &mut symbols);
-    let mutable = reference_type(Operator::MutableAddressOf, &mut config, &mut symbols);
+    let mutable = reference_type(Operator::MutOf, &mut config, &mut symbols);
     assert_ne!(immutable, mutable);
     assert!(
         matches!(symbols.types.get(immutable), CompileType::Ref(reference)
@@ -79,6 +78,7 @@ fn address_of_preserves_mutability_in_type_identity() {
                 span,
             ),
             symbols,
+            None,
         )
     };
     assert_eq!(
@@ -90,4 +90,105 @@ fn address_of_preserves_mutability_in_type_identity() {
         Some(mutable)
     );
     assert!(config.error_handle().errors.is_empty());
+}
+
+#[test]
+fn val_can_only_produce_immutable_reference() {
+    let mut config = Config::new(
+        Vec::new(),
+        "test".into(),
+        "test".into(),
+        ErrorHandle::new("test".into()),
+    );
+    let mut symbols = SymbolTable::new();
+    let base = symbols.get_base(DataType::Integer, 32, true);
+    let final_type = base.into(ValueType::Final, &mut symbols.types);
+    symbols.globals.insert(
+        "fixed".into(),
+        Rc::new(Variable {
+            name: "fixed".into(),
+            var_type: final_type,
+            init_val: Box::new(Expression::null()),
+        }),
+    );
+    let span = (0..1).into();
+    let address = |op, config: &mut Config, symbols: &mut SymbolTable| {
+        Expression::new(
+            config,
+            (
+                TempExpr::Unary {
+                    op,
+                    value: Box::new((
+                        TempExpr::Path(TempPath {
+                            segments: vec!["fixed".into()],
+                        }),
+                        span,
+                    )),
+                },
+                span,
+            ),
+            symbols,
+            None,
+        )
+    };
+    let immutable = address(Operator::AddressOf, &mut config, &mut symbols);
+    let reference = immutable.type_inference(&mut config, &mut symbols);
+    assert!(matches!(
+        symbols.types.get(reference),
+        CompileType::Ref(reference) if !reference.mut_base && reference.base == base
+    ));
+    let invalid = address(Operator::MutOf, &mut config, &mut symbols);
+    assert!(invalid.is_poisoned());
+    assert!(config.error_handle().errors.contains(&ErrorInfo::new(
+        CompileError::IllegalUse(IllegalUseError::InvalidAssignment),
+        span,
+    )));
+}
+
+#[test]
+fn final_binding_does_not_freeze_mutable_reference_target() {
+    let mut config = Config::new(
+        Vec::new(),
+        "test".into(),
+        "test".into(),
+        ErrorHandle::new("test".into()),
+    );
+    let mut symbols = SymbolTable::new();
+    let base = symbols.get_base(DataType::Integer, 32, true);
+    let reference = base
+        .make_ref(&mut symbols.types, true)
+        .into(ValueType::Final, &mut symbols.types);
+    symbols.globals.insert(
+        "reference".into(),
+        Rc::new(Variable {
+            name: "reference".into(),
+            var_type: reference,
+            init_val: Box::new(Expression::null()),
+        }),
+    );
+    let span = (0..1).into();
+    let dereference = Expression::new(
+        &mut config,
+        (
+            TempExpr::Unary {
+                op: Operator::Dereference,
+                value: Box::new((
+                    TempExpr::Path(TempPath {
+                        segments: vec!["reference".into()],
+                    }),
+                    span,
+                )),
+            },
+            span,
+        ),
+        &mut symbols,
+        None,
+    );
+    assert!(dereference.assignable(&mut config, &mut symbols));
+    assert_eq!(
+        dereference
+            .type_inference(&mut config, &mut symbols)
+            .value_type(&symbols.types),
+        ValueType::Flex
+    );
 }

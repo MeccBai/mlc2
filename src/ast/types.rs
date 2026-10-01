@@ -14,11 +14,17 @@ pub(crate) mod enum_type;
 
 pub(crate) use enum_type::EnumType;
 
+mod resolve;
+pub use resolve::{TypeContext, resolve_type, resolve_type_with_bindings};
+
 use crate::ast::arena::get_ident;
 use crate::ast::config::Config;
 use crate::ast::symbol_name::SymbolName;
 use crate::ast::types::CompileType::{Base, Enum, Generic, List, Ref, Unit};
-use crate::ast::{GenericIndex, SymbolTable, TypeArena, TypeIndex};
+use crate::ast::{
+    GenericIndex, TypeArena, TypeIndex,
+    symbols::{EnumBool, SymbolTable},
+};
 use crate::error::ice::ice;
 use crate::error::{CompileError, ResolveError};
 use crate::parser::out::{Spanned, TempType};
@@ -31,10 +37,47 @@ pub enum CompileType {
     List(ListType),
     Enum(EnumType),
     Generic(GenericIndex),
+    Qualified {
+        base: Box<CompileType>,
+        value: ValueType,
+    },
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ValueType {
+    Flex,
+    Final,
+    Constant,
+}
+
+impl ValueType {
+    fn prefix(self) -> &'static str {
+        match self {
+            Self::Flex => "",
+            Self::Final => "val ",
+            Self::Constant => "const ",
+        }
+    }
+}
+
 impl CompileType {
+    pub fn value_type(&self) -> ValueType {
+        match self {
+            Self::Qualified { value, .. } => *value,
+            _ => ValueType::Flex,
+        }
+    }
+
+    pub fn unqualified(&self) -> &Self {
+        match self {
+            Self::Qualified { base, .. } => base.unqualified(),
+            _ => self,
+        }
+    }
+
     pub fn is_generic(&self, arena: &TypeArena) -> bool {
         match self {
+            Self::Qualified { base, .. } => base.is_generic(arena),
             Generic(_) => true,
             Base(_) | Enum(_) => false,
             Ref(ref_type) => ref_type.base.is_generic(arena),
@@ -45,16 +88,27 @@ impl CompileType {
 
     pub fn format(&self, arena: &TypeArena) -> String {
         match self {
+            Self::Qualified { base, value } => format!("{}{}", value.prefix(), base.format(arena)),
             Base(base_type) => base_type.name(),
             Ref(ref_type) => ref_type.format(arena),
             Unit(unit_type) => unit_type.format(),
             List(list_type) => list_type.format(arena),
             Enum(enum_type) => enum_type.name.clone(),
-            Generic(_) => ice("Cannot format a Generic type."),
+            Generic(index) => SymbolName::generic_type(*index),
         }
     }
 
-    
+    pub fn dump(&self, arena: &TypeArena) -> String {
+        match self {
+            Self::Qualified { base, value } => format!("{}{}", value.prefix(), base.dump(arena)),
+            Base(base) => base.dump(),
+            Ref(reference) => reference.dump(arena),
+            Unit(unit) => unit.dump(arena),
+            List(list) => list.dump(arena),
+            Enum(enm) => enm.dump(),
+            Generic(index) => SymbolName::generic_type(*index),
+        }
+    }
 }
 
 impl TypeArena {
@@ -74,8 +128,34 @@ impl TypeArena {
 }
 
 impl TypeIndex {
+    pub fn value_type(&self, arena: &TypeArena) -> ValueType {
+        arena.get(*self).value_type()
+    }
+
+    pub fn into_value_type(self, value: ValueType, arena: &mut TypeArena) -> Self {
+        if self.is_empty() {
+            return self;
+        }
+        if self.value_type(arena) == value {
+            return self;
+        }
+        let base = arena.get(self).unqualified().clone();
+        let qualified = match value {
+            ValueType::Flex => base,
+            _ => CompileType::Qualified {
+                base: Box::new(base),
+                value,
+            },
+        };
+        let name = qualified.format(arena);
+        arena.insert(get_ident(&name), qualified)
+    }
+
+    pub fn into(self, value: ValueType, arena: &mut TypeArena) -> Self {
+        self.into_value_type(value, arena)
+    }
     pub fn size(&self, arena: &TypeArena) -> usize {
-        let ty = arena.get(*self);
+        let ty = arena.get(*self).unqualified();
         match ty {
             Base(base) => base.size(),
             Ref(ref_type) => ref_type.size(),
@@ -89,7 +169,7 @@ impl TypeIndex {
     }
 
     pub fn align(&self, arena: &TypeArena) -> usize {
-        let ty = arena.get(*self);
+        let ty = arena.get(*self).unqualified();
         match ty {
             Base(base) => base.align(),
             Ref(ref_type) => ref_type.align(),
@@ -104,74 +184,79 @@ impl TypeIndex {
 
     pub fn dump(&self, arena: &TypeArena) -> String {
         let ty = arena.get(*self);
+        if let CompileType::Qualified { .. } = ty {
+            return ty.dump(arena);
+        }
         match ty {
             Base(base) => base.dump(),
             Ref(ref_type) => ref_type.dump(arena),
             Unit(unit) => unit.dump(arena),
             List(list) => list.dump(arena),
             Enum(enm) => enm.dump(),
-            _ => {
-                ice("Cannot dump a Generic type.");
-            }
+            Generic(index) => SymbolName::generic_type(*index),
+            CompileType::Qualified { .. } => unreachable!(),
         }
     }
 
     pub fn format(&self, arena: &TypeArena) -> String {
         let ty = arena.get(*self);
+        if let CompileType::Qualified { .. } = ty {
+            return ty.format(arena);
+        }
         match ty {
             Base(base_type) => base_type.name(),
             Ref(ref_type) => ref_type.format(arena),
             Unit(unit) => unit.format(),
             List(list) => list.format(arena),
             Enum(enum_type) => enum_type.name.clone(),
-            _ => {
-                ice("Cannot format a Generic type.");
-            }
+            Generic(index) => SymbolName::generic_type(*index),
+            CompileType::Qualified { .. } => unreachable!(),
         }
     }
 
     pub fn is_generic(&self, arena: &TypeArena) -> bool {
-        let ty = arena.get(*self);
+        let ty = arena.get(*self).unqualified();
         ty.is_generic(arena)
     }
 
     pub fn has_generic(&self, arena: &TypeArena) -> bool {
-        let ty = arena.get(*self);
+        let ty = arena.get(*self).unqualified();
         match ty {
             Base(_) | Enum(_) => false,
             Ref(ref_type) => ref_type.base.has_generic(arena),
             Unit(unit) => unit.has_generic(),
             List(list) => list.is_generic(arena),
             Generic(_) => false,
+            CompileType::Qualified { .. } => unreachable!(),
         }
     }
 
     pub fn is_base(&self, arena: &TypeArena) -> bool {
-        matches!(arena.get(*self), Base(_))
+        matches!(arena.get(*self).unqualified(), Base(_))
     }
 
     pub fn is_ref(&self, arena: &TypeArena) -> bool {
-        matches!(arena.get(*self), Ref(_))
+        matches!(arena.get(*self).unqualified(), Ref(_))
     }
 
     pub fn is_unit(&self, arena: &TypeArena) -> bool {
-        matches!(arena.get(*self), Unit(_))
+        matches!(arena.get(*self).unqualified(), Unit(_))
     }
 
     pub fn is_integer(&self, arena: &TypeArena) -> bool {
-        matches!(arena.get(*self), Base(base) if base.data_type() == base_type::DataType::Integer)
+        matches!(arena.get(*self).unqualified(), Base(base) if base.data_type() == base_type::DataType::Integer)
     }
 
     pub fn is_float(&self, arena: &TypeArena) -> bool {
-        matches!(arena.get(*self), Base(base) if base.data_type() == base_type::DataType::Float)
+        matches!(arena.get(*self).unqualified(), Base(base) if base.data_type() == base_type::DataType::Float)
     }
 
     pub fn is_signed(&self, arena: &TypeArena) -> bool {
-        matches!(arena.get(*self), Base(base) if base.signed())
+        matches!(arena.get(*self).unqualified(), Base(base) if base.signed())
     }
 
     pub fn get_generic_index(&self, arena: &TypeArena) -> GenericIndex {
-        let ty = arena.get(*self);
+        let ty = arena.get(*self).unqualified();
         match ty {
             Generic(index) => *index,
             _ => {
@@ -194,7 +279,7 @@ impl TypeIndex {
         params: &HashMap<GenericIndex, TypeIndex>,
     ) -> String {
         if self.has_generic(arena) {
-            let ty = arena.get(*self);
+            let ty = arena.get(*self).unqualified();
             match ty {
                 Ref(ref_type) => ref_type.generic_instance_name(arena, params),
                 Unit(unit) => unit.generic_instance_name(arena, params),
@@ -214,23 +299,32 @@ impl TypeIndex {
                     )
                 }
             } else {
-                ice(
-                    "TypeIndex is not a Generic type. Cannot get generic instance name of a non-generic type.",
-                )
+                self.format(arena)
             }
         }
     }
 
     pub fn deref(&self, arena: &mut TypeArena) -> Option<TypeIndex> {
-        let ty = arena.get(*self);
+        let ty = arena.get(*self).unqualified();
         match ty {
-            Ref(ref_type) => ref_type.clone().deref(arena),
+            Ref(ref_type) => {
+                let mutable = ref_type.mut_base;
+                ref_type.clone().deref(arena).map(|base| {
+                    let value = if mutable {
+                        ValueType::Flex
+                    } else {
+                        ValueType::Final
+                    };
+                    base.into_value_type(value, arena)
+                })
+            }
             _ => ice("Non-ref type cannot be de referenced."),
         }
     }
 
     pub fn make_ref(&self, arena: &mut TypeArena, mut_base: bool) -> TypeIndex {
-        let ty = arena.get(*self);
+        let base = self.into_value_type(ValueType::Flex, arena);
+        let ty = arena.get(base).unqualified();
         match ty {
             Ref(ref_type) => {
                 let new_ref = RefType::new(ref_type.base, ref_type.level + 1, mut_base);
@@ -239,7 +333,7 @@ impl TypeIndex {
                 arena.insert(ident, Ref(new_ref))
             }
             _ => {
-                let new_ref = RefType::new(*self, 1, mut_base);
+                let new_ref = RefType::new(base, 1, mut_base);
                 let type_str = new_ref.format(arena);
                 let ident = get_ident(&type_str);
                 arena.insert(ident, Ref(new_ref))
@@ -252,88 +346,16 @@ impl TypeIndex {
             return true;
         }
 
-        let target = arena.get(*self);
-        let other = arena.get(*other);
+        let target = arena.get(*self).unqualified();
+        let other = arena.get(*other).unqualified();
         match (target, other) {
             (Base(base), Base(other)) => base.type_check(tolerance, other),
             (Ref(ref_t), Ref(ref2)) => ref_t.type_check(ref2, arena),
             (List(list), List(list2)) => list.type_check(list2, arena),
+            (Unit(unit), Unit(other)) => unit.format() == other.format(),
+            (Enum(enm), Enum(other)) => enm.name == other.name,
+            (Generic(index), Generic(other)) => index == other,
             _ => false,
-        }
-    }
-}
-
-pub fn resolve_type(
-    config: &mut Config,
-    temp: Spanned<TempType>,
-    symbols: &mut SymbolTable,
-) -> Option<TypeIndex> {
-    let (temp, span) = temp;
-    match temp {
-        TempType::Path(path) => {
-            let path = SymbolName::path(&path.segments);
-            let local = config.symbol_name(&path);
-            match symbols
-                .types
-                .get_by_name(&local)
-                .or_else(|| symbols.types.get_by_name(&path))
-            {
-                Some(ty) => Some(ty),
-                None => {
-                    config.submit_error(CompileError::Resolve(ResolveError::UnknownType), span);
-                    None
-                }
-            }
-        }
-        TempType::Generic { base, args } => {
-            let name = config.symbol_name(&SymbolName::path(&base.segments));
-            let ident = get_ident(&name);
-            let index = match symbols.generics.units.get_by_ident(ident) {
-                Some(index) => index,
-                None => {
-                    config.submit_error(CompileError::Resolve(ResolveError::UnknownGeneric), span);
-                    return None;
-                }
-            };
-
-            let unit = symbols.generics.units.get(index).clone();
-            if args.len() != unit.generics.len() {
-                config.submit_error(
-                    CompileError::IllegalUse(crate::error::IllegalUseError::GenericCountMismatch),
-                    span,
-                );
-                return None;
-            }
-            let resolved = args
-                .into_iter()
-                .map(|arg| resolve_type(config, arg, symbols))
-                .collect::<Option<Vec<_>>>()?;
-
-            let mut params = HashMap::new();
-            for (name, ty) in unit.generics.iter().zip(resolved) {
-                let Some(&index) = unit.generic_map.get(name) else {
-                    config.submit_error(CompileError::Resolve(ResolveError::UnknownGeneric), span);
-                    return None;
-                };
-                params.insert(index, ty);
-            }
-            unit.instantiation(config, &params, symbols, None, span)
-        }
-        TempType::Reference { inner, mutable } => {
-            let base = resolve_type(config, *inner, symbols)?;
-            let ty = symbols.types.get(base);
-
-            if let CompileType::Ref(ref_type) = ty {
-                let new_ref = RefType::new(ref_type.base, ref_type.level + 1, mutable);
-                let type_str = new_ref.format(&symbols.types);
-                let ident = get_ident(&type_str);
-                Some(symbols.types.insert(ident, CompileType::Ref(new_ref)))
-            } else {
-                let new_ref = RefType::new(base, 1, mutable);
-                let type_str = new_ref.format(&symbols.types);
-                let ident = get_ident(&type_str);
-                Some(symbols.types.insert(ident, CompileType::Ref(new_ref)))
-            }
         }
     }
 }
@@ -362,7 +384,12 @@ mod tests {
             segments: vec!["Missing".into()],
         };
         assert_eq!(
-            resolve_type(&mut config, (TempType::Path(path), span), &mut symbols),
+            resolve_type(
+                &mut config,
+                (TempType::Path(path), span),
+                &mut symbols,
+                None
+            ),
             None
         );
         assert!(config.error_handle().errors.contains(&ErrorInfo::new(
@@ -386,10 +413,16 @@ mod tests {
             },
             args: Vec::new(),
         };
-        assert_eq!(resolve_type(&mut config, (ty, span), &mut symbols), None);
+        assert_eq!(
+            resolve_type(&mut config, (ty, span), &mut symbols, None),
+            None
+        );
         assert!(config.error_handle().errors.contains(&ErrorInfo::new(
             CompileError::IllegalUse(IllegalUseError::GenericCountMismatch),
             span,
         )));
     }
 }
+
+#[cfg(test)]
+mod value_tests;

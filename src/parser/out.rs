@@ -4,7 +4,7 @@ pub mod stmt;
 pub mod types;
 
 use crate::{
-    ast::{ImportModule, config::Config},
+    ast::{config::Config, ImportModule},
     error::{CompileError, IllegalUseError},
 };
 
@@ -251,15 +251,15 @@ pub struct TempVar {
     pub name_span: Span,
     pub ty: Option<Spanned<TempType>>,
     pub initializer: Spanned<TempExpr>,
-    pub constant: bool,
+    pub value_type: crate::ast::types::ValueType,
 }
 
 impl TempVar {
     pub fn dump(&self) -> String {
         format!(
-            "Global Variable: {}\n    Constant: {}\n    Type: {}\n    Initializer: {}",
+            "Global Variable: {}\n    Value Type: {:?}\n    Type: {}\n    Initializer: {}",
             self.name,
-            self.constant,
+            self.value_type,
             self.ty
                 .as_ref()
                 .map(|(ty, _)| ty.dump())

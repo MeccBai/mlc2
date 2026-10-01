@@ -2,7 +2,10 @@ use crate::ast::arena::{GenericIndex, TypeArena, get_ident};
 use crate::ast::config::Config;
 use crate::ast::symbol_name::SymbolName;
 use crate::ast::types::CompileType::List;
-use crate::ast::{SymbolTable, TypeIndex};
+use crate::ast::{
+    TypeIndex,
+    symbols::{EnumBool, SymbolTable},
+};
 use crate::parser::out::Span;
 use std::collections::HashMap;
 
@@ -64,7 +67,7 @@ impl ListType {
         config: &mut Config,
         params: &HashMap<GenericIndex, TypeIndex>,
         symbols: &mut SymbolTable,
-        actives: Option<&mut HashMap<String, TypeIndex>>,
+        actives: Option<&crate::ast::function::InstantiationActives>,
         span: Span,
     ) -> Option<TypeIndex> {
         let child = self

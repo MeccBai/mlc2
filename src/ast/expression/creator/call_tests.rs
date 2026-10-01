@@ -90,7 +90,6 @@ fn member_call_resolves_interface_and_prepends_owner() {
             name: "point".into(),
             var_type: point_type,
             init_val: Box::new(Expression::null()),
-            immutable: true,
         }),
     );
     let index = symbols.interfaces.insert(
