@@ -1,3 +1,4 @@
+use crate::ast::config::FileId;
 use crate::ast::function::{FuncSymbol, InterfaceSymbol};
 use crate::ast::generic::GenericRequire;
 use crate::ast::types::CompileType;
@@ -6,21 +7,24 @@ use std::fmt;
 use std::marker::PhantomData;
 
 pub type Ident = String;
+mod store;
+pub use store::ArenaStore;
 
 pub struct ArenaIndex<T> {
+    file_id: FileId,
     index: usize,
     _marker: PhantomData<fn() -> T>,
 }
 
 impl<T> fmt::Debug for ArenaIndex<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "ArenaIndex({})", self.index)
+        write!(f, "ArenaIndex({:?}, {})", self.file_id, self.index)
     }
 }
 
 impl<T> PartialEq for ArenaIndex<T> {
     fn eq(&self, other: &Self) -> bool {
-        self.index == other.index
+        self.file_id == other.file_id && self.index == other.index
     }
 }
 
@@ -29,6 +33,7 @@ impl<T> Eq for ArenaIndex<T> {}
 impl<T> std::hash::Hash for ArenaIndex<T> {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.index.hash(state);
+        self.file_id.hash(state);
     }
 }
 
@@ -41,30 +46,42 @@ impl<T> Clone for ArenaIndex<T> {
 }
 
 impl<T> ArenaIndex<T> {
-    fn new(index: usize) -> Self {
+    fn new(file_id: FileId, index: usize) -> Self {
         Self {
+            file_id,
             index,
             _marker: PhantomData,
         }
     }
 
     pub fn empty() -> Self {
-        Self::new(usize::MAX)
+        Self::new(FileId::new(usize::MAX), usize::MAX)
     }
 
     pub fn is_empty(self) -> bool {
         self.index == usize::MAX
     }
+
+    pub fn file_id(self) -> FileId {
+        self.file_id
+    }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NamedArena<T> {
+    file_id: FileId,
     values: Vec<T>,
     by_name: HashMap<Ident, ArenaIndex<T>>,
 }
 
 impl<T> NamedArena<T> {
     pub fn empty() -> Self {
+        Self::for_file(FileId::new(0))
+    }
+
+    pub fn for_file(file_id: FileId) -> Self {
         Self {
+            file_id,
             values: Vec::new(),
             by_name: HashMap::new(),
         }
@@ -75,7 +92,7 @@ impl<T> NamedArena<T> {
             return *index;
         }
 
-        let index = ArenaIndex::new(self.values.len());
+        let index = ArenaIndex::new(self.file_id, self.values.len());
 
         self.values.push(value);
         self.by_name.insert(name, index);
@@ -84,10 +101,22 @@ impl<T> NamedArena<T> {
     }
 
     pub fn get(&self, index: ArenaIndex<T>) -> &T {
+        assert_eq!(
+            index.file_id, self.file_id,
+            "index belongs to another file arena"
+        );
         &self.values[index.index]
     }
 
+    pub fn contains(&self, index: ArenaIndex<T>) -> bool {
+        index.file_id == self.file_id && index.index < self.values.len()
+    }
+
     pub fn get_mut(&mut self, index: ArenaIndex<T>) -> &mut T {
+        assert_eq!(
+            index.file_id, self.file_id,
+            "index belongs to another file arena"
+        );
         &mut self.values[index.index]
     }
 
@@ -105,7 +134,13 @@ impl<T> NamedArena<T> {
     }
 
     pub fn set(&mut self, index: &ArenaIndex<T>, data: T) {
-        self.values[index.index] = data;
+        *self.get_mut(*index) = data;
+    }
+
+    pub fn entries(&self) -> impl Iterator<Item = (&String, ArenaIndex<T>, &T)> {
+        self.by_name
+            .iter()
+            .map(|(name, index)| (name, *index, self.get(*index)))
     }
 }
 
@@ -125,7 +160,4 @@ pub type FuncIndex = ArenaIndex<FuncSymbol>;
 pub type InterfaceArena = NamedArena<InterfaceSymbol>;
 pub type InterfaceIndex = ArenaIndex<InterfaceSymbol>;
 
-
-impl FuncIndex {
-    
-}
+impl FuncIndex {}

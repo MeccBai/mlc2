@@ -11,12 +11,14 @@ use crate::ast::generic::GenericTable;
 use crate::ast::statement::Variable;
 use crate::ast::types::CompileType::{Base, Enum, List, Ref, Unit};
 use crate::ast::types::{BaseType, CompileType, EnumType, UnitType, base_type::DataType};
-use crate::error::{CompileError, ErrorHandle, ResolveError, ice::ice};
+use crate::diagnostic::error::{CompileError, ErrorHandle, ResolveError};
+use crate::diagnostic::ice::ice;
 use crate::parser::out::{
     TempEnum, TempFunc, TempGeneric, TempInterface, TempUnit, TempUsing, TempVar,
 };
 use crate::parser::{TempGlobalStmt, TempModule};
 
+#[derive(Debug, Clone, PartialEq)]
 pub struct SymbolTable {
     pub types: TypeArena,
     pub base_type_view: HashMap<usize, TypeIndex>,
@@ -25,6 +27,7 @@ pub struct SymbolTable {
     pub generics: GenericTable,
     pub globals: HashMap<String, Rc<Variable>>,
     pub names: HashSet<String>,
+    pub(crate) declaration_spans: HashMap<String, crate::parser::out::Span>,
     pub usings: HashMap<String, String>,
     pub function_instances: HashMap<FuncIndex, FuncBody>,
     pub interface_instances: HashMap<InterfaceIndex, Interface>,
@@ -32,14 +35,19 @@ pub struct SymbolTable {
 
 impl SymbolTable {
     pub fn new() -> Self {
-        let (types, view) = TypeArena::new();
+        Self::for_file(crate::ast::config::FileId::new(0))
+    }
+
+    pub fn for_file(file_id: crate::ast::config::FileId) -> Self {
+        let (types, view) = TypeArena::new_for_file(file_id);
         let mut temp = Self {
             types,
-            functions: FuncArena::empty(),
-            interfaces: InterfaceArena::empty(),
-            generics: GenericTable::new(),
+            functions: FuncArena::for_file(file_id),
+            interfaces: InterfaceArena::for_file(file_id),
+            generics: GenericTable::for_file(file_id),
             globals: HashMap::new(),
             names: HashSet::new(),
+            declaration_spans: HashMap::new(),
             usings: HashMap::new(),
             base_type_view: view,
             function_instances: HashMap::new(),
@@ -58,7 +66,7 @@ impl SymbolTable {
                         params: vec![(TypeIndex::empty(), "...".to_string())],
                         ret_type: Some(ret_type),
                         generics: Vec::new(),
-                        attributes: Vec::new(),
+                        attributes: Default::default(),
                         generic_map: HashMap::new(),
                         exported: false,
                     };
@@ -84,8 +92,16 @@ pub enum EnumBool<T, F> {
     False(F),
 }
 
+mod concat;
 mod declarations;
+pub use concat::ConcatError;
+pub(crate) mod export;
+mod import;
+pub use export::{ExportSymbol, ExportTable};
+pub use import::ImportModule;
 mod frame;
+mod package;
 mod path;
 pub use frame::{ContextBinding, ScopeFrame, StatementContext, SupperScopeType};
+pub use package::PackageSymbolTable;
 pub use path::{PATH_SEARCH_ORDER, PathSymbol, PathSymbolKind};

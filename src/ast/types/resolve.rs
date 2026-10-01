@@ -7,7 +7,7 @@ use crate::ast::{
     symbols::{StatementContext, SymbolTable},
     types::{CompileType, RefType, UnitType},
 };
-use crate::error::{CompileError, ResolveError};
+use crate::diagnostic::error::{CompileError, ResolveError};
 use crate::parser::out::{Spanned, TempType};
 use std::collections::HashMap;
 
@@ -148,7 +148,7 @@ pub fn resolve_type_with_bindings(
             let unit = symbols.generics.units.get(index).clone();
             if args.len() != unit.generics.len() {
                 config.submit_error(
-                    CompileError::IllegalUse(crate::error::IllegalUseError::GenericCountMismatch),
+                    CompileError::IllegalUse(crate::diagnostic::error::IllegalUseError::GenericCountMismatch),
                     span,
                 );
                 return None;

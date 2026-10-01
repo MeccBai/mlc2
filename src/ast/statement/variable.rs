@@ -9,7 +9,7 @@ use crate::{
         symbols::{EnumBool, SymbolTable},
         types::{ValueType, resolve_type},
     },
-    error::IllegalUseError,
+    diagnostic::error::IllegalUseError,
     parser::out::TempVar,
 };
 
@@ -58,7 +58,7 @@ impl Variable {
                 Some(ty) => {
                     if init_val.type_check(&ty, config, symbols) == false {
                         config.submit_error(
-                            crate::error::CompileError::IllegalUse(
+                            crate::diagnostic::error::CompileError::IllegalUse(
                                 IllegalUseError::TypeMismatched {
                                     expected: symbols.types.get(ty).format(&symbols.types),
                                     found: symbols.types.get(inferred).format(&symbols.types),
@@ -74,8 +74,8 @@ impl Variable {
             None => {
                 if inferred.is_empty() {
                     config.submit_error(
-                        crate::error::CompileError::Resolve(
-                            crate::error::ResolveError::MissingType,
+                        crate::diagnostic::error::CompileError::Resolve(
+                            crate::diagnostic::error::ResolveError::MissingType,
                         ),
                         var_span,
                     );
@@ -87,7 +87,9 @@ impl Variable {
 
         if temp_var.value_type == ValueType::Constant && !init_val.is_const(symbols) {
             config.submit_error(
-                crate::error::CompileError::IllegalUse(IllegalUseError::NonConstantInitializer),
+                crate::diagnostic::error::CompileError::IllegalUse(
+                    IllegalUseError::NonConstantInitializer,
+                ),
                 var_span,
             );
         }
@@ -140,4 +142,4 @@ impl Variable {
 }
 
 #[cfg(test)]
-mod value_tests;
+mod tests;

@@ -1,6 +1,8 @@
 use super::*;
 use crate::ast::arena::TypeIndex;
 use crate::ast::expression::Expression;
+use crate::diagnostic::error::ErrorHandle;
+use crate::diagnostic::warning::WarningHandle;
 
 fn variable(name: &str) -> Rc<Variable> {
     Rc::new(Variable {
@@ -13,10 +15,12 @@ fn variable(name: &str) -> Rc<Variable> {
 #[test]
 fn shadowing_is_rejected_and_existing_binding_survives() {
     let mut config = Config::new(
+        crate::ast::config::FileId::new(0),
         Vec::new(),
         String::new(),
         String::new(),
-        crate::error::ErrorHandle::new("test".into()),
+        ErrorHandle::new("test".into()),
+        WarningHandle::new("test".into()),
     );
     let span = (3..8).into();
     let mut context = StatementContext::new(EnumBool::False(FuncIndex::empty()));
@@ -39,10 +43,12 @@ fn shadowing_is_rejected_and_existing_binding_survives() {
 #[test]
 fn lookup_includes_receiver_generics_and_parameters_and_blocks_shadowing() {
     let mut config = Config::new(
+        crate::ast::config::FileId::new(0),
         Vec::new(),
         String::new(),
         String::new(),
-        crate::error::ErrorHandle::new("test".into()),
+        ErrorHandle::new("test".into()),
+        WarningHandle::new("test".into()),
     );
     let mut context = StatementContext::new(EnumBool::False(FuncIndex::empty()));
     let span = (0..1).into();

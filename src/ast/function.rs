@@ -1,6 +1,7 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::ast::arena::{FuncIndex, InterfaceIndex, get_ident};
+use crate::ast::attribute::FuncAttibute;
 use crate::ast::symbol_name::SymbolName;
 use crate::ast::types::resolve_type;
 use crate::ast::{Config, GenericIndex, TypeIndex};
@@ -8,7 +9,7 @@ use crate::ast::{
     statement::Statement,
     symbols::{EnumBool, SymbolTable},
 };
-use crate::error::{CompileError, ResolveError};
+use crate::diagnostic::error::{CompileError, ResolveError};
 use crate::lexer::Span;
 use crate::parser::Scope;
 use crate::parser::out::{TempFuncSymbol, TempInterfaceSymbol, TempType, TempVisibility};
@@ -30,7 +31,7 @@ pub struct FuncSymbol {
     pub ret_type: Option<TypeIndex>,
     pub generics: Vec<String>,
     pub generic_map: HashMap<String, GenericIndex>,
-    pub attributes: Vec<String>,
+    pub attributes: HashSet<FuncAttibute>,
     pub exported: bool,
 }
 
@@ -47,7 +48,7 @@ pub struct InterfaceSymbol {
     pub mutable: bool,
     pub exported: bool,
     pub owner: TypeIndex,
-    pub attributes: Vec<String>,
+    pub attributes: HashSet<FuncAttibute>,
     pub generics: Vec<String>,
     pub generic_map: HashMap<String, GenericIndex>,
     pub name: String,
@@ -84,7 +85,7 @@ impl FuncSymbol {
                 ret_type,
                 generics,
                 generic_map,
-                attributes: prototype.attributes,
+                attributes: FuncAttibute::parse(config, prototype.attributes, name_span),
                 exported: prototype.visibility.normal_export(config, &name_span),
             },
             name_span,
@@ -179,7 +180,7 @@ impl InterfaceSymbol {
                 ret_type,
                 generics: generics,
                 generic_map: generic_map,
-                attributes: prototype.attributes,
+                attributes: FuncAttibute::parse(config, prototype.attributes, name_span),
                 public,
                 exported,
                 mutable: prototype.mutable,
@@ -232,43 +233,4 @@ impl Interface {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::error::{ErrorHandle, ErrorInfo};
-    use crate::parser::out::TempPath;
-
-    #[test]
-    fn unknown_interface_owner_reports_owner_span() {
-        let mut config = Config::new(
-            Vec::new(),
-            String::new(),
-            String::new(),
-            ErrorHandle::new("test".into()),
-        );
-        let mut symbols = SymbolTable::new();
-        let span = (4..17).into();
-        let prototype = TempInterfaceSymbol {
-            visibility: TempVisibility::Private,
-            owner: Some((
-                TempPath {
-                    segments: vec!["Missing".into()],
-                },
-                span,
-            )),
-            has_self: false,
-            mutable: false,
-            name: "run".into(),
-            name_span: span,
-            generics: Vec::new(),
-            params: Vec::new(),
-            return_type: None,
-            attributes: Vec::new(),
-        };
-
-        InterfaceSymbol::new(&mut config, prototype, &mut symbols);
-        assert!(config.error_handle().errors.contains(&ErrorInfo::new(
-            CompileError::Resolve(ResolveError::UnknownType),
-            span,
-        )));
-    }
-}
+mod tests;

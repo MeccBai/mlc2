@@ -1,4 +1,5 @@
 use super::BackendError;
+use crate::manifest::{LIB_DIR, TOOLS_DIR};
 use std::path::PathBuf;
 
 #[derive(Debug, Clone)]
@@ -24,8 +25,8 @@ impl BackendConfig {
                 BackendError::Config("executable must have a parent directory".into())
             })?;
         Ok(Self {
-            lib: root.join("lib"),
-            tools: root.join("tools"),
+            lib: root.join(LIB_DIR),
+            tools: root.join(TOOLS_DIR),
             executable,
         })
     }

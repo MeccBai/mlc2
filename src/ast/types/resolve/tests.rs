@@ -1,17 +1,19 @@
 use super::*;
 use crate::ast::{
-    AbstractSyntaxTree, arena::FuncIndex, generic::GenericRequire, symbols::EnumBool,
-    types::ValueType,
+    AnalyzedAst, arena::FuncIndex, generic::GenericRequire, symbols::EnumBool, types::ValueType,
 };
-use crate::error::ErrorHandle;
+use crate::diagnostic::error::ErrorHandle;
+use crate::diagnostic::warning::WarningHandle;
 use crate::parser::out::TempPath;
 
 fn config() -> Config {
     Config::new(
+        crate::ast::config::FileId::new(0),
         Vec::new(),
         String::new(),
         String::new(),
         ErrorHandle::new("test".into()),
+        WarningHandle::new("test".into()),
     )
 }
 
@@ -169,7 +171,7 @@ fn function_and_unit_contexts_resolve_reference_members_without_empty_keys() {
     let tokens = crate::lexer::tokenize(source).unwrap();
     let (module, errors) = crate::parser::parse(&tokens.tokens, source.len());
     assert!(errors.is_empty(), "{errors:?}");
-    let mut ast = AbstractSyntaxTree::new(config(), module.unwrap());
+    let mut ast = AnalyzedAst::new(config(), module.unwrap());
     assert!(
         ast.config.error_handle().errors.is_empty(),
         "{:?}",

@@ -1,25 +1,28 @@
 use super::*;
 use crate::ast::symbols::EnumBool;
 use crate::ast::{
-    AbstractSyntaxTree, expression::Expression, statement::Statement, types::base_type::DataType,
+    AnalyzedAst, expression::Expression, statement::Statement, types::base_type::DataType,
 };
-use crate::error::ErrorHandle;
+use crate::diagnostic::error::ErrorHandle;
+use crate::diagnostic::warning::WarningHandle;
 use std::{collections::HashMap, rc::Rc};
 
 fn config() -> Config {
     Config::new(
+        crate::ast::config::FileId::new(0),
         Vec::new(),
         String::new(),
         String::new(),
         ErrorHandle::new("test".into()),
+        WarningHandle::new("test".into()),
     )
 }
 
-fn compile(source: &str) -> AbstractSyntaxTree {
+fn compile(source: &str) -> AnalyzedAst {
     let tokens = crate::lexer::tokenize(source).unwrap();
     let (module, errors) = crate::parser::parse(&tokens.tokens, source.len());
     assert!(errors.is_empty(), "{errors:?}");
-    let ast = AbstractSyntaxTree::new(config(), module.unwrap());
+    let ast = AnalyzedAst::new(config(), module.unwrap());
     assert!(
         ast.config.error_handle().errors.is_empty(),
         "{:?}",

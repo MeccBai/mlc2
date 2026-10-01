@@ -1,6 +1,10 @@
-fn main() {
-    let llvm = r"F:\Develop\scoop\apps\llvm-dev\current";
+#[allow(dead_code)]
+#[path = "src/manifest.rs"]
+mod manifest;
 
-    println!("cargo:rustc-link-search=native={llvm}\\lib");
-    println!("cargo:rustc-link-lib=dylib=LLVM-C");
-} 
+fn main() {
+    let lib = std::path::Path::new(manifest::LLVM_INSTALL_DIR).join(manifest::LIB_DIR);
+
+    println!("cargo:rustc-link-search=native={}", lib.display());
+    println!("cargo:rustc-link-lib=dylib={}", manifest::LLVM_C_LIBRARY);
+}

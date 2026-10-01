@@ -1,5 +1,5 @@
 use crate::ast::{arena::FuncIndex, config::Config, expression::Expression, symbols::SymbolTable};
-use crate::error::{CompileError, IllegalUseError};
+use crate::diagnostic::error::{CompileError, IllegalUseError};
 use crate::parser::out::Span;
 
 impl Expression {

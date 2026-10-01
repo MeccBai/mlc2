@@ -3,12 +3,12 @@ use crate::ast::{
     expression::{Access, Expression, UnaryExpr, operators::Operator},
     statement::Statement,
 };
-use crate::error::IllegalUseError;
+use crate::diagnostic::error::IllegalUseError;
 
 #[test]
 fn assignment_left_sides_retain_variables_members_indices_and_dereferences() {
     let ast = valid(
-        "unit Point { x:i32; }; func main() { var a = 1; a = 2; var point = Point{1}; point.x = 3; var array = [1,2]; array[0] = 4; var p = @mut a; $p = 5; }",
+        "unit Point { pub x:i32; }; func main() { var a = 1; a = 2; var point = Point{1}; point.x = 3; var array = [1,2]; array[0] = 4; var p = @mut a; $p = 5; }",
     );
     let assignments = main_body(&ast)
         .iter()

@@ -12,7 +12,7 @@ use crate::ast::{
     symbols::{EnumBool, StatementContext, SymbolTable},
     types::ValueType,
 };
-use crate::error::{CompileError, IllegalUseError};
+use crate::diagnostic::error::{CompileError, IllegalUseError};
 use crate::parser::out::{Span, Spanned, TempExpr, TempMatchPattern, TempScope};
 
 fn child_context(

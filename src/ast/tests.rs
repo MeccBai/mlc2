@@ -3,13 +3,16 @@
 
 use std::panic::{AssertUnwindSafe, catch_unwind};
 
-use super::{AbstractSyntaxTree, Function, config::Config};
-use crate::error::{CompileError, ErrorHandle, ErrorInfo};
+use super::{AnalyzedAst, Function, config::Config};
+use crate::diagnostic::{
+    error::{CompileError, ErrorHandle, ErrorInfo},
+    warning::WarningHandle,
+};
 
 enum Outcome {
     LexError,
     SyntaxError,
-    Ast(AbstractSyntaxTree),
+    Ast(AnalyzedAst),
 }
 
 fn pipeline(source: &str) -> Outcome {
@@ -22,12 +25,14 @@ fn pipeline(source: &str) -> Outcome {
             return Outcome::SyntaxError;
         }
         let module = module.expect("successful parsing must produce a module");
-        Outcome::Ast(AbstractSyntaxTree::new(
+        Outcome::Ast(AnalyzedAst::new(
             Config::new(
+                crate::ast::config::FileId::new(0),
                 Vec::new(),
                 String::new(),
                 "integration.vl".into(),
                 ErrorHandle::new("integration.vl".into()),
+                WarningHandle::new("integration.vl".into()),
             ),
             module,
         ))
@@ -45,7 +50,7 @@ fn pipeline(source: &str) -> Outcome {
     }
 }
 
-fn build(source: &str) -> AbstractSyntaxTree {
+fn build(source: &str) -> AnalyzedAst {
     match pipeline(source) {
         Outcome::Ast(ast) => ast,
         Outcome::LexError => panic!("unexpected lexical error:\n{source}"),
@@ -53,7 +58,7 @@ fn build(source: &str) -> AbstractSyntaxTree {
     }
 }
 
-fn valid(source: &str) -> AbstractSyntaxTree {
+fn valid(source: &str) -> AnalyzedAst {
     let ast = build(source);
     assert!(
         !ast.config.is_poisoned(),
@@ -64,7 +69,7 @@ fn valid(source: &str) -> AbstractSyntaxTree {
     ast
 }
 
-fn invalid_semantics(source: &str) -> AbstractSyntaxTree {
+fn invalid_semantics(source: &str) -> AnalyzedAst {
     let ast = build(source);
     assert!(
         ast.config.is_poisoned(),
@@ -98,7 +103,7 @@ fn assert_error(source: &str, needle: &str, error: CompileError) {
     );
 }
 
-fn main_body(ast: &AbstractSyntaxTree) -> &[super::statement::Statement] {
+fn main_body(ast: &AnalyzedAst) -> &[super::statement::Statement] {
     ast.body
         .iter()
         .find_map(|function| match function {
@@ -143,6 +148,8 @@ mod function_calls;
 mod generics;
 mod known_gaps;
 mod path_symbols;
+mod stages;
 mod statements;
+pub(crate) mod support;
 mod symbol_names;
 mod unit_applications;

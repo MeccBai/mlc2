@@ -4,8 +4,8 @@ use crate::ast::config::Config;
 use crate::ast::expression::Expression;
 use crate::ast::statement::ReturnStatement;
 use crate::ast::symbols::{EnumBool, StatementContext, SymbolTable};
-use crate::error::CompileError;
-use crate::error::IllegalUseError;
+use crate::diagnostic::error::CompileError;
+use crate::diagnostic::error::IllegalUseError;
 use crate::parser::out::{Spanned, TempStmt};
 
 impl Statement {

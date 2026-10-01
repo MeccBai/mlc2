@@ -26,11 +26,11 @@ valid_case!(
 );
 valid_case!(
     generic_unit_initializer,
-    "unit Box<T> { value:T; }; func main() { var boxed = Box<i32>{1}; var value = boxed.value; }"
+    "unit Box<T> { pub value:T; }; func main() { var boxed = Box<i32>{1}; var value = boxed.value; }"
 );
 valid_case!(
     generic_unit_reference_member,
-    "unit Box<T> { value:$T; }; func main() { var x = 1; var boxed = Box<i32>{@x}; var value = $boxed.value; }"
+    "unit Box<T> { pub value:$T; }; func main() { var x = 1; var boxed = Box<i32>{@x}; var value = $boxed.value; }"
 );
 valid_case!(
     generic_signature_and_body_have_distinct_owners,

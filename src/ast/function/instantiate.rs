@@ -4,11 +4,11 @@ use super::{FuncBody, Interface};
 use crate::ast::{
     GenericIndex, TypeIndex,
     arena::{FuncIndex, InterfaceIndex},
-    config::Config,
+    config::{Config, FileId},
     symbol_name::SymbolName,
     symbols::SymbolTable,
 };
-use crate::error::{CompileError, IllegalUseError};
+use crate::diagnostic::error::{CompileError, IllegalUseError};
 use crate::parser::out::Span;
 mod body;
 #[cfg(test)]
@@ -22,7 +22,7 @@ pub enum InstanceIndex {
 }
 
 /// A shared recursion registry. No borrow is held while parsing a nested body.
-pub type InstantiationActives = Rc<RefCell<HashMap<String, InstanceIndex>>>;
+pub type InstantiationActives = Rc<RefCell<HashMap<(FileId, String), InstanceIndex>>>;
 
 fn arguments(
     config: &mut Config,
@@ -39,7 +39,7 @@ fn arguments(
     for name in names {
         let Some(index) = indices.get(name) else {
             config.submit_error(
-                CompileError::Resolve(crate::error::ResolveError::UnknownGeneric),
+                CompileError::Resolve(crate::diagnostic::error::ResolveError::UnknownGeneric),
                 span,
             );
             return None;
@@ -119,7 +119,8 @@ impl FuncIndex {
             return FuncIndex::empty();
         };
         let name = SymbolName::generic_instance(&template.name, &args);
-        if let Some(InstanceIndex::Function(index)) = actives.borrow().get(&name) {
+        let key = (self.file_id(), name.clone());
+        if let Some(InstanceIndex::Function(index)) = actives.borrow().get(&key) {
             return *index;
         }
         if let Some(index) = symbols.functions.get_by_name(&name) {
@@ -146,9 +147,9 @@ impl FuncIndex {
         let index = symbols.functions.insert(name.clone(), symbol);
         actives
             .borrow_mut()
-            .insert(name.clone(), InstanceIndex::Function(index));
+            .insert(key.clone(), InstanceIndex::Function(index));
         let body = FuncBody::instantiation(config, index, self, params, symbols, actives, span);
-        actives.borrow_mut().remove(&name);
+        actives.borrow_mut().remove(&key);
         if config.is_poisoned() {
             return FuncIndex::empty();
         }
@@ -180,7 +181,8 @@ impl InterfaceIndex {
             return InterfaceIndex::empty();
         };
         let name = SymbolName::generic_instance(&template.name, &args);
-        if let Some(InstanceIndex::Interface(index)) = actives.borrow().get(&name) {
+        let key = (self.file_id(), name.clone());
+        if let Some(InstanceIndex::Interface(index)) = actives.borrow().get(&key) {
             return *index;
         }
         if let Some(index) = symbols.interfaces.get_by_name(&name) {
@@ -211,9 +213,9 @@ impl InterfaceIndex {
         let index = symbols.interfaces.insert(name.clone(), symbol);
         actives
             .borrow_mut()
-            .insert(name.clone(), InstanceIndex::Interface(index));
+            .insert(key.clone(), InstanceIndex::Interface(index));
         let body = Interface::instantiation(config, index, self, params, symbols, actives, span);
-        actives.borrow_mut().remove(&name);
+        actives.borrow_mut().remove(&key);
         if config.is_poisoned() {
             return InterfaceIndex::empty();
         }

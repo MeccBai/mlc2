@@ -9,7 +9,7 @@ pub struct IrGenerator {
     bodys: String,
 }
 
-const RESERVE_SIZE: usize = 2 * 1000 * 1000;
+use crate::manifest::IR_RESERVE_SIZE;
 
 impl IrGenerator {
     pub fn new(tiplet: String) -> IrGenerator {
@@ -17,7 +17,7 @@ impl IrGenerator {
 
         let mut bodys = String::new();
 
-        bodys.reserve(RESERVE_SIZE);
+        bodys.reserve(IR_RESERVE_SIZE);
 
         IrGenerator {
             used_symbols: HashSet::new(),

@@ -2,10 +2,9 @@ use super::BackendError;
 use llvm_sys::target::*;
 use std::sync::Mutex;
 
-pub const X86_64_PC_WINDOWS_MSVC: &str = "x86_64-pc-windows-msvc";
-pub const THUMBV7EM_NONE_EABI: &str = "thumbv7em-none-eabi";
-pub const AARCH64_NONE_ELF: &str = "aarch64-none-elf";
-pub const RISCV32_NONE_ELF: &str = "riscv32-unknown-none-elf";
+use crate::manifest::{
+    AARCH64_NONE_ELF, RISCV32_NONE_ELF, THUMBV7EM_NONE_EABI, X86_64_PC_WINDOWS_MSVC,
+};
 
 /// Registration is global in LLVM. Serialize and initialize each selected family once.
 pub(super) fn initialize(triplet: &str) -> Result<(), BackendError> {

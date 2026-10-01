@@ -13,7 +13,7 @@ use crate::ast::{
     symbols::{StatementContext, SymbolTable},
     types::{CompileType, resolve_type_with_bindings},
 };
-use crate::error::{CompileError, IllegalUseError, ResolveError};
+use crate::diagnostic::error::{CompileError, IllegalUseError, ResolveError};
 use crate::parser::out::{Span, Spanned, TempGenericParam, TempParam, TempType};
 
 pub(crate) fn generics(

@@ -5,7 +5,7 @@ pub mod types;
 
 use crate::{
     ast::{config::Config, ImportModule},
-    error::{CompileError, IllegalUseError},
+    diagnostic::error::{CompileError, IllegalUseError},
 };
 
 pub use crate::lexer::Span;

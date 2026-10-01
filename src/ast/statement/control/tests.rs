@@ -1,36 +1,43 @@
 use std::rc::Rc;
 
-use crate::ast::{
-    AbstractSyntaxTree, Function,
-    config::Config,
-    expression::{CompAtom, Expression, operators::Operator},
-    statement::{MatchPattern, Statement},
+use crate::diagnostic::error::{
+    CompileError, ErrorHandle, ErrorInfo, IllegalUseError, ResolveError,
 };
-use crate::error::{CompileError, ErrorHandle, ErrorInfo, IllegalUseError, ResolveError};
+use crate::{
+    ast::{
+        AnalyzedAst, Function,
+        config::Config,
+        expression::{CompAtom, Expression, operators::Operator},
+        statement::{MatchPattern, Statement},
+    },
+    diagnostic::warning::WarningHandle,
+};
 
-fn compile(source: &str) -> AbstractSyntaxTree {
+fn compile(source: &str) -> AnalyzedAst {
     let lexed = crate::lexer::tokenize(source).unwrap();
     let (module, errors) = crate::parser::parse(&lexed.tokens, source.len());
     assert!(errors.is_empty(), "{errors:?}");
-    AbstractSyntaxTree::new(
+    AnalyzedAst::new(
         Config::new(
+            crate::ast::config::FileId::new(0),
             Vec::new(),
             String::new(),
             String::new(),
             ErrorHandle::new("test".into()),
+            WarningHandle::new("test".into()),
         ),
         module.unwrap(),
     )
 }
 
-fn body(ast: &AbstractSyntaxTree) -> &[Statement] {
+fn body(ast: &AnalyzedAst) -> &[Statement] {
     let Function::Func(function) = &ast.body[0] else {
         panic!("function expected");
     };
     &function.body
 }
 
-fn assert_ok(ast: &AbstractSyntaxTree) {
+fn assert_ok(ast: &AnalyzedAst) {
     assert!(
         ast.config.error_handle().errors.is_empty(),
         "{:?}",

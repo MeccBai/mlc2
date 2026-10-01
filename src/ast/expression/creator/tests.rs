@@ -105,7 +105,7 @@ fn registered_generic_function_is_found_in_generic_table() {
             ret_type: None,
             generics: vec!["T".into()],
             generic_map: HashMap::from([("T".into(), requirement)]),
-            attributes: Vec::new(),
+            attributes: Default::default(),
             exported: false,
         },
     );

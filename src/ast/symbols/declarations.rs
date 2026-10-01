@@ -1,12 +1,16 @@
 use super::SymbolTable;
 use crate::ast::{Config, symbol_name::SymbolName};
-use crate::error::{CompileError, IllegalUseError};
-use crate::parser::out::{TempGlobalStmt, TempModule, TempType};
+use crate::diagnostic::error::{CompileError, IllegalUseError};
+use crate::parser::out::{Spanned, TempGlobalStmt, TempType};
 
 impl SymbolTable {
     /// Preflight source declarations before any arena can overwrite a symbol.
-    pub(crate) fn collect_names(&mut self, config: &mut Config, module: &TempModule) {
-        for (statement, _) in module {
+    pub(crate) fn collect_names<'a>(
+        &mut self,
+        config: &mut Config,
+        module: impl Iterator<Item = &'a Spanned<TempGlobalStmt>> + Clone,
+    ) {
+        for (statement, _) in module.clone() {
             let (name, span) = match statement {
                 TempGlobalStmt::Unit(v) => (config.symbol_name(&v.name), v.name_span),
                 TempGlobalStmt::Enum(v) => (config.symbol_name(&v.name), v.name_span),
@@ -38,6 +42,7 @@ impl SymbolTable {
                 return;
             }
             let members: Vec<_> = match statement {
+                // Members participate in the same fully qualified namespace.
                 TempGlobalStmt::Unit(unit) => unit
                     .members
                     .iter()
@@ -50,6 +55,7 @@ impl SymbolTable {
                     .collect(),
                 _ => Vec::new(),
             };
+            self.declaration_spans.insert(name.clone(), span);
             for (member, span) in members {
                 let member_name = SymbolName::member(&name, member);
                 if !self.names.insert(member_name.clone()) {
@@ -61,6 +67,7 @@ impl SymbolTable {
                     );
                     return;
                 }
+                self.declaration_spans.insert(member_name, span);
             }
             if let TempGlobalStmt::Using(using) = statement {
                 let TempType::Path(path) = &using.target.0 else {

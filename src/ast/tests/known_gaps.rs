@@ -16,21 +16,21 @@ fn enum_variant_value_builds_ast() {
 #[test]
 fn owner_qualified_interface_call_resolves() {
     valid(
-        "unit Point {}; Point::func create() -> i32 { return 1; } func main() { var result = Point::create(); }",
+        "unit Point {}; pub Point::func create() -> i32 { return 1; } func main() { var result = Point::create(); }",
     );
 }
 
 #[test]
 fn owner_qualified_generic_interface_call_resolves() {
     valid(
-        "unit Point {}; Point::func<T> choose(value:$T) -> $T { return value; } func main() { var a = 1; var p = Point::choose<i32>(@a); }",
+        "unit Point {}; pub Point::func<T> choose(value:$T) -> $T { return value; } func main() { var a = 1; var p = Point::choose<i32>(@a); }",
     );
 }
 
 #[test]
 fn same_named_interfaces_keep_distinct_owners_and_generic_bindings() {
     let ast = valid(
-        "unit A {}; unit B {}; A::func<T> choose(value:T) -> T { return value; } B::func<T> choose(value:T) -> T { return value; } A::func create() -> i32 { return 1; } B::func create() -> bool { return true; } func main() { var a = A::choose<i32>(1); var b = B::choose<bool>(true); var c = A::create(); var d = B::create(); }",
+        "unit A {}; unit B {}; pub A::func<T> choose(value:T) -> T { return value; } pub B::func<T> choose(value:T) -> T { return value; } pub A::func create() -> i32 { return 1; } pub B::func create() -> bool { return true; } func main() { var a = A::choose<i32>(1); var b = B::choose<bool>(true); var c = A::create(); var d = B::create(); }",
     );
     let a = ast
         .symbols

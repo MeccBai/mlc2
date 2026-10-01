@@ -6,15 +6,18 @@ use crate::lexer::tokenize;
 
 mod ast;
 mod build;
-mod error;
+mod diagnostic;
+mod gens;
 mod lexer;
 mod llvm;
+pub mod manifest;
 mod parser;
 
 fn main() {
     let code = include_str!("..\\example\\main.vl");
 
-    let err_h = error::ErrorHandle::new("test".to_string());
+    let err_h = diagnostic::error::ErrorHandle::new("test".to_string());
+    let warn_h = diagnostic::warning::WarningHandle::new("test".to_string());
 
     let lexed = tokenize(code).unwrap_or_else(|e| {
         err_h.token_error(e, code);
@@ -32,12 +35,21 @@ fn main() {
         return;
     };
 
-    let config = Config::new(vec!["".to_string()], "".to_string(), "".to_string(), err_h);
+    let global = crate::ast::config::GlobalConfig::new();
+    let config = global.config(
+        vec!["".to_string()],
+        "".to_string(),
+        "".to_string(),
+        err_h,
+        warn_h,
+    );
 
     let time_now = std::time::Instant::now();
-    let ast = ast::AbstractSyntaxTree::new(config, module);
+    let mut package = ast::symbols::PackageSymbolTable::new();
+    let mut ast = ast::AbstractSyntaxTree::new(config, module);
+    ast.analysis(&mut package);
     let elapsed = time_now.elapsed();
-    
+
     std::println!("AST construction took: {:.2?}", elapsed);
 
     //if let Some(module) = module {

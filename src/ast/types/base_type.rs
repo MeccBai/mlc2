@@ -1,4 +1,4 @@
-use crate::error::ice::ice;
+use crate::diagnostic::ice::ice;
 
 use super::CompileType;
 use crate::ast::symbol_name::SymbolName;
@@ -118,16 +118,14 @@ impl BaseType {
             (DataType::Integer, DataType::Integer) => {
                 if tolerance {
                     self.bits <= other.bits
-                } 
-                else {
+                } else {
                     self.bits == other.bits && self.signed == other.signed
                 }
             }
             (DataType::Float, DataType::Float) => {
                 if tolerance {
                     self.bits <= other.bits
-                } 
-                else {
+                } else {
                     self.bits == other.bits
                 }
             }

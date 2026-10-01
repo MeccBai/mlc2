@@ -14,7 +14,7 @@ use crate::ast::{
     FuncIndex, TypeIndex,
     symbols::{EnumBool, SymbolTable},
 };
-use crate::error::ice::ice;
+use crate::diagnostic::ice::ice;
 use crate::parser::out::TempLiteralKind;
 
 use operators::Operator;
@@ -399,7 +399,11 @@ impl Expression {
 
 impl Composite {
     fn type_inference(&self, config: &mut Config, symbols: &mut SymbolTable) -> TypeIndex {
-        if self.operators.first().is_some_and(|op| op.changes_binary_result_type()) {
+        if self
+            .operators
+            .first()
+            .is_some_and(|op| op.changes_binary_result_type())
+        {
             symbols.get_base(DataType::Boolean, 8, true)
         } else {
             self.members.first().map_or(TypeIndex::empty(), |member| {

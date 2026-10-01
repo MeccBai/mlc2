@@ -53,7 +53,7 @@ fn plain_function_call_resolves_symbol_arguments_and_return_type() {
             ret_type: Some(i32_type),
             generics: Vec::new(),
             generic_map: HashMap::new(),
-            attributes: Vec::new(),
+            attributes: Default::default(),
             exported: false,
         },
     );
@@ -103,7 +103,7 @@ fn member_call_resolves_interface_and_prepends_owner() {
             mutable: false,
             exported: false,
             owner: point_type,
-            attributes: Vec::new(),
+            attributes: Default::default(),
             generics: Vec::new(),
             generic_map: HashMap::new(),
             name: "get".into(),

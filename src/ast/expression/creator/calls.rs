@@ -4,7 +4,7 @@ use crate::ast::{
     expression::{Expression, FuncCall},
     symbols::{EnumBool, StatementContext, SymbolTable},
 };
-use crate::error::{CompileError, IllegalUseError, ResolveError};
+use crate::diagnostic::error::{CompileError, IllegalUseError, ResolveError};
 use crate::parser::out::{Span, Spanned, TempExpr};
 
 impl Expression {

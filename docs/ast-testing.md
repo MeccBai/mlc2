@@ -1,7 +1,24 @@
 # 源码到 AST 的端到端测试
 
 入口：`../src/ast/tests.rs`。所有用例从普通源码字符串开始，依次经过
-lexer、Chumsky parser 和 `AbstractSyntaxTree::new`，不手工组装 Temp AST 或符号表。
+lexer、Chumsky parser、`AbstractSyntaxTree::new` 和 `analysis(&mut package)`，
+不手工组装 Temp AST 或符号表。new 只持有分组后的 Temp 数据，analysis 才进行语义分析。
+
+生产 AST 不持有 SymbolTable：Config 持有 FileId，PackageSymbolTable 的 ArenaStore
+按 FileId 管理每个文件的符号表。所有 ArenaIndex 同时携带文件身份和本地位置。
+旧的单文件测试通过仅限测试的 AnalyzedAst 适配器访问完成分析后的符号表；
+`tests/stages.rs` 直接测试生产入口、多文件路由及 export/analysis 顺序。
+
+export 与 analysis 共用声明登记和签名解析阶段。export 返回索引组成的 ExportTable，
+不构建普通函数 Body 或全局变量初始化；analysis 继续消费保留的 Body。
+导出表的 searchable 存放公开声明，inner 保留私有声明及泛型模板的索引，
+inner 查找要求调用者 FileId 与来源文件一致。实体和模板仍属于 package。
+entry 持有唯一的 PackageSymbolTable，各翻译单元始终在其中登记 arena 和 Config。
+`package.concat(export_table)` 接收普通导出表，不接收另一个 package；export 自动调用
+此入口发布导出索引，冲突时 package 不改变。lookup 先查 searchable，再查调用文件的 inner。
+所有翻译单元共用同一个 GlobalConfig（克隆共享计数），由它递增分配 FileId。
+import 的源码获取入口 `ImportModule::fetch(&global)` 暂为显式 `todo!()`；
+当前不自动加载 import，完整的跨文件语义分析接入仍待完成。
 
 项目目前只有 binary crate，因此测试作为内部 `#[cfg(test)]` 模块运行；它们不是
 Cargo 的根目录 `tests/` 独立测试 crate。将来拆出 library 后可以迁移。
@@ -13,6 +30,11 @@ cargo test
 
 ## 检查口径
 
+目录按职责划分：`ast/module/` 保存 Temp 分组、声明解析与 Body 分析，
+`ast/symbols/` 保存符号表、package、导入和导出定义；`ast/tests/` 保存整体
+源码到 AST 测试及其 support。组件测试位于组件自己的目录，多组测试集中在
+该组件的 `tests/` 下，不与生产实现文件混放。
+
 - 合法源码：三个阶段不 panic，AST 未被标记为有毒，无语义错误。
 - 语义非法源码：词法和语法必须成功，AST 构建不 panic，提交且仅提交一个错误。
 - 语法非法源码：必须由 parser 返回错误，不进入 AST 构建。
@@ -22,18 +44,17 @@ cargo test
 
 ## 已确认的待完成项
 
-`known_gaps.rs` 保存期望行为的回归测试，使用带原因的 `#[ignore]` 标记。
-忽略不是将错误行为当成成功；修复后应去掉对应标记。
+`known_gaps.rs` 保存曾经缺失行为的回归测试，目前已全部启用。
 
 ```powershell
-cargo test ast::tests::known_gaps -- --ignored
+cargo test ast::tests::known_gaps
 ```
 
-当前这组测试会失败，已逐项运行确认：
+当前已修复并覆盖：
 
-1. 枚举变体值被当成变量路径，提交 UnknownVariable。
-2. owner 限定的普通 Interface 调用找不到符号。
-3. owner 限定的泛型 Interface 调用找不到符号。
+1. 枚举变体解析为携带枚举类型及成员序号的常量。
+2. owner 限定的普通 Interface 调用。
+3. owner 限定的泛型 Interface 调用。
 
 赋值已改为左右表达式；测试覆盖变量、成员、下标和解引用左值及泛型实例化。
 return 的值类型/有无值检查和 break/continue 的祖先循环检查已启用对应测试。

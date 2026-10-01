@@ -1,4 +1,5 @@
 use crate::ast::arena::get_ident;
+use crate::ast::attribute::UnitAttribute;
 use crate::ast::config::Config;
 use crate::ast::generic::GenericRequire;
 use crate::ast::symbol_name::SymbolName;
@@ -8,10 +9,10 @@ use crate::ast::{
     GenericIndex, TypeArena, TypeIndex,
     symbols::{EnumBool, SymbolTable},
 };
-use crate::error::ice::ice;
-use crate::error::{CompileError, IllegalUseError, ResolveError};
+use crate::diagnostic::error::{CompileError, IllegalUseError, ResolveError};
+use crate::diagnostic::ice::ice;
 use crate::parser::out::{Span, TempUnit};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::hash::Hash;
 
 mod application;
@@ -29,7 +30,7 @@ pub struct UnitType {
     pub application: Option<UnitApplication>,
     pub name: String,
     pub members: Vec<UnitMember>,
-    pub attributes: Vec<String>,
+    pub attributes: HashSet<UnitAttribute>,
     pub generics: Vec<String>,
     pub generic_map: HashMap<String, GenericIndex>,
     pub exported: bool,
@@ -45,7 +46,7 @@ impl UnitType {
         let mut this = UnitType {
             application: None,
             name: prototype.name,
-            attributes: prototype.attributes,
+            attributes: UnitAttribute::parse(config, prototype.attributes, name_span),
             members: Vec::new(),
             generics: Vec::new(),
             generic_map: HashMap::new(),
@@ -90,7 +91,7 @@ impl UnitType {
             application: None,
             name: String::new(),
             members: Vec::new(),
-            attributes: Vec::new(),
+            attributes: HashSet::new(),
             generics: Vec::new(),
             generic_map: HashMap::new(),
             exported: false,
@@ -205,6 +206,7 @@ impl UnitType {
         }
 
         let instance_name = self.generic_instance_name(&symbols.types, params);
+        let active_key = (config.file_id(), instance_name.clone());
         let ident = get_ident(&instance_name);
 
         if let Some(instance_index) = symbols.types.get_by_name(&ident) {
@@ -220,7 +222,7 @@ impl UnitType {
         let temp_actives = actives.unwrap_or(&binding);
 
         temp_actives.borrow_mut().insert(
-            instance_name.clone(),
+            active_key.clone(),
             crate::ast::function::instantiate::InstanceIndex::Type(holder_index),
         );
 
@@ -247,7 +249,7 @@ impl UnitType {
             })
             .collect::<Option<Vec<UnitMember>>>();
         let Some(new_members) = new_members else {
-            temp_actives.borrow_mut().remove(&instance_name);
+            temp_actives.borrow_mut().remove(&active_key);
             return None;
         };
 
@@ -261,7 +263,7 @@ impl UnitType {
             exported: self.exported,
         };
 
-        temp_actives.borrow_mut().remove(&instance.name);
+        temp_actives.borrow_mut().remove(&active_key);
         symbols.types.set(&holder_index, Unit(instance));
         Some(holder_index)
     }
@@ -307,59 +309,4 @@ impl UnitType {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::error::ErrorHandle;
-    use crate::parser::out::{TempGenericParam, TempPath, TempType, TempVisibility};
-
-    #[test]
-    fn unconstrained_generic_is_kept_and_can_be_instantiated() {
-        let mut config = Config::new(
-            Vec::new(),
-            String::new(),
-            String::new(),
-            ErrorHandle::new("test".into()),
-        );
-        let mut symbols = SymbolTable::new();
-        let span = (0..1).into();
-        let name = config.symbol_name("Box");
-        let prototype = TempUnit {
-            visibility: TempVisibility::Private,
-            name: name.clone(),
-            name_span: span,
-            generics: vec![TempGenericParam {
-                name: "T".into(),
-                name_span: span,
-                constraint: None,
-            }],
-            members: Vec::new(),
-            attributes: Vec::new(),
-        };
-        let (unit, _) = UnitType::finalize(&mut config, prototype, &mut symbols);
-        assert_eq!(unit.generics, ["T"]);
-        let requirement = unit.generic_map["T"];
-        assert!(
-            symbols
-                .generics
-                .requires
-                .get(requirement)
-                .requires
-                .is_empty()
-        );
-        symbols.generics.units.insert(get_ident(&name), unit);
-
-        let arg = TempType::Generic {
-            base: TempPath {
-                segments: vec!["Box".into()],
-            },
-            args: vec![(
-                TempType::Path(TempPath {
-                    segments: vec!["bool".into()],
-                }),
-                span,
-            )],
-        };
-        assert!(resolve_type(&mut config, (arg, span), &mut symbols, None).is_some());
-        assert!(config.error_handle().errors.is_empty());
-    }
-}
+mod tests;

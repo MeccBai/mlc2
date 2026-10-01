@@ -1,10 +1,9 @@
-use crate::error::{ErrorHandle, ice::ice};
+use crate::diagnostic::error::ErrorHandle;
+use crate::diagnostic::ice::ice;
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 
-use std::env::consts::EXE_SUFFIX;
-
-const LIB_DIR: &str = "lib/mlc";
+use crate::manifest::{EXE_SUFFIX, EXECUTABLE_NAME, LIB_DIR};
 
 pub struct PathResolver {
     self_path: PathBuf,
@@ -15,7 +14,7 @@ impl PathResolver {
     pub fn new(self_path: PathBuf) -> Self {
         let executable = self_path.file_name().unwrap();
 
-        let mlc_name = format!("mlc{}", std::env::consts::EXE_SUFFIX);
+        let mlc_name = format!("{EXECUTABLE_NAME}{EXE_SUFFIX}");
 
         if executable != OsStr::new(&mlc_name) {
             ice("Executable is not mlc");

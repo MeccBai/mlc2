@@ -5,7 +5,7 @@ use super::EnumBool;
 use crate::ast::arena::{FuncIndex, GenericIndex, InterfaceIndex};
 use crate::ast::config::Config;
 use crate::ast::statement::Variable;
-use crate::error::{CompileError, IllegalUseError};
+use crate::diagnostic::error::{CompileError, IllegalUseError};
 use crate::parser::out::Span;
 
 /// One lexical scope. Declaration order is retained for future cleanup lowering.

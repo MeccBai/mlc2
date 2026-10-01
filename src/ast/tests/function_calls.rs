@@ -1,5 +1,5 @@
 use super::*;
-use crate::error::IllegalUseError;
+use crate::diagnostic::error::IllegalUseError;
 
 valid_case!(
     zero_argument_function,
@@ -101,6 +101,6 @@ fn invalid_argument_does_not_cascade_into_parameter_errors() {
     assert_error(
         "func run(a:i32) {} func main() { run(missing); }",
         "missing",
-        CompileError::Resolve(crate::error::ResolveError::UnknownVariable),
+        CompileError::Resolve(crate::diagnostic::error::ResolveError::UnknownVariable),
     );
 }

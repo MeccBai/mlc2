@@ -7,7 +7,7 @@ use crate::ast::expression::{Expression, FuncCall};
 use crate::ast::statement::Variable;
 use crate::ast::types::resolve_type;
 use crate::ast::{EnumBool, SymbolTable, TypeIndex};
-use crate::error::{CompileError, ResolveError};
+use crate::diagnostic::error::{CompileError, ResolveError};
 use crate::parser::out::{Span, Spanned, TempExpr, TempExpr::Path, TempPath, TempType};
 
 impl Expression {
@@ -50,7 +50,7 @@ impl Expression {
                 if generics_names.len() != params.len() {
                     config.submit_error(
                         CompileError::IllegalUse(
-                            crate::error::IllegalUseError::GenericCountMismatch,
+                            crate::diagnostic::error::IllegalUseError::GenericCountMismatch,
                         ),
                         span,
                     );
@@ -90,7 +90,7 @@ impl Expression {
                 if generics_names.len() != params.len() {
                     config.submit_error(
                         CompileError::IllegalUse(
-                            crate::error::IllegalUseError::GenericCountMismatch,
+                            crate::diagnostic::error::IllegalUseError::GenericCountMismatch,
                         ),
                         span,
                     );

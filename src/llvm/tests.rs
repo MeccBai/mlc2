@@ -1,4 +1,7 @@
 use super::*;
+use crate::manifest::{
+    AARCH64_NONE_ELF, RISCV32_NONE_ELF, THUMBV7EM_NONE_EABI, X86_64_PC_WINDOWS_MSVC,
+};
 #[cfg(unix)]
 use std::os::unix::process::ExitStatusExt;
 #[cfg(windows)]

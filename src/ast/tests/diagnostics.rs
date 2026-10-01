@@ -1,5 +1,5 @@
 use super::*;
-use crate::error::{IllegalUseError, ResolveError};
+use crate::diagnostic::error::{IllegalUseError, ResolveError};
 
 #[test]
 fn unknown_type_reports_original_source_location() {

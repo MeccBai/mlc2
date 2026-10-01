@@ -68,13 +68,44 @@ semantic_case!(duplicate_function_parameter, "func wrong(a:i32,a:i32) {}");
 syntax_case!(public_free_function_is_illegal, "pub func wrong() {}");
 syntax_case!(api_unit_is_illegal, "api unit Wrong {};");
 #[test]
-fn attribute_groups_preserve_names_and_no_longer_use_array_brackets() {
+fn attribute_groups_resolve_known_enums_and_warn_for_unknown_names() {
     let ast = valid("#[c_abi, demo,]# #[extra]# export func main() {}");
     let index = ast.symbols.functions.get_by_name(&"main".into()).unwrap();
     assert_eq!(
         ast.symbols.functions.get(index).attributes,
-        ["c_abi", "demo", "extra"]
+        std::collections::HashSet::from([crate::ast::attribute::FuncAttibute::Cabi])
     );
+    assert!(!ast.config.warning_handle().warnings.is_empty());
+    assert!(!ast.config.is_poisoned());
     invalid_syntax("[[c_abi]] func main() {}");
     invalid_syntax("#[c_abi] func main() {}");
+}
+
+#[test]
+fn unit_and_interface_attributes_are_typed_sets() {
+    let ast = valid(
+        "#[c_abi,c_abi,unknown]# unit Point {}; #[c_abi,c_abi]# pub Point::func create() {} func main() {}",
+    );
+    let unit = ast
+        .symbols
+        .types
+        .get_by_name(&ast.config.symbol_name("Point"))
+        .unwrap();
+    let crate::ast::types::CompileType::Unit(unit) = ast.symbols.types.get(unit) else {
+        panic!("unit expected")
+    };
+    assert_eq!(
+        unit.attributes,
+        std::collections::HashSet::from([crate::ast::attribute::UnitAttribute::Cabi])
+    );
+    let interface = ast
+        .symbols
+        .interfaces
+        .get_by_name(&ast.config.symbol_name("Point::create"))
+        .unwrap();
+    assert_eq!(
+        ast.symbols.interfaces.get(interface).attributes,
+        std::collections::HashSet::from([crate::ast::attribute::FuncAttibute::Cabi])
+    );
+    assert!(!ast.config.warning_handle().warnings.is_empty());
 }

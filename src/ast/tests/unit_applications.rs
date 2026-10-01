@@ -6,7 +6,7 @@ use crate::ast::{
 };
 use std::rc::Rc;
 
-fn concrete_signature(source: &str, expected: &str) -> AbstractSyntaxTree {
+fn concrete_signature(source: &str, expected: &str) -> AnalyzedAst {
     let ast = valid(source);
     let instance = ast.symbols.function_instances.values().next().unwrap();
     let symbol = ast.symbols.functions.get(instance.symbol);
