@@ -1,0 +1,11 @@
+[package]
+name = "mlc_codegen"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+mlc_core.workspace = true
+mlc_syntax.workspace = true
+
+[dev-dependencies]
+mlc_builder.workspace = true

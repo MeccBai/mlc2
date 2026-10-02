@@ -1,0 +1,9 @@
+[package]
+name = "mlc_builder"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+mlc_core.workspace = true
+mlc_syntax.workspace = true
+llvm-sys.workspace = true

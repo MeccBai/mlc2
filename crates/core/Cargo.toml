@@ -1,0 +1,8 @@
+[package]
+name = "mlc_core"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+mlc_syntax.workspace = true
+colored.workspace = true

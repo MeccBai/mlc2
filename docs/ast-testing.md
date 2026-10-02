@@ -1,6 +1,6 @@
 # 源码到 AST 的端到端测试
 
-入口：`../src/ast/tests.rs`。所有用例从普通源码字符串开始，依次经过
+入口：`../crates/core/src/ast/tests.rs`。所有用例从普通源码字符串开始，依次经过
 lexer、Chumsky parser、`AbstractSyntaxTree::new` 和 `analysis(&mut package)`，
 不手工组装 Temp AST 或符号表。new 只持有分组后的 Temp 数据，analysis 才进行语义分析。
 
@@ -17,11 +17,11 @@ entry 持有唯一的 PackageSymbolTable，各翻译单元始终在其中登记 
 `package.concat(export_table)` 接收普通导出表，不接收另一个 package；export 自动调用
 此入口发布导出索引，冲突时 package 不改变。lookup 先查 searchable，再查调用文件的 inner。
 所有翻译单元共用同一个 GlobalConfig（克隆共享计数），由它递增分配 FileId。
-import 的源码获取入口 `ImportModule::fetch(&global)` 暂为显式 `todo!()`；
+import 的源码获取扩展接口 `ImportFetch::fetch(&global)` 暂为显式 `todo!()`；
 当前不自动加载 import，完整的跨文件语义分析接入仍待完成。
 
-项目目前只有 binary crate，因此测试作为内部 `#[cfg(test)]` 模块运行；它们不是
-Cargo 的根目录 `tests/` 独立测试 crate。将来拆出 library 后可以迁移。
+项目已拆为 workspace。前端测试属于 mlc_core library 的内部 `#[cfg(test)]` 模块，
+使用 `cargo test -p mlc_core` 独立运行，不依赖 LLVM；它们不是根目录 `tests/` 独立测试 crate。
 
 ```powershell
 cargo test ast::tests

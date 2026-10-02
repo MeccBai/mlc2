@@ -1,0 +1,8 @@
+[package]
+name = "mlc_syntax"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+logos.workspace = true
+chumsky.workspace = true

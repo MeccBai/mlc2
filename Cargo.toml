@@ -1,11 +1,28 @@
 [package]
-name = "mlc2"
+name = "mlc"
 version = "0.1.0"
 edition = "2024"
 
-[dependencies]
+[workspace]
+members = [".", "crates/syntax", "crates/core", "crates/codegen", "crates/builder"]
+resolver = "3"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+
+[workspace.dependencies]
+mlc_syntax = { path = "crates/syntax" }
+mlc_core = { path = "crates/core" }
+mlc_codegen = { path = "crates/codegen" }
+mlc_builder = { path = "crates/builder" }
 logos = "0.16.1"
 colored = "3.1.1"
-lasso = "0.7.3"
 chumsky = "0.13"
 llvm-sys = { version = "231", features = ["no-llvm-linking"] }
+
+[dependencies]
+mlc_syntax.workspace = true
+mlc_core.workspace = true
+mlc_codegen.workspace = true
+mlc_builder.workspace = true

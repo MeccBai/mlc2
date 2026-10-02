@@ -4,14 +4,9 @@ use crate::ast::config::Config;
 use crate::ast::types::CompileType::Generic;
 use crate::lexer::tokenize;
 
-mod ast;
-mod build;
-mod diagnostic;
-mod gens;
-mod lexer;
-mod llvm;
+use mlc_core::{ast, diagnostic};
+use mlc_syntax::{lexer, parser};
 pub mod manifest;
-mod parser;
 
 fn main() {
     let code = include_str!("..\\example\\main.vl");
