@@ -141,6 +141,7 @@ macro_rules! syntax_case {
 }
 
 mod control_flow;
+mod c_abi;
 mod declarations;
 mod diagnostics;
 mod expressions;

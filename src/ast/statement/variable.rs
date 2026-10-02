@@ -97,6 +97,7 @@ impl Variable {
         if config.is_poisoned() {
             return Self::poison();
         }
+        let init_val = init_val.const_fold(config, symbols);
         Rc::new(Self {
             name: temp_var.name,
             var_type: ty,

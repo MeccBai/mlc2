@@ -1,4 +1,3 @@
-
 use crate::lexer::TokenError;
 use crate::parser::ParseError;
 use crate::parser::out::Span;
@@ -35,6 +34,7 @@ pub enum ResolveError {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum IllegalUseError {
+    CAbi(CAbiError),
     InvalidExportTable,
     DuplicateFileId,
     DuplicateSymbol { name: String },
@@ -67,6 +67,14 @@ pub enum IllegalUseError {
     DuplicateDefaultBranch,
     ArgumentCountMismatch,
     TypeMismatched { expected: String, found: String },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum CAbiError {
+    GenericUnit,
+    GenericFunction,
+    UnitHasInterface,
+    NonCAbiUnitParameter,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

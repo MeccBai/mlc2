@@ -1,4 +1,5 @@
 use crate::lexer::Span;
+pub(crate) mod validate;
 use crate::{ast::config::Config, diagnostic::warning::Warning};
 use std::{
     collections::{HashMap, HashSet},

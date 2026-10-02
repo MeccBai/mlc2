@@ -26,7 +26,7 @@ impl RefType {
         }
     }
 
-    pub fn format(&self, arena: &TypeArena) -> String {
+    pub fn format(&self, arena: &impl crate::ast::types::TypeLookup) -> String {
         SymbolName::reference(&self.base.format(arena), self.level, self.mut_base)
     }
 
@@ -50,7 +50,7 @@ impl RefType {
         REF_SIZE
     }
 
-    pub fn dump(&self, arena: &TypeArena) -> String {
+    pub fn dump(&self, arena: &impl crate::ast::types::TypeLookup) -> String {
         self.format(arena)
     }
 

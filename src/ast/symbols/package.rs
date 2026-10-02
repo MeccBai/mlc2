@@ -40,6 +40,10 @@ impl PackageSymbolTable {
     pub fn file(&self, id: FileId) -> Option<&SymbolTable> {
         self.arenas.get(id)
     }
+
+    pub fn arenas(&self) -> &ArenaStore<SymbolTable> {
+        &self.arenas
+    }
     pub fn file_mut(&mut self, id: FileId) -> Option<&mut SymbolTable> {
         self.arenas.get_mut(id)
     }

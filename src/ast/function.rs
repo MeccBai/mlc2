@@ -67,6 +67,13 @@ impl FuncSymbol {
         symbols: &mut SymbolTable,
     ) -> (Self, Span) {
         let name_span = prototype.name_span;
+        let attributes = FuncAttibute::parse(config, prototype.attributes, name_span);
+        crate::ast::attribute::validate::callable(
+            config,
+            &attributes,
+            !prototype.generics.is_empty(),
+            name_span,
+        );
         let name = SymbolName::callable(None, &prototype.name);
         let (generics, generic_map, types) =
             bindings::generics(config, "func", &name, prototype.generics, symbols);
@@ -78,6 +85,13 @@ impl FuncSymbol {
             symbols,
         );
 
+        crate::ast::attribute::validate::parameters(
+            config,
+            &attributes,
+            &params,
+            symbols,
+            name_span,
+        );
         (
             Self {
                 name,
@@ -85,7 +99,7 @@ impl FuncSymbol {
                 ret_type,
                 generics,
                 generic_map,
-                attributes: FuncAttibute::parse(config, prototype.attributes, name_span),
+                attributes,
                 exported: prototype.visibility.normal_export(config, &name_span),
             },
             name_span,
@@ -134,6 +148,13 @@ impl InterfaceSymbol {
         symbols: &mut SymbolTable,
     ) -> (Self, Span) {
         let name_span = prototype.name_span;
+        let attributes = FuncAttibute::parse(config, prototype.attributes, name_span);
+        crate::ast::attribute::validate::callable(
+            config,
+            &attributes,
+            !prototype.generics.is_empty(),
+            name_span,
+        );
         let owner_name = prototype
             .owner
             .as_ref()
@@ -173,6 +194,23 @@ impl InterfaceSymbol {
             SymbolName::callable(Some(&owner.format(&symbols.types)), &prototype.name)
         };
 
+        if !owner.is_empty()
+            && matches!(symbols.types.get(owner).unqualified(), crate::ast::types::CompileType::Unit(unit)
+            if unit.attributes.contains(&crate::ast::attribute::UnitAttribute::Cabi))
+        {
+            crate::ast::attribute::validate::reject(
+                config,
+                crate::diagnostic::error::CAbiError::UnitHasInterface,
+                name_span,
+            );
+        }
+        crate::ast::attribute::validate::parameters(
+            config,
+            &attributes,
+            &params,
+            symbols,
+            name_span,
+        );
         (
             Self {
                 name,
@@ -180,7 +218,7 @@ impl InterfaceSymbol {
                 ret_type,
                 generics: generics,
                 generic_map: generic_map,
-                attributes: FuncAttibute::parse(config, prototype.attributes, name_span),
+                attributes,
                 public,
                 exported,
                 mutable: prototype.mutable,

@@ -14,7 +14,9 @@ pub(crate) mod enum_type;
 
 pub(crate) use enum_type::EnumType;
 
+mod lookup;
 mod resolve;
+pub use lookup::TypeLookup;
 pub use resolve::{TypeContext, resolve_type, resolve_type_with_bindings};
 
 use crate::ast::arena::get_ident;
@@ -25,8 +27,8 @@ use crate::ast::{
     GenericIndex, TypeArena, TypeIndex,
     symbols::{EnumBool, SymbolTable},
 };
-use crate::diagnostic::ice::ice;
 use crate::diagnostic::error::{CompileError, ResolveError};
+use crate::diagnostic::ice::ice;
 use crate::parser::out::{Spanned, TempType};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -86,7 +88,7 @@ impl CompileType {
         }
     }
 
-    pub fn format(&self, arena: &TypeArena) -> String {
+    pub fn format(&self, arena: &impl crate::ast::types::TypeLookup) -> String {
         match self {
             Self::Qualified { base, value } => format!("{}{}", value.prefix(), base.format(arena)),
             Base(base_type) => base_type.name(),
@@ -98,7 +100,7 @@ impl CompileType {
         }
     }
 
-    pub fn dump(&self, arena: &TypeArena) -> String {
+    pub fn dump(&self, arena: &impl crate::ast::types::TypeLookup) -> String {
         match self {
             Self::Qualified { base, value } => format!("{}{}", value.prefix(), base.dump(arena)),
             Base(base) => base.dump(),
@@ -107,6 +109,18 @@ impl CompileType {
             List(list) => list.dump(arena),
             Enum(enm) => enm.dump(),
             Generic(index) => SymbolName::generic_type(*index),
+        }
+    }
+
+    pub fn size(&self, arena: &impl crate::ast::types::TypeLookup) -> usize {
+        match self {
+            Self::Qualified { base, .. } => base.size(arena),
+            Base(base) => base.size(),
+            Ref(reference) => reference.size(),
+            Unit(unit) => unit.size(arena),
+            List(list) => list.size(arena),
+            Enum(enm) => enm.size(),
+            Generic(_) => ice("Cannot get size of a Generic type."),
         }
     }
 }
@@ -158,8 +172,8 @@ impl TypeIndex {
     pub fn into(self, value: ValueType, arena: &mut TypeArena) -> Self {
         self.into_value_type(value, arena)
     }
-    pub fn size(&self, arena: &TypeArena) -> usize {
-        let ty = arena.get(*self).unqualified();
+    pub fn size(&self, arena: &impl crate::ast::types::TypeLookup) -> usize {
+        let ty = arena.get_type(*self).unqualified();
         match ty {
             Base(base) => base.size(),
             Ref(ref_type) => ref_type.size(),
@@ -172,8 +186,8 @@ impl TypeIndex {
         }
     }
 
-    pub fn align(&self, arena: &TypeArena) -> usize {
-        let ty = arena.get(*self).unqualified();
+    pub fn align(&self, arena: &impl crate::ast::types::TypeLookup) -> usize {
+        let ty = arena.get_type(*self).unqualified();
         match ty {
             Base(base) => base.align(),
             Ref(ref_type) => ref_type.align(),
@@ -186,8 +200,8 @@ impl TypeIndex {
         }
     }
 
-    pub fn dump(&self, arena: &TypeArena) -> String {
-        let ty = arena.get(*self);
+    pub fn dump(&self, arena: &impl crate::ast::types::TypeLookup) -> String {
+        let ty = arena.get_type(*self);
         if let CompileType::Qualified { .. } = ty {
             return ty.dump(arena);
         }
@@ -202,8 +216,8 @@ impl TypeIndex {
         }
     }
 
-    pub fn format(&self, arena: &TypeArena) -> String {
-        let ty = arena.get(*self);
+    pub fn format(&self, arena: &impl crate::ast::types::TypeLookup) -> String {
+        let ty = arena.get_type(*self);
         if let CompileType::Qualified { .. } = ty {
             return ty.format(arena);
         }

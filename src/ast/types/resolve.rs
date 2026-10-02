@@ -148,7 +148,9 @@ pub fn resolve_type_with_bindings(
             let unit = symbols.generics.units.get(index).clone();
             if args.len() != unit.generics.len() {
                 config.submit_error(
-                    CompileError::IllegalUse(crate::diagnostic::error::IllegalUseError::GenericCountMismatch),
+                    CompileError::IllegalUse(
+                        crate::diagnostic::error::IllegalUseError::GenericCountMismatch,
+                    ),
                     span,
                 );
                 return None;

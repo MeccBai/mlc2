@@ -31,19 +31,19 @@ impl ListType {
         self.length
     }
 
-    pub fn size(&self, arena: &TypeArena) -> usize {
+    pub fn size(&self, arena: &impl crate::ast::types::TypeLookup) -> usize {
         self.length * self.element_type.size(arena)
     }
 
-    pub fn align(&self, arena: &TypeArena) -> usize {
+    pub fn align(&self, arena: &impl crate::ast::types::TypeLookup) -> usize {
         self.element_type.align(arena)
     }
 
-    pub fn format(&self, arena: &TypeArena) -> String {
+    pub fn format(&self, arena: &impl crate::ast::types::TypeLookup) -> String {
         SymbolName::array(&self.element_type.format(arena), self.length)
     }
 
-    pub fn dump(&self, arena: &TypeArena) -> String {
+    pub fn dump(&self, arena: &impl crate::ast::types::TypeLookup) -> String {
         self.format(arena)
     }
 

@@ -34,6 +34,24 @@ pub enum Operator {
 }
 
 impl Operator {
+    /// Larger values bind more tightly. Binary operators are left associative.
+    pub fn precedence(&self) -> u8 {
+        use Operator::*;
+        match self {
+            LogicalOr => 1,
+            LogicalAnd => 2,
+            BitOr => 3,
+            BitXor => 4,
+            BitAnd => 5,
+            Equal | NotEqual => 6,
+            Less | LessOrEqual | Greater | GreaterOrEqual => 7,
+            ShiftLeft | ShiftRight => 8,
+            Add | Subtract => 9,
+            Multiply | Divide | Remainder => 10,
+            _ => 11,
+        }
+    }
+
     pub fn changes_binary_result_type(&self) -> bool {
         matches!(
             self,

@@ -1,6 +1,7 @@
 use crate::ast::arena::get_ident;
 use crate::ast::attribute::UnitAttribute;
 use crate::ast::config::Config;
+use crate::ast::function::bindings;
 use crate::ast::generic::GenericRequire;
 use crate::ast::symbol_name::SymbolName;
 use crate::ast::types::CompileType::Unit;
@@ -9,7 +10,7 @@ use crate::ast::{
     GenericIndex, TypeArena, TypeIndex,
     symbols::{EnumBool, SymbolTable},
 };
-use crate::diagnostic::error::{CompileError, IllegalUseError, ResolveError};
+use crate::diagnostic::error::{CAbiError, CompileError, IllegalUseError, ResolveError};
 use crate::diagnostic::ice::ice;
 use crate::parser::out::{Span, TempUnit};
 use std::collections::{HashMap, HashSet};
@@ -37,6 +38,14 @@ pub struct UnitType {
 }
 
 impl UnitType {
+    fn member_resort(&mut self, symbols: &SymbolTable) {
+        self.members.sort_by(|a, b| {
+            a.member_type
+                .size(&symbols.types)
+                .cmp(&b.member_type.size(&symbols.types))
+        });
+    }
+
     pub fn finalize(
         config: &mut Config,
         prototype: TempUnit,
@@ -52,14 +61,15 @@ impl UnitType {
             generic_map: HashMap::new(),
             exported: prototype.visibility.normal_export(config, &name_span),
         };
-
-        let (generics, generic_map, _bindings) = crate::ast::function::bindings::generics(
-            config,
-            "unit",
-            &this.name,
-            prototype.generics,
-            symbols,
-        );
+        if this.attributes.contains(&UnitAttribute::Cabi) && !prototype.generics.is_empty() {
+            crate::ast::attribute::validate::reject(config, CAbiError::GenericUnit, name_span);
+            return (this, name_span);
+        }
+        if !this.attributes.contains(&UnitAttribute::Cabi) {
+            this.member_resort(symbols);
+        }
+        let (generics, generic_map, _bindings) =
+            bindings::generics(config, "unit", &this.name, prototype.generics, symbols);
         this.generics = generics;
         this.generic_map = generic_map;
 
@@ -102,7 +112,7 @@ impl UnitType {
         self.name.clone()
     }
 
-    pub fn size(&self, arena: &TypeArena) -> usize {
+    pub fn size(&self, arena: &impl crate::ast::types::TypeLookup) -> usize {
         let mut current_offset = 0;
         let mut max_align = 1;
 
@@ -118,7 +128,7 @@ impl UnitType {
         (current_offset + max_align - 1) & !(max_align - 1)
     }
 
-    pub fn align(&self, arena: &TypeArena) -> usize {
+    pub fn align(&self, arena: &impl crate::ast::types::TypeLookup) -> usize {
         let mut max_align = 1;
 
         self.members.iter().for_each(|member| {
@@ -131,7 +141,7 @@ impl UnitType {
         max_align
     }
 
-    pub fn dump(&self, arena: &TypeArena) -> String {
+    pub fn dump(&self, arena: &impl crate::ast::types::TypeLookup) -> String {
         let unit_name = self.format();
         format!("unit:{},members: {:?}", unit_name, self.members)
     }

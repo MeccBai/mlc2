@@ -84,7 +84,7 @@ fn attribute_groups_resolve_known_enums_and_warn_for_unknown_names() {
 #[test]
 fn unit_and_interface_attributes_are_typed_sets() {
     let ast = valid(
-        "#[c_abi,c_abi,unknown]# unit Point {}; #[c_abi,c_abi]# pub Point::func create() {} func main() {}",
+        "#[c_abi,c_abi,unknown]# unit Point {}; unit Owner {}; #[c_abi,c_abi]# pub Owner::func create() {} func main() {}",
     );
     let unit = ast
         .symbols
@@ -101,7 +101,7 @@ fn unit_and_interface_attributes_are_typed_sets() {
     let interface = ast
         .symbols
         .interfaces
-        .get_by_name(&ast.config.symbol_name("Point::create"))
+        .get_by_name(&ast.config.symbol_name("Owner::create"))
         .unwrap();
     assert_eq!(
         ast.symbols.interfaces.get(interface).attributes,
