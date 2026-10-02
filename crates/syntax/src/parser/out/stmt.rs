@@ -1,17 +1,19 @@
 use super::{Spanned, TempExpr, TempVar};
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(tag = "kind", content = "data")]
 pub enum TempMatchPattern {
     Default,
     Expression(Spanned<TempExpr>),
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct TempScope {
     pub statements: Vec<Spanned<TempStmt>>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(tag = "kind", content = "data")]
 pub enum TempStmt {
     Variable(TempVar),
     Assignment {

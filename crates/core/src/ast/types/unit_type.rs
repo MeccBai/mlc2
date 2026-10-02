@@ -4,6 +4,7 @@ use crate::ast::config::Config;
 use crate::ast::function::bindings;
 use crate::ast::generic::GenericRequire;
 use crate::ast::symbol_name::SymbolName;
+use crate::ast::symbols::Resolution;
 use crate::ast::types::CompileType::Unit;
 use crate::ast::types::resolve_type;
 use crate::ast::{
@@ -39,18 +40,18 @@ pub struct UnitType {
 }
 
 impl UnitType {
-    fn member_resort(&mut self, symbols: &SymbolTable) {
+    fn member_resort(&mut self, symbols: &dyn Resolution) {
         self.members.sort_by(|a, b| {
             a.member_type
-                .size(&symbols.types)
-                .cmp(&b.member_type.size(&symbols.types))
+                .size(symbols)
+                .cmp(&b.member_type.size(symbols))
         });
     }
 
     pub fn finalize(
         config: &mut Config,
         prototype: TempUnit,
-        symbols: &mut SymbolTable,
+        symbols: &mut dyn Resolution,
     ) -> (Self, Span) {
         let name_span = prototype.name_span;
         let mut this = UnitType {
@@ -76,8 +77,8 @@ impl UnitType {
 
         // Publish the generic header before resolving recursive member types.
         if !this.generics.is_empty() {
-            if let Some(index) = symbols.generics.units.get_by_name(&this.name) {
-                symbols.generics.units.set(&index, this.clone());
+            if let Some(index) = symbols.local().generics.units.get_by_name(&this.name) {
+                symbols.local_mut().generics.units.set(&index, this.clone());
             }
         }
 
@@ -113,7 +114,7 @@ impl UnitType {
         self.name.clone()
     }
 
-    pub fn size(&self, arena: &impl crate::ast::types::TypeLookup) -> usize {
+    pub fn size(&self, arena: &(impl crate::ast::types::TypeLookup + ?Sized)) -> usize {
         let mut current_offset = 0;
         let mut max_align = 1;
 
@@ -129,7 +130,7 @@ impl UnitType {
         (current_offset + max_align - 1) & !(max_align - 1)
     }
 
-    pub fn align(&self, arena: &impl crate::ast::types::TypeLookup) -> usize {
+    pub fn align(&self, arena: &(impl crate::ast::types::TypeLookup + ?Sized)) -> usize {
         let mut max_align = 1;
 
         self.members.iter().for_each(|member| {
@@ -142,7 +143,7 @@ impl UnitType {
         max_align
     }
 
-    pub fn dump(&self, arena: &impl crate::ast::types::TypeLookup) -> String {
+    pub fn dump(&self, arena: &(impl crate::ast::types::TypeLookup + ?Sized)) -> String {
         let unit_name = self.format();
         format!("unit:{},members: {:?}", unit_name, self.members)
     }
@@ -151,7 +152,38 @@ impl UnitType {
         self,
         config: &mut Config,
         params: &HashMap<GenericIndex, TypeIndex>,
-        symbols: &mut SymbolTable,
+        symbols: &mut dyn Resolution,
+        actives: Option<&crate::ast::function::InstantiationActives>,
+        span: Span,
+    ) -> Option<TypeIndex> {
+        let owner = self
+            .application
+            .as_ref()
+            .map(|app| app.template.file_id())
+            .or_else(|| {
+                self.generic_map
+                    .values()
+                    .next()
+                    .map(|index| index.file_id())
+            })
+            .unwrap_or(config.file_id());
+        let exported = self.exported;
+        crate::ast::symbols::owner::in_owner(
+            config,
+            symbols,
+            owner,
+            exported,
+            span,
+            |config, symbols| self.instantiate_local(config, params, symbols, actives, span),
+        )
+        .flatten()
+    }
+
+    fn instantiate_local(
+        self,
+        config: &mut Config,
+        params: &HashMap<GenericIndex, TypeIndex>,
+        symbols: &mut dyn Resolution,
         actives: Option<&crate::ast::function::InstantiationActives>,
         span: Span,
     ) -> Option<TypeIndex> {
@@ -181,13 +213,15 @@ impl UnitType {
             .iter()
             .map(|name| params[&self.generic_map[name]])
             .collect::<Vec<_>>();
-        if arguments.iter().any(|ty| ty.is_generic(&symbols.types)) {
+        if arguments.iter().any(|ty| ty.is_generic(symbols)) {
             let template = symbols
+                .local()
                 .generics
                 .units
                 .get_by_name(&self.name)
                 .unwrap_or_else(|| {
                     symbols
+                        .local_mut()
                         .generics
                         .units
                         .insert(self.name.clone(), self.clone())
@@ -216,18 +250,18 @@ impl UnitType {
             }
         }
 
-        let instance_name = self.generic_instance_name(&symbols.types, params);
+        let instance_name = self.generic_instance_name(symbols, params);
         let active_key = (config.file_id(), instance_name.clone());
         let ident = get_ident(&instance_name);
 
-        if let Some(instance_index) = symbols.types.get_by_name(&ident) {
+        if let Some(instance_index) = symbols.local().types.get_by_name(&ident) {
             return Some(instance_index);
         }
 
         let mut temp_instance = UnitType::empty();
         temp_instance.name = instance_name.clone();
 
-        let holder_index = symbols.types.insert(ident, Unit(temp_instance));
+        let holder_index = symbols.local_mut().types.insert(ident, Unit(temp_instance));
 
         let binding = crate::ast::function::InstantiationActives::default();
         let temp_actives = actives.unwrap_or(&binding);
@@ -241,7 +275,7 @@ impl UnitType {
             .members
             .iter()
             .map(|member| {
-                if member.member_type.is_generic(&symbols.types) {
+                if member.member_type.is_generic(symbols) {
                     let new_type = member.member_type.clone().instantiation(
                         config,
                         params,
@@ -261,6 +295,7 @@ impl UnitType {
             .collect::<Option<Vec<UnitMember>>>();
         let Some(new_members) = new_members else {
             temp_actives.borrow_mut().remove(&active_key);
+            symbols.local_mut().types.forget_name(&instance_name);
             return None;
         };
 
@@ -275,7 +310,7 @@ impl UnitType {
         };
 
         temp_actives.borrow_mut().remove(&active_key);
-        symbols.types.set(&holder_index, Unit(instance));
+        symbols.local_mut().types.set(&holder_index, Unit(instance));
         Some(holder_index)
     }
 
@@ -285,7 +320,7 @@ impl UnitType {
 
     pub fn generic_instance_name(
         &self,
-        arena: &TypeArena,
+        arena: &(impl crate::ast::types::TypeLookup + ?Sized),
         params: &HashMap<GenericIndex, TypeIndex>,
     ) -> String {
         if let Some(application) = &self.application {

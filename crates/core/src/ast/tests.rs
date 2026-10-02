@@ -1,7 +1,10 @@
 //! Source-to-AST integration coverage for this binary crate.
 //! Tests never fabricate Temp nodes or pre-populate symbol arenas.
+mod cross_file;
 
 use std::panic::{AssertUnwindSafe, catch_unwind};
+
+use mlc_syntax::manifest::SOURCE_SUFFIX;
 
 use super::{AnalyzedAst, Function, config::Config};
 use crate::diagnostic::{
@@ -30,9 +33,9 @@ fn pipeline(source: &str) -> Outcome {
                 crate::ast::config::FileId::new(0),
                 Vec::new(),
                 String::new(),
-                "integration.vl".into(),
-                ErrorHandle::new("integration.vl".into()),
-                WarningHandle::new("integration.vl".into()),
+                format!("integration{}", SOURCE_SUFFIX),
+                ErrorHandle::new(format!("integration{}", SOURCE_SUFFIX)),
+                WarningHandle::new(format!("integration{}", SOURCE_SUFFIX)),
             ),
             module,
         ))

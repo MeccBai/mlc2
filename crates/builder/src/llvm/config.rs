@@ -1,5 +1,5 @@
 use super::BackendError;
-use crate::manifest::{LIB_DIR, TOOLS_DIR};
+use crate::manifest::LIB_DIR;
 use std::path::PathBuf;
 
 #[derive(Debug, Clone)]
@@ -16,7 +16,8 @@ impl BackendConfig {
         Self::from_executable(executable)
     }
 
-    /// Distribution layout: executable and sibling lib/ and tools/ directories.
+    /// Distribution layout: executable, linker and runtime DLLs share the root;
+    /// libraries live below its lib/ directory.
     pub fn from_executable(executable: PathBuf) -> Result<Self, BackendError> {
         let root = executable
             .parent()
@@ -26,7 +27,7 @@ impl BackendConfig {
             })?;
         Ok(Self {
             lib: root.join(LIB_DIR),
-            tools: root.join(TOOLS_DIR),
+            tools: root.to_owned(),
             executable,
         })
     }

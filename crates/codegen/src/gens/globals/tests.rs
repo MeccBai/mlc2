@@ -1,3 +1,5 @@
+use mlc_syntax::manifest::SOURCE_SUFFIX;
+
 use super::*;
 use crate::ast::{AbstractSyntaxTree, config::Config};
 use crate::diagnostic::{error::ErrorHandle, warning::WarningHandle};
@@ -10,9 +12,9 @@ fn parse(source: &str) -> (AbstractSyntaxTree, PackageSymbolTable) {
         FileId::new(0),
         vec![],
         "test".into(),
-        "globals.vl".into(),
-        ErrorHandle::new("globals.vl".into()),
-        WarningHandle::new("globals.vl".into()),
+        format!("globals{}", SOURCE_SUFFIX),
+        ErrorHandle::new(format!("globals{}", SOURCE_SUFFIX)),
+        WarningHandle::new(format!("globals{}", SOURCE_SUFFIX)),
     );
     let mut ast = AbstractSyntaxTree::new(config, module.unwrap());
     let mut package = PackageSymbolTable::new();

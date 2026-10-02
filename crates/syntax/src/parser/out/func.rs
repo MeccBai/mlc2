@@ -1,6 +1,6 @@
 use super::{Span, Spanned, TempGenericParam, TempPath, TempScope, TempType, TempVisibility};
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct TempParam {
     pub name: String,
     pub name_span: Span,
@@ -16,13 +16,13 @@ impl TempParam {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct TempFunc {
     pub symbol: TempFuncSymbol,
     pub body: Option<TempScope>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct TempFuncSymbol {
     pub visibility: TempVisibility,
     pub name: String,
@@ -33,13 +33,13 @@ pub struct TempFuncSymbol {
     pub attributes: Vec<String>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct TempInterface {
     pub symbol: TempInterfaceSymbol,
     pub body: Option<TempScope>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct TempInterfaceSymbol {
     pub visibility: TempVisibility,
     pub owner: Option<Spanned<TempPath>>,

@@ -1,4 +1,5 @@
 use super::*;
+use crate::ast::symbols::Resolution;
 use crate::ast::{
     arena::get_ident,
     function::{FuncSymbol, InterfaceSymbol},
@@ -9,7 +10,7 @@ use crate::parser;
 
 pub(super) fn parse(
     mut config: &mut Config,
-    mut symbols: &mut SymbolTable,
+    mut symbols: &mut dyn Resolution,
     temp_ast: TempModule,
 ) -> PendingBodies {
     let (enums, mut units, funcs, temp_generics, imports, globals, _usings, interfaces) =
@@ -20,7 +21,10 @@ pub(super) fn parse(
     enums.into_iter().for_each(|temp_enum| {
         let (enum_type, _span) = EnumType::new(&config, temp_enum);
         let ident = get_ident(&enum_type.name);
-        symbols.types.insert(ident, CompileType::Enum(enum_type));
+        symbols
+            .local_mut()
+            .types
+            .insert(ident, CompileType::Enum(enum_type));
     });
 
     let unit_indexs = units
@@ -30,9 +34,14 @@ pub(super) fn parse(
             let ident = get_ident(&temp_unit.name);
             let temp = UnitType::empty();
             if temp_unit.generics.is_empty() {
-                EnumBool::True(symbols.types.insert(ident, CompileType::Unit(temp)))
+                EnumBool::True(
+                    symbols
+                        .local_mut()
+                        .types
+                        .insert(ident, CompileType::Unit(temp)),
+                )
             } else {
-                EnumBool::False(symbols.generics.units.insert(ident, temp))
+                EnumBool::False(symbols.local_mut().generics.units.insert(ident, temp))
             }
         })
         .collect::<Vec<_>>();
@@ -43,7 +52,11 @@ pub(super) fn parse(
         }
         let (generic_type, _span) = GenericRequire::new(&mut config, temp_generic, &mut symbols);
         let ident = arena::get_ident(&generic_type.name);
-        symbols.generics.requires.insert(ident, generic_type);
+        symbols
+            .local_mut()
+            .generics
+            .requires
+            .insert(ident, generic_type);
     });
 
     unit_indexs
@@ -56,11 +69,11 @@ pub(super) fn parse(
             match index {
                 EnumBool::True(unit_index) => {
                     let (unit, _span) = UnitType::finalize(&mut config, temp, &mut symbols);
-                    symbols.types.set(&unit_index, Unit(unit));
+                    symbols.local_mut().types.set(&unit_index, Unit(unit));
                 }
                 EnumBool::False(unit_index) => {
                     let (unit, _span) = UnitType::finalize(&mut config, temp, &mut symbols);
-                    symbols.generics.units.set(&unit_index, unit);
+                    symbols.local_mut().generics.units.set(&unit_index, unit);
                 }
             }
         });
@@ -75,13 +88,17 @@ pub(super) fn parse(
             let (symbol, _span) = FuncSymbol::new(&mut config, symbol, &mut symbols);
             let ident = get_ident(&symbol.name);
             let index = if symbol.has_generics() {
-                let index = symbols.generics.functions.insert(ident, symbol);
+                let index = symbols.local_mut().generics.functions.insert(ident, symbol);
                 if let Some(scope) = body.clone() {
-                    symbols.generics.function_templates.insert(index, scope);
+                    symbols
+                        .local_mut()
+                        .generics
+                        .function_templates
+                        .insert(index, scope);
                 }
                 EnumBool::False(index)
             } else {
-                EnumBool::True(symbols.functions.insert(ident, symbol))
+                EnumBool::True(symbols.local_mut().functions.insert(ident, symbol))
             };
             Some((index, body))
         })
@@ -97,13 +114,21 @@ pub(super) fn parse(
             let (symbol, _span) = InterfaceSymbol::new(&mut config, symbol, &mut symbols);
             let ident = get_ident(&symbol.name);
             let index = if symbol.has_generics() {
-                let index = symbols.generics.interfaces.insert(ident, symbol);
+                let index = symbols
+                    .local_mut()
+                    .generics
+                    .interfaces
+                    .insert(ident, symbol);
                 if let Some(scope) = body.clone() {
-                    symbols.generics.interface_templates.insert(index, scope);
+                    symbols
+                        .local_mut()
+                        .generics
+                        .interface_templates
+                        .insert(index, scope);
                 }
                 EnumBool::False(index)
             } else {
-                EnumBool::True(symbols.interfaces.insert(ident, symbol))
+                EnumBool::True(symbols.local_mut().interfaces.insert(ident, symbol))
             };
             Some((index, body))
         })

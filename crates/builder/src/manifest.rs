@@ -4,7 +4,9 @@ pub const EXECUTABLE_NAME: &str = "mlc";
 /// Host executable suffix; independent of the compilation target.
 pub const EXE_SUFFIX: &str = std::env::consts::EXE_SUFFIX;
 pub const LIB_DIR: &str = "lib";
-pub const TOOLS_DIR: &str = "tools";
+pub const UNIVERSAL_LIB_DIR: &str = "universal";
+/// Linkers live beside the compiler executable in the distribution root.
+pub const TOOLS_DIR: &str = ".";
 
 pub const LLD_COFF: &str = "lld-link";
 pub const LLD_ELF: &str = "ld.lld";

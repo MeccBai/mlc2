@@ -6,6 +6,27 @@ use crate::ast::{
 };
 
 valid_case!(
+    fixed_byte_array_accepts_short_string,
+    "func main() { var text:[i8:20] = \"hello world\"; text[19] = 0; }"
+);
+valid_case!(
+    fixed_nested_arrays,
+    "func main() { var matrix:[[i32:2]:2] = [[1,2],[3,4]]; }"
+);
+semantic_case!(
+    fixed_byte_array_rejects_oversized_string,
+    "func main() { var text:[i8:3] = \"hello\"; }"
+);
+semantic_case!(
+    string_requires_byte_array,
+    "func main() { var text:[i16:20] = \"hello\"; }"
+);
+semantic_case!(
+    string_capacity_counts_utf8_bytes,
+    "func main() { var text:[i8:1] = \"你\"; }"
+);
+
+valid_case!(
     arithmetic_and_parentheses,
     "func main() { var a = 1 + 2 * (3 - 4); var b = -a; var c = a / 2 % 3; }"
 );

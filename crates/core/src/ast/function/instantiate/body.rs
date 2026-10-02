@@ -1,3 +1,4 @@
+use crate::ast::symbols::Resolution;
 use std::collections::HashMap;
 
 use super::InstantiationActives;
@@ -20,7 +21,7 @@ fn build_body(
     generic_map: &HashMap<String, GenericIndex>,
     generics: &HashMap<GenericIndex, TypeIndex>,
     receiver: Option<TypeIndex>,
-    symbols: &mut SymbolTable,
+    symbols: &mut dyn Resolution,
     actives: &InstantiationActives,
     span: Span,
 ) -> Vec<Statement> {
@@ -52,13 +53,13 @@ impl FuncBody {
         symbol: FuncIndex,
         template: FuncIndex,
         generics: &HashMap<GenericIndex, TypeIndex>,
-        symbols: &mut SymbolTable,
+        symbols: &mut dyn Resolution,
         actives: &InstantiationActives,
         span: Span,
     ) -> Self {
-        let parameters = symbols.functions.get(symbol).params.clone();
-        let generic_map = symbols.generics.functions.get(template).generic_map.clone();
-        let scope = symbols.generics.function_templates.get(&template).cloned();
+        let parameters = symbols.get_function_regular(symbol).params.clone();
+        let generic_map = symbols.get_function(template, true).generic_map.clone();
+        let scope = symbols.function_template(template);
         let body = build_body(
             config,
             scope,
@@ -81,25 +82,20 @@ impl Interface {
         symbol: InterfaceIndex,
         template: InterfaceIndex,
         generics: &HashMap<GenericIndex, TypeIndex>,
-        symbols: &mut SymbolTable,
+        symbols: &mut dyn Resolution,
         actives: &InstantiationActives,
         span: Span,
     ) -> Self {
-        let concrete = symbols.interfaces.get(symbol).clone();
-        let generic_map = symbols
-            .generics
-            .interfaces
-            .get(template)
-            .generic_map
-            .clone();
-        let scope = symbols.generics.interface_templates.get(&template).cloned();
+        let concrete = symbols.get_interface_regular(symbol).clone();
+        let generic_map = symbols.get_interface(template, true).generic_map.clone();
+        let scope = symbols.interface_template(template);
         let receiver = concrete.has_self.then(|| {
             let value = if concrete.mutable {
                 ValueType::Flex
             } else {
                 ValueType::Final
             };
-            concrete.owner.into_value_type(value, &mut symbols.types)
+            concrete.owner.into_value_type(value, symbols)
         });
         let body = build_body(
             config,

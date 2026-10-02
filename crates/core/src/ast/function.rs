@@ -1,3 +1,4 @@
+use crate::ast::symbols::Resolution;
 use crate::visibility::TempVisibilityExt;
 use std::collections::{HashMap, HashSet};
 
@@ -65,7 +66,7 @@ impl FuncSymbol {
     pub fn new(
         config: &mut Config,
         prototype: TempFuncSymbol,
-        symbols: &mut SymbolTable,
+        symbols: &mut dyn Resolution,
     ) -> (Self, Span) {
         let name_span = prototype.name_span;
         let attributes = FuncAttibute::parse(config, prototype.attributes, name_span);
@@ -113,10 +114,10 @@ impl FuncBody {
         config: &mut Config,
         index: FuncIndex,
         prototype: Option<Scope>,
-        symbols: &mut SymbolTable,
+        symbols: &mut dyn Resolution,
     ) -> Self {
         let body = if let Some(prototype) = prototype {
-            let symbol = symbols.functions.get(index).clone();
+            let symbol = symbols.get_function_regular(index).clone();
             let mut context = bindings::context(
                 config,
                 EnumBool::False(index),
@@ -146,7 +147,7 @@ impl InterfaceSymbol {
     pub fn new(
         config: &mut Config,
         prototype: TempInterfaceSymbol,
-        symbols: &mut SymbolTable,
+        symbols: &mut dyn Resolution,
     ) -> (Self, Span) {
         let name_span = prototype.name_span;
         let attributes = FuncAttibute::parse(config, prototype.attributes, name_span);
@@ -192,11 +193,11 @@ impl InterfaceSymbol {
         let name = if owner.is_empty() {
             name
         } else {
-            SymbolName::callable(Some(&owner.format(&symbols.types)), &prototype.name)
+            SymbolName::callable(Some(&owner.format(symbols)), &prototype.name)
         };
 
         if !owner.is_empty()
-            && matches!(symbols.types.get(owner).unqualified(), crate::ast::types::CompileType::Unit(unit)
+            && matches!(symbols.get_type(owner).unqualified(), crate::ast::types::CompileType::Unit(unit)
             if unit.attributes.contains(&crate::ast::attribute::UnitAttribute::Cabi))
         {
             crate::ast::attribute::validate::reject(
@@ -236,17 +237,17 @@ impl Interface {
         config: &mut Config,
         index: InterfaceIndex,
         prototype: Option<Scope>,
-        symbols: &mut SymbolTable,
+        symbols: &mut dyn Resolution,
     ) -> Self {
         let body = if let Some(prototype) = prototype {
-            let symbol = symbols.interfaces.get(index).clone();
+            let symbol = symbols.get_interface_regular(index).clone();
             let receiver = if symbol.has_self {
                 let value = if symbol.mutable {
                     crate::ast::types::ValueType::Flex
                 } else {
                     crate::ast::types::ValueType::Final
                 };
-                Some(symbol.owner.into_value_type(value, &mut symbols.types))
+                Some(symbol.owner.into_value_type(value, symbols))
             } else {
                 None
             };

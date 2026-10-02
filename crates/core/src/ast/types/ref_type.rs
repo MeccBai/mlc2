@@ -1,6 +1,7 @@
 use crate::ast::arena::{GenericIndex, Ident, TypeArena, TypeIndex, get_ident};
 use crate::ast::config::Config;
 use crate::ast::symbol_name::SymbolName;
+use crate::ast::symbols::Resolution;
 use crate::ast::{
     symbols::{EnumBool, SymbolTable},
     types::CompileType::{self, Ref},
@@ -16,6 +17,8 @@ pub struct RefType {
 }
 
 const REF_SIZE: usize = 8;
+#[cfg(test)]
+mod tests;
 
 impl RefType {
     pub fn new(base: TypeIndex, level: usize, mut_base: bool) -> Self {
@@ -26,16 +29,19 @@ impl RefType {
         }
     }
 
-    pub fn format(&self, arena: &impl crate::ast::types::TypeLookup) -> String {
+    pub fn format(&self, arena: &(impl crate::ast::types::TypeLookup + ?Sized)) -> String {
         SymbolName::reference(&self.base.format(arena), self.level, self.mut_base)
     }
 
-    pub fn deref(mut self, arena: &mut TypeArena) -> Option<TypeIndex> {
+    pub fn deref(
+        mut self,
+        arena: &mut (impl crate::ast::types::TypeStorage + ?Sized),
+    ) -> Option<TypeIndex> {
         if self.level > 1 {
             self.level -= 1;
             let type_str = self.format(arena);
             let ident: Ident = get_ident(&type_str);
-            Some(arena.insert(ident, Ref(self)))
+            Some(arena.insert_type(ident, Ref(self)))
         } else if self.level == 1 {
             Some(self.base)
         } else {
@@ -50,13 +56,13 @@ impl RefType {
         REF_SIZE
     }
 
-    pub fn dump(&self, arena: &impl crate::ast::types::TypeLookup) -> String {
+    pub fn dump(&self, arena: &(impl crate::ast::types::TypeLookup + ?Sized)) -> String {
         self.format(arena)
     }
 
     pub fn generic_instance_name(
         &self,
-        arena: &TypeArena,
+        arena: &(impl crate::ast::types::TypeLookup + ?Sized),
         params: &HashMap<GenericIndex, TypeIndex>,
     ) -> String {
         SymbolName::reference(
@@ -70,7 +76,7 @@ impl RefType {
         self,
         config: &mut Config,
         params: &HashMap<GenericIndex, TypeIndex>,
-        symbols: &mut SymbolTable,
+        symbols: &mut dyn Resolution,
         actives: Option<&crate::ast::function::InstantiationActives>,
         span: Span,
     ) -> Option<TypeIndex> {
@@ -79,18 +85,22 @@ impl RefType {
             .instantiation(config, params, symbols, actives, span)?;
         let instance = RefType::new(child, self.level, self.mut_base);
 
-        let name = instance.format(&symbols.types);
+        let name = instance.format(symbols);
         let ident = get_ident(&name);
 
-        if let Some(index) = symbols.types.get_by_name(&ident) {
+        if let Some(index) = symbols.local().types.get_by_name(&ident) {
             return Some(index);
         }
 
-        Some(symbols.types.insert(ident, Ref(instance)))
+        Some(symbols.local_mut().types.insert(ident, Ref(instance)))
     }
 
-    pub fn type_check(&self, other: &RefType, symbols: &TypeArena) -> bool {
-        if self.base != other.base {
+    pub fn type_check(
+        &self,
+        other: &RefType,
+        symbols: &(impl crate::ast::types::TypeLookup + ?Sized),
+    ) -> bool {
+        if !self.base.type_check(false, &other.base, symbols) {
             return false;
         }
         if self.level != other.level {

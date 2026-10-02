@@ -1,6 +1,7 @@
 use crate::ast::arena::{GenericIndex, TypeArena, get_ident};
 use crate::ast::config::Config;
 use crate::ast::symbol_name::SymbolName;
+use crate::ast::symbols::Resolution;
 use crate::ast::types::CompileType::List;
 use crate::ast::{
     TypeIndex,
@@ -31,29 +32,29 @@ impl ListType {
         self.length
     }
 
-    pub fn size(&self, arena: &impl crate::ast::types::TypeLookup) -> usize {
+    pub fn size(&self, arena: &(impl crate::ast::types::TypeLookup + ?Sized)) -> usize {
         self.length * self.element_type.size(arena)
     }
 
-    pub fn align(&self, arena: &impl crate::ast::types::TypeLookup) -> usize {
+    pub fn align(&self, arena: &(impl crate::ast::types::TypeLookup + ?Sized)) -> usize {
         self.element_type.align(arena)
     }
 
-    pub fn format(&self, arena: &impl crate::ast::types::TypeLookup) -> String {
+    pub fn format(&self, arena: &(impl crate::ast::types::TypeLookup + ?Sized)) -> String {
         SymbolName::array(&self.element_type.format(arena), self.length)
     }
 
-    pub fn dump(&self, arena: &impl crate::ast::types::TypeLookup) -> String {
+    pub fn dump(&self, arena: &(impl crate::ast::types::TypeLookup + ?Sized)) -> String {
         self.format(arena)
     }
 
-    pub fn is_generic(&self, arena: &TypeArena) -> bool {
+    pub fn is_generic(&self, arena: &(impl crate::ast::types::TypeLookup + ?Sized)) -> bool {
         self.element_type.is_generic(arena)
     }
 
     pub fn generic_instance_name(
         &self,
-        arena: &TypeArena,
+        arena: &(impl crate::ast::types::TypeLookup + ?Sized),
         params: &HashMap<GenericIndex, TypeIndex>,
     ) -> String {
         SymbolName::array(
@@ -66,7 +67,7 @@ impl ListType {
         self,
         config: &mut Config,
         params: &HashMap<GenericIndex, TypeIndex>,
-        symbols: &mut SymbolTable,
+        symbols: &mut dyn Resolution,
         actives: Option<&crate::ast::function::InstantiationActives>,
         span: Span,
     ) -> Option<TypeIndex> {
@@ -75,17 +76,21 @@ impl ListType {
             .instantiation(config, params, symbols, actives, span)?;
         let instance = ListType::new(child, self.length);
 
-        let name = instance.format(&symbols.types);
+        let name = instance.format(symbols);
         let ident = get_ident(&name);
 
-        if let Some(index) = symbols.types.get_by_name(&ident) {
+        if let Some(index) = symbols.local().types.get_by_name(&ident) {
             return Some(index);
         }
 
-        Some(symbols.types.insert(ident, List(instance)))
+        Some(symbols.local_mut().types.insert(ident, List(instance)))
     }
 
-    pub fn type_check(&self, other: &ListType, symbols: &TypeArena) -> bool {
+    pub fn type_check(
+        &self,
+        other: &ListType,
+        symbols: &(impl crate::ast::types::TypeLookup + ?Sized),
+    ) -> bool {
         if self.length != other.length {
             return false;
         }

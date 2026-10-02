@@ -9,6 +9,7 @@ fn parse_ok(source: &str) -> TempModule {
     module.expect("valid source should produce a module")
 }
 
+mod arrays;
 mod declarations;
 mod expressions;
 mod statements;

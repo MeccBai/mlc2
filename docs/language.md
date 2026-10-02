@@ -80,6 +80,8 @@ return 0;
 
 ```
 var numbers = [1, 2, 3]; // 数组
+var text:[i8:20] = "hello world"; // 固定容量字节数组，剩余空间清零
+text[19] = 0;
 var point = Point{1, 3};  // 单元初始化列表
 
 enum State {

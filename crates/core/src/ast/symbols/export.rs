@@ -77,7 +77,7 @@ pub(crate) fn collect(
     }
     for (name, index, requirement) in file.generics.requires.entries() {
         out.insert(
-            name.clone(),
+            config.symbol_name(name),
             ExportSymbol::GenericRequire(index),
             requirement.exported,
         );
@@ -94,7 +94,11 @@ pub(crate) fn collect(
     for (generic, arena) in [(false, &file.interfaces), (true, &file.generics.interfaces)] {
         for (name, index, symbol) in arena.entries() {
             out.insert(
-                name.clone(),
+                if symbol.owner.is_empty() {
+                    config.symbol_name(name)
+                } else {
+                    name.clone()
+                },
                 ExportSymbol::Interface { index, generic },
                 symbol.exported,
             );

@@ -1,3 +1,4 @@
+use crate::ast::symbols::Resolution;
 use std::collections::HashMap;
 use std::rc::Rc;
 
@@ -17,7 +18,7 @@ impl Expression {
         generic_args: Vec<Spanned<TempType>>,
         args: Vec<Spanned<TempExpr>>,
         span: Span,
-        symbols: &mut SymbolTable,
+        symbols: &mut dyn Resolution,
         context: Option<&crate::ast::symbols::StatementContext>,
     ) -> Self {
         let params = generic_args
@@ -44,7 +45,7 @@ impl Expression {
 
         let func = match func {
             EnumBool::True(interface) => {
-                let symbol = symbols.generics.interfaces.get(interface);
+                let symbol = symbols.get_interface(interface, true);
 
                 let generics_names = &symbol.generics;
                 if generics_names.len() != params.len() {
@@ -85,7 +86,7 @@ impl Expression {
                 ))
             }
             EnumBool::False(func_index) => {
-                let symbol = symbols.generics.functions.get(func_index);
+                let symbol = symbols.get_function(func_index, true);
                 let generics_names = &symbol.generics;
                 if generics_names.len() != params.len() {
                     config.submit_error(

@@ -75,6 +75,16 @@ pub struct NamedArena<T> {
 }
 
 impl<T> NamedArena<T> {
+    pub fn file_id(&self) -> FileId {
+        self.file_id
+    }
+
+    /// Failed construction may leave an allocated slot, but must not publish
+    /// its name as a valid cached instance. Existing indices are never shifted.
+    pub(crate) fn forget_name(&mut self, name: &str) {
+        self.by_name.remove(name);
+    }
+
     pub fn empty() -> Self {
         Self::for_file(FileId::new(0))
     }

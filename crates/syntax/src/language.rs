@@ -1,5 +1,5 @@
 //! Definitions shared by temporary syntax and semantic ASTs.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum ValueType {
     Flex,
     Final,
@@ -15,7 +15,7 @@ impl ValueType {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct ImportModule {
     path: Vec<String>,
     export: bool,

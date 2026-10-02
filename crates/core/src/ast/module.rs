@@ -111,10 +111,10 @@ impl AbstractSyntaxTree {
             );
             return;
         }
-        let symbols = package.file_mut(id).expect("registered file");
+        let mut symbols = package.resolve_context(id);
         self.pending = Some(declarations::parse(
             &mut self.config,
-            symbols,
+            &mut symbols,
             declarations.into_module(),
         ));
         package.update_config(&self.config);
@@ -149,10 +149,8 @@ impl AbstractSyntaxTree {
         let Some(pending) = self.pending.take() else {
             return;
         };
-        let symbols = package
-            .file_mut(self.config.file_id())
-            .expect("prepared file");
-        self.body = analysis::parse(&mut self.config, symbols, pending);
+        let mut symbols = package.resolve_context(self.config.file_id());
+        self.body = analysis::parse(&mut self.config, &mut symbols, pending);
         package.update_config(&self.config);
     }
 

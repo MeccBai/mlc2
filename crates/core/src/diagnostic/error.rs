@@ -48,6 +48,7 @@ pub enum IllegalUseError {
     SymbolNotCallable,
     GenericCountMismatch,
     NonGenericInstantiation,
+    PrivateInstantiation,
     RequirementUnmet,
     MemberAccessViolation,
     InvalidIndexAccess,
@@ -97,6 +98,10 @@ pub struct ErrorHandle {
 }
 
 impl ErrorHandle {
+    pub(crate) fn first_error(&self) -> Option<CompileError> {
+        self.errors.iter().next().map(|info| info.error.clone())
+    }
+
     pub fn new(file: String) -> Self {
         Self {
             file,

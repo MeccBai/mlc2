@@ -1,3 +1,4 @@
+use crate::ast::symbols::Resolution;
 mod calls;
 mod function_args;
 mod generic_call;
@@ -35,7 +36,7 @@ impl Expression {
     pub fn new(
         config: &mut Config,
         temp_expr: Spanned<TempExpr>,
-        symbols: &mut SymbolTable,
+        symbols: &mut dyn Resolution,
         context: Option<&crate::ast::symbols::StatementContext>,
     ) -> Self {
         if config.is_poisoned() {
@@ -52,7 +53,7 @@ impl Expression {
     fn create(
         config: &mut Config,
         temp_expr: Spanned<TempExpr>,
-        symbols: &mut SymbolTable,
+        symbols: &mut dyn Resolution,
         context: Option<&crate::ast::symbols::StatementContext>,
     ) -> Self {
         let (expr, span) = temp_expr;
@@ -108,7 +109,7 @@ impl Expression {
                 }
                 if op == Operator::Dereference {
                     let ty = expr.type_inference(config, symbols);
-                    if !ty.is_empty() && !ty.is_ref(&symbols.types) {
+                    if !ty.is_empty() && !ty.is_ref(symbols) {
                         config.submit_error(
                             CompileError::IllegalUse(IllegalUseError::InvalidDereference),
                             span,
@@ -134,10 +135,10 @@ impl Expression {
                     let index_type = index.type_inference(config, symbols);
                     if (!base_type.is_empty()
                         && !matches!(
-                            symbols.types.get(base_type).unqualified(),
+                            symbols.get_type(base_type).unqualified(),
                             CompileType::List(_)
                         ))
-                        || (!index_type.is_empty() && !index_type.is_integer(&symbols.types))
+                        || (!index_type.is_empty() && !index_type.is_integer(symbols))
                     {
                         config.submit_error(
                             CompileError::IllegalUse(IllegalUseError::InvalidIndexAccess),
@@ -162,7 +163,7 @@ impl Expression {
                 }
                 expressions.iter().for_each(|expr| {
                     let ty = expr.type_inference(config, symbols);
-                    if !ty.is_empty() && ty.is_ref(&symbols.types) {
+                    if !ty.is_empty() && ty.is_ref(symbols) {
                         config.submit_error(
                             CompileError::IllegalUse(IllegalUseError::CannotInferenceType),
                             span,
@@ -211,18 +212,18 @@ impl Expression {
                 }
                 let mut owner_type = owner.type_inference(config, symbols);
                 if !owner_type.is_empty() && indirect && !receiver {
-                    if !owner_type.is_ref(&symbols.types) {
+                    if !owner_type.is_ref(symbols) {
                         config.submit_error(
                             CompileError::IllegalUse(IllegalUseError::MemberAccessViolation),
                             span,
                         );
                         return Self::null();
                     }
-                    owner_type = owner_type.deref(&mut symbols.types).unwrap();
+                    owner_type = owner_type.deref(symbols).unwrap();
                 }
                 if !owner_type.is_empty()
                     && !matches!(
-                        symbols.types.get(owner_type).unqualified(),
+                        symbols.get_type(owner_type).unqualified(),
                         CompileType::Unit(unit) if unit.get_member(&name).is_some_and(|member| receiver || member.public)
                     )
                 {
@@ -274,13 +275,16 @@ impl Expression {
                 let ty = if let Some(first) = values.first() {
                     let element_type = first
                         .type_inference(config, symbols)
-                        .into(crate::ast::types::ValueType::Flex, &mut symbols.types);
+                        .into(crate::ast::types::ValueType::Flex, symbols);
                     if element_type.is_empty() {
                         TypeIndex::empty()
                     } else {
                         let list = ListType::new(element_type, values.len());
-                        let name = list.format(&symbols.types);
-                        symbols.types.insert(name, CompileType::List(list))
+                        let name = list.format(symbols);
+                        symbols
+                            .local_mut()
+                            .types
+                            .insert(name, CompileType::List(list))
                     }
                 } else {
                     config.submit_error(CompileError::Resolve(ResolveError::MissingType), span);

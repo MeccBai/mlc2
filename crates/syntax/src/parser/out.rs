@@ -15,7 +15,7 @@ pub use types::{TempPath, TempType};
 pub type Spanned<T> = (T, Span);
 pub type TempModule = Vec<Spanned<TempGlobalStmt>>;
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum TempVisibility {
     #[default]
     Private,
@@ -24,7 +24,7 @@ pub enum TempVisibility {
     Api,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct TempGenericParam {
     pub name: String,
     pub name_span: Span,
@@ -48,7 +48,7 @@ impl TempGenericParam {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct TempUnitMember {
     pub name: String,
     pub name_span: Span,
@@ -76,7 +76,7 @@ impl TempUnitMember {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct TempUnit {
     pub visibility: TempVisibility,
     pub name: String,
@@ -127,7 +127,7 @@ impl TempUnit {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct TempUsing {
     pub visibility: TempVisibility,
     pub name: String,
@@ -146,7 +146,8 @@ impl TempUsing {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(tag = "kind", content = "data")]
 pub enum TempConstraints {
     Type {
         path: TempPath,
@@ -168,7 +169,7 @@ impl TempConstraints {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct TempGeneric {
     pub visibility: TempVisibility,
     pub name: String,
@@ -202,7 +203,7 @@ impl TempGeneric {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct TempEnum {
     pub visibility: TempVisibility,
     pub name: String,
@@ -226,7 +227,7 @@ impl TempEnum {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct TempVar {
     pub name: String,
     pub name_span: Span,
@@ -250,7 +251,8 @@ impl TempVar {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(tag = "kind", content = "data")]
 pub enum TempGlobalStmt {
     Unit(TempUnit),
     Func(TempFunc),

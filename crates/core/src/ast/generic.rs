@@ -1,3 +1,4 @@
+use crate::ast::symbols::Resolution;
 use crate::visibility::TempVisibilityExt;
 
 use crate::ast::arena::{
@@ -33,7 +34,7 @@ impl InterfaceRequire {
     pub fn new(
         config: &mut Config,
         prototype: TempInterfaceSymbol,
-        symbols: &mut SymbolTable,
+        symbols: &mut dyn Resolution,
         span: Span,
     ) -> Option<Self> {
         let name = SymbolName::callable(None, &prototype.name);
@@ -70,18 +71,25 @@ impl InterfaceRequire {
         })
     }
 
-    pub fn check(&self, param: TypeIndex, symbols: &SymbolTable) -> bool {
-        let param_name = param.format(&symbols.types);
+    pub fn check(&self, param: TypeIndex, symbols: &dyn Resolution) -> bool {
+        let param_name = symbols.get_type(param).unqualified().format(symbols);
         let interface_name = SymbolName::callable(Some(&param_name), &self.name);
-        let interface = symbols.interfaces.get_by_name(&interface_name);
+        let interface = symbols.associated_interface(param, &interface_name);
 
         let interface = match interface {
-            Some(interface) => symbols.interfaces.get(interface),
+            Some(interface) => symbols.get_interface_regular(interface),
             None => return false,
         };
 
         let ret_type = &interface.ret_type;
-        if self.ret_type != *ret_type {
+        if !interface.public {
+            return false;
+        }
+        if match (self.ret_type, *ret_type) {
+            (Some(expected), Some(found)) => !expected.type_check(false, &found, symbols),
+            (None, None) => false,
+            _ => true,
+        } {
             return false;
         }
         if self.mutable != interface.mutable {
@@ -93,12 +101,11 @@ impl InterfaceRequire {
         if self.params.len() != interface.params.len() {
             return false;
         }
-        if self
-            .params
-            .iter()
-            .zip(interface.params.iter())
-            .any(|((param_type, _), (expected_type, _))| param_type != expected_type)
-        {
+        if self.params.iter().zip(interface.params.iter()).any(
+            |((param_type, _), (expected_type, _))| {
+                !param_type.type_check(false, expected_type, symbols)
+            },
+        ) {
             return false;
         }
         true
@@ -194,18 +201,18 @@ impl GenericTypeRequire {
         }
     }
 
-    pub fn check(&self, param: TypeIndex, symbols: &SymbolTable) -> bool {
+    pub fn check(&self, param: TypeIndex, symbols: &dyn Resolution) -> bool {
         match self {
-            GenericTypeRequire::Integer => param.is_integer(&symbols.types),
-            GenericTypeRequire::Float => param.is_float(&symbols.types),
-            GenericTypeRequire::Signed => param.is_signed(&symbols.types),
+            GenericTypeRequire::Integer => param.is_integer(symbols),
+            GenericTypeRequire::Float => param.is_float(symbols),
+            GenericTypeRequire::Signed => param.is_signed(symbols),
             GenericTypeRequire::MinBits(bits) => {
-                let size = param.size(&symbols.types);
+                let size = param.size(symbols);
                 let param_bits = size * 8;
                 param_bits >= *bits
             }
             GenericTypeRequire::MaxBits(bits) => {
-                let size = param.size(&symbols.types);
+                let size = param.size(symbols);
                 let param_bits = size * 8;
                 param_bits <= *bits
             }
@@ -220,7 +227,7 @@ pub enum Constraints {
 }
 
 impl Constraints {
-    pub fn check(&self, param: TypeIndex, symbols: &SymbolTable) -> bool {
+    pub fn check(&self, param: TypeIndex, symbols: &dyn Resolution) -> bool {
         match self {
             Constraints::Interface(interface) => interface.check(param, symbols),
             Constraints::Type(requirement) => requirement.check(param, symbols),
@@ -249,7 +256,7 @@ impl GenericRequire {
     pub fn new(
         config: &mut Config,
         prototype: TempGeneric,
-        symbols: &mut SymbolTable,
+        symbols: &mut dyn Resolution,
     ) -> (Self, Span) {
         let name_span = prototype.name_span;
         (
@@ -276,7 +283,7 @@ impl GenericRequire {
         )
     }
 
-    pub fn check(&self, param: TypeIndex, symbols: &SymbolTable) -> bool {
+    pub fn check(&self, param: TypeIndex, symbols: &dyn Resolution) -> bool {
         self.requires
             .iter()
             .all(|requirement| requirement.check(param, symbols))
@@ -314,8 +321,8 @@ impl GenericTable {
 }
 
 impl GenericIndex {
-    pub fn check(&self, param: TypeIndex, symbols: &SymbolTable) -> bool {
-        let generic = symbols.generics.requires.get(*self);
+    pub fn check(&self, param: TypeIndex, symbols: &dyn Resolution) -> bool {
+        let generic = symbols.get_generic(*self);
         generic.check(param, symbols)
     }
 
@@ -323,10 +330,10 @@ impl GenericIndex {
         self,
         config: &mut Config,
         params: &HashMap<GenericIndex, TypeIndex>,
-        symbols: &SymbolTable,
+        symbols: &dyn Resolution,
         span: Span,
     ) -> Option<TypeIndex> {
-        let require = symbols.generics.requires.get(self);
+        let require = symbols.get_generic(self);
 
         let param = match params.get(&self) {
             Some(param) => *param,
@@ -353,30 +360,30 @@ impl TypeIndex {
         self,
         config: &mut Config,
         params: &HashMap<GenericIndex, TypeIndex>,
-        symbols: &mut SymbolTable,
+        symbols: &mut dyn Resolution,
         actives: Option<&crate::ast::function::InstantiationActives>,
         span: Span,
     ) -> Option<TypeIndex> {
         if config.is_poisoned() {
             return None;
         }
-        let value = self.value_type(&symbols.types);
-        let ty = symbols.types.get(self).unqualified().clone();
+        let value = self.value_type(symbols);
+        let ty = symbols.get_type(self).unqualified().clone();
         match ty {
             Base(_) | Enum(_) => Some(self),
             CompileType::Generic(generic) => generic
                 .instantiation(config, params, symbols, span)
-                .map(|index| index.into_value_type(value, &mut symbols.types)),
+                .map(|index| index.into_value_type(value, symbols)),
             CompileType::Unit(unit) if !unit.has_generic() => Some(self),
             CompileType::Unit(unit) => unit
                 .instantiation(config, params, symbols, actives, span)
-                .map(|index| index.into_value_type(value, &mut symbols.types)),
+                .map(|index| index.into_value_type(value, symbols)),
             CompileType::List(list) => list
                 .instantiation(config, params, symbols, actives, span)
-                .map(|index| index.into_value_type(value, &mut symbols.types)),
+                .map(|index| index.into_value_type(value, symbols)),
             CompileType::Ref(ref_type) => ref_type
                 .instantiation(config, params, symbols, actives, span)
-                .map(|index| index.into_value_type(value, &mut symbols.types)),
+                .map(|index| index.into_value_type(value, symbols)),
             CompileType::Qualified { .. } => unreachable!(),
         }
     }

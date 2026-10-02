@@ -1,3 +1,4 @@
+use crate::ast::symbols::Resolution;
 use crate::ast::{
     TypeIndex,
     config::Config,
@@ -13,7 +14,7 @@ impl Expression {
         callee: Spanned<TempExpr>,
         args: Vec<Spanned<TempExpr>>,
         span: Span,
-        symbols: &mut SymbolTable,
+        symbols: &mut dyn Resolution,
         context: Option<&StatementContext>,
     ) -> Self {
         let (owner, interface) = match Self::search_interface(config, callee, symbols, context) {
@@ -36,7 +37,7 @@ impl Expression {
             return Self::Poison;
         }
 
-        let interface_params = &symbols.interfaces.get(interface).params;
+        let interface_params = &symbols.get_interface_regular(interface).params;
 
         if params_types.len() != interface_params.len() {
             config.submit_error(
@@ -48,14 +49,12 @@ impl Expression {
 
         let check_result = params_types.iter().zip(interface_params.iter()).all(
             |(param_type, interface_param)| {
-                let check_result = interface_param
-                    .0
-                    .type_check(false, param_type, &symbols.types);
+                let check_result = interface_param.0.type_check(false, param_type, symbols);
                 if !check_result {
                     config.submit_error(
                         CompileError::IllegalUse(IllegalUseError::TypeMismatched {
-                            expected: interface_param.0.format(&symbols.types),
-                            found: param_type.format(&symbols.types),
+                            expected: interface_param.0.format(symbols),
+                            found: param_type.format(symbols),
                         }),
                         span,
                     );
@@ -79,7 +78,7 @@ impl Expression {
         callee: Spanned<TempExpr>,
         args: Vec<Spanned<TempExpr>>,
         span: Span,
-        symbols: &mut SymbolTable,
+        symbols: &mut dyn Resolution,
         context: Option<&StatementContext>,
     ) -> Self {
         let function = match Self::search_function(config, callee, symbols, context) {

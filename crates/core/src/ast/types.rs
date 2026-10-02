@@ -16,7 +16,7 @@ pub use enum_type::EnumType;
 
 mod lookup;
 mod resolve;
-pub use lookup::TypeLookup;
+pub use lookup::{TypeLookup, TypeStorage};
 pub use resolve::{TypeContext, resolve_type, resolve_type_with_bindings};
 
 use crate::ast::arena::get_ident;
@@ -62,7 +62,7 @@ impl CompileType {
         }
     }
 
-    pub fn is_generic(&self, arena: &TypeArena) -> bool {
+    pub fn is_generic(&self, arena: &(impl crate::ast::types::TypeLookup + ?Sized)) -> bool {
         match self {
             Self::Qualified { base, .. } => base.is_generic(arena),
             Generic(_) => true,
@@ -73,7 +73,7 @@ impl CompileType {
         }
     }
 
-    pub fn format(&self, arena: &impl crate::ast::types::TypeLookup) -> String {
+    pub fn format(&self, arena: &(impl crate::ast::types::TypeLookup + ?Sized)) -> String {
         match self {
             Self::Qualified { base, value } => format!("{}{}", value.prefix(), base.format(arena)),
             Base(base_type) => base_type.name(),
@@ -85,7 +85,7 @@ impl CompileType {
         }
     }
 
-    pub fn dump(&self, arena: &impl crate::ast::types::TypeLookup) -> String {
+    pub fn dump(&self, arena: &(impl crate::ast::types::TypeLookup + ?Sized)) -> String {
         match self {
             Self::Qualified { base, value } => format!("{}{}", value.prefix(), base.dump(arena)),
             Base(base) => base.dump(),
@@ -97,7 +97,7 @@ impl CompileType {
         }
     }
 
-    pub fn size(&self, arena: &impl crate::ast::types::TypeLookup) -> usize {
+    pub fn size(&self, arena: &(impl crate::ast::types::TypeLookup + ?Sized)) -> usize {
         match self {
             Self::Qualified { base, .. } => base.size(arena),
             Base(base) => base.size(),
@@ -123,7 +123,7 @@ impl TypeArena {
                 Base(base) => get_ident(&base.name()),
                 _ => ice("New type arena cannot contain other types."),
             };
-            let ty_index = arena.insert(name, ty);
+            let ty_index = arena.insert_type(name, ty);
             view.insert(index, ty_index);
         }
         (arena, view)
@@ -131,18 +131,22 @@ impl TypeArena {
 }
 
 impl TypeIndex {
-    pub fn value_type(&self, arena: &TypeArena) -> ValueType {
-        arena.get(*self).value_type()
+    pub fn value_type(&self, arena: &(impl crate::ast::types::TypeLookup + ?Sized)) -> ValueType {
+        arena.get_type(*self).value_type()
     }
 
-    pub fn into_value_type(self, value: ValueType, arena: &mut TypeArena) -> Self {
+    pub fn into_value_type(
+        self,
+        value: ValueType,
+        arena: &mut (impl crate::ast::types::TypeStorage + ?Sized),
+    ) -> Self {
         if self.is_empty() {
             return self;
         }
         if self.value_type(arena) == value {
             return self;
         }
-        let base = arena.get(self).unqualified().clone();
+        let base = arena.get_type(self).unqualified().clone();
         let qualified = match value {
             ValueType::Flex => base,
             _ => CompileType::Qualified {
@@ -151,13 +155,17 @@ impl TypeIndex {
             },
         };
         let name = qualified.format(arena);
-        arena.insert(get_ident(&name), qualified)
+        arena.insert_type(get_ident(&name), qualified)
     }
 
-    pub fn into(self, value: ValueType, arena: &mut TypeArena) -> Self {
+    pub fn into(
+        self,
+        value: ValueType,
+        arena: &mut (impl crate::ast::types::TypeStorage + ?Sized),
+    ) -> Self {
         self.into_value_type(value, arena)
     }
-    pub fn size(&self, arena: &impl crate::ast::types::TypeLookup) -> usize {
+    pub fn size(&self, arena: &(impl crate::ast::types::TypeLookup + ?Sized)) -> usize {
         let ty = arena.get_type(*self).unqualified();
         match ty {
             Base(base) => base.size(),
@@ -171,7 +179,7 @@ impl TypeIndex {
         }
     }
 
-    pub fn align(&self, arena: &impl crate::ast::types::TypeLookup) -> usize {
+    pub fn align(&self, arena: &(impl crate::ast::types::TypeLookup + ?Sized)) -> usize {
         let ty = arena.get_type(*self).unqualified();
         match ty {
             Base(base) => base.align(),
@@ -185,7 +193,7 @@ impl TypeIndex {
         }
     }
 
-    pub fn dump(&self, arena: &impl crate::ast::types::TypeLookup) -> String {
+    pub fn dump(&self, arena: &(impl crate::ast::types::TypeLookup + ?Sized)) -> String {
         let ty = arena.get_type(*self);
         if let CompileType::Qualified { .. } = ty {
             return ty.dump(arena);
@@ -201,7 +209,7 @@ impl TypeIndex {
         }
     }
 
-    pub fn format(&self, arena: &impl crate::ast::types::TypeLookup) -> String {
+    pub fn format(&self, arena: &(impl crate::ast::types::TypeLookup + ?Sized)) -> String {
         let ty = arena.get_type(*self);
         if let CompileType::Qualified { .. } = ty {
             return ty.format(arena);
@@ -217,13 +225,13 @@ impl TypeIndex {
         }
     }
 
-    pub fn is_generic(&self, arena: &TypeArena) -> bool {
-        let ty = arena.get(*self).unqualified();
+    pub fn is_generic(&self, arena: &(impl crate::ast::types::TypeLookup + ?Sized)) -> bool {
+        let ty = arena.get_type(*self).unqualified();
         ty.is_generic(arena)
     }
 
-    pub fn has_generic(&self, arena: &TypeArena) -> bool {
-        let ty = arena.get(*self).unqualified();
+    pub fn has_generic(&self, arena: &(impl crate::ast::types::TypeLookup + ?Sized)) -> bool {
+        let ty = arena.get_type(*self).unqualified();
         match ty {
             Base(_) | Enum(_) => false,
             Ref(ref_type) => ref_type.base.has_generic(arena),
@@ -234,32 +242,35 @@ impl TypeIndex {
         }
     }
 
-    pub fn is_base(&self, arena: &TypeArena) -> bool {
-        matches!(arena.get(*self).unqualified(), Base(_))
+    pub fn is_base(&self, arena: &(impl crate::ast::types::TypeLookup + ?Sized)) -> bool {
+        matches!(arena.get_type(*self).unqualified(), Base(_))
     }
 
-    pub fn is_ref(&self, arena: &TypeArena) -> bool {
-        matches!(arena.get(*self).unqualified(), Ref(_))
+    pub fn is_ref(&self, arena: &(impl crate::ast::types::TypeLookup + ?Sized)) -> bool {
+        matches!(arena.get_type(*self).unqualified(), Ref(_))
     }
 
-    pub fn is_unit(&self, arena: &TypeArena) -> bool {
-        matches!(arena.get(*self).unqualified(), Unit(_))
+    pub fn is_unit(&self, arena: &(impl crate::ast::types::TypeLookup + ?Sized)) -> bool {
+        matches!(arena.get_type(*self).unqualified(), Unit(_))
     }
 
-    pub fn is_integer(&self, arena: &TypeArena) -> bool {
-        matches!(arena.get(*self).unqualified(), Base(base) if base.data_type() == base_type::DataType::Integer)
+    pub fn is_integer(&self, arena: &(impl crate::ast::types::TypeLookup + ?Sized)) -> bool {
+        matches!(arena.get_type(*self).unqualified(), Base(base) if base.data_type() == base_type::DataType::Integer)
     }
 
-    pub fn is_float(&self, arena: &TypeArena) -> bool {
-        matches!(arena.get(*self).unqualified(), Base(base) if base.data_type() == base_type::DataType::Float)
+    pub fn is_float(&self, arena: &(impl crate::ast::types::TypeLookup + ?Sized)) -> bool {
+        matches!(arena.get_type(*self).unqualified(), Base(base) if base.data_type() == base_type::DataType::Float)
     }
 
-    pub fn is_signed(&self, arena: &TypeArena) -> bool {
-        matches!(arena.get(*self).unqualified(), Base(base) if base.signed())
+    pub fn is_signed(&self, arena: &(impl crate::ast::types::TypeLookup + ?Sized)) -> bool {
+        matches!(arena.get_type(*self).unqualified(), Base(base) if base.signed())
     }
 
-    pub fn get_generic_index(&self, arena: &TypeArena) -> GenericIndex {
-        let ty = arena.get(*self).unqualified();
+    pub fn get_generic_index(
+        &self,
+        arena: &(impl crate::ast::types::TypeLookup + ?Sized),
+    ) -> GenericIndex {
+        let ty = arena.get_type(*self).unqualified();
         match ty {
             Generic(index) => *index,
             _ => {
@@ -268,7 +279,7 @@ impl TypeIndex {
         }
     }
 
-    pub fn symbol_name(&self, arena: &TypeArena) -> String {
+    pub fn symbol_name(&self, arena: &(impl crate::ast::types::TypeLookup + ?Sized)) -> String {
         if self.is_generic(arena) {
             ice("TypeIndex is a Generic type. Cannot get symbol name of a Generic type.")
         } else {
@@ -278,11 +289,11 @@ impl TypeIndex {
 
     pub fn generic_instance_name(
         &self,
-        arena: &TypeArena,
+        arena: &(impl crate::ast::types::TypeLookup + ?Sized),
         params: &HashMap<GenericIndex, TypeIndex>,
     ) -> String {
         if self.has_generic(arena) {
-            let ty = arena.get(*self).unqualified();
+            let ty = arena.get_type(*self).unqualified();
             match ty {
                 Ref(ref_type) => ref_type.generic_instance_name(arena, params),
                 Unit(unit) => unit.generic_instance_name(arena, params),
@@ -307,8 +318,11 @@ impl TypeIndex {
         }
     }
 
-    pub fn deref(&self, arena: &mut TypeArena) -> Option<TypeIndex> {
-        let ty = arena.get(*self).unqualified();
+    pub fn deref(
+        &self,
+        arena: &mut (impl crate::ast::types::TypeStorage + ?Sized),
+    ) -> Option<TypeIndex> {
+        let ty = arena.get_type(*self).unqualified();
         match ty {
             Ref(ref_type) => {
                 let mutable = ref_type.mut_base;
@@ -325,32 +339,41 @@ impl TypeIndex {
         }
     }
 
-    pub fn make_ref(&self, arena: &mut TypeArena, mut_base: bool) -> TypeIndex {
+    pub fn make_ref(
+        &self,
+        arena: &mut (impl crate::ast::types::TypeStorage + ?Sized),
+        mut_base: bool,
+    ) -> TypeIndex {
         let base = self.into_value_type(ValueType::Flex, arena);
-        let ty = arena.get(base).unqualified();
+        let ty = arena.get_type(base).unqualified();
         match ty {
             Ref(ref_type) => {
                 let new_ref = RefType::new(ref_type.base, ref_type.level + 1, mut_base);
                 let type_str = new_ref.format(arena);
                 let ident = get_ident(&type_str);
-                arena.insert(ident, Ref(new_ref))
+                arena.insert_type(ident, Ref(new_ref))
             }
             _ => {
                 let new_ref = RefType::new(base, 1, mut_base);
                 let type_str = new_ref.format(arena);
                 let ident = get_ident(&type_str);
-                arena.insert(ident, Ref(new_ref))
+                arena.insert_type(ident, Ref(new_ref))
             }
         }
     }
 
-    pub fn type_check(&self, tolerance: bool, other: &TypeIndex, arena: &TypeArena) -> bool {
+    pub fn type_check(
+        &self,
+        tolerance: bool,
+        other: &TypeIndex,
+        arena: &(impl crate::ast::types::TypeLookup + ?Sized),
+    ) -> bool {
         if self == other {
             return true;
         }
 
-        let target = arena.get(*self).unqualified();
-        let other = arena.get(*other).unqualified();
+        let target = arena.get_type(*self).unqualified();
+        let other = arena.get_type(*other).unqualified();
         match (target, other) {
             (Base(base), Base(other)) => base.type_check(tolerance, other),
             (Ref(ref_t), Ref(ref2)) => ref_t.type_check(ref2, arena),

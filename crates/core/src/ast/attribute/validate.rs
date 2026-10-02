@@ -1,4 +1,5 @@
 use super::{FuncAttibute, UnitAttribute};
+use crate::ast::symbols::Resolution;
 use crate::ast::{Config, TypeIndex, symbols::SymbolTable, types::CompileType};
 use crate::diagnostic::error::{CAbiError, CompileError, IllegalUseError};
 use crate::lexer::Span;
@@ -23,7 +24,7 @@ pub(crate) fn parameters(
     config: &mut Config,
     attributes: &HashSet<FuncAttibute>,
     params: &[(TypeIndex, String)],
-    symbols: &SymbolTable,
+    symbols: &dyn Resolution,
     span: Span,
 ) {
     if config.is_poisoned() || !attributes.contains(&FuncAttibute::Cabi) {
@@ -39,13 +40,13 @@ pub(crate) fn parameters(
 
 fn contains_non_c_unit(
     ty: TypeIndex,
-    symbols: &SymbolTable,
+    symbols: &dyn Resolution,
     visited: &mut HashSet<TypeIndex>,
 ) -> bool {
     if ty.is_empty() || !visited.insert(ty) {
         return false;
     }
-    match symbols.types.get(ty).unqualified() {
+    match symbols.get_type(ty).unqualified() {
         CompileType::Unit(unit) => !unit.attributes.contains(&UnitAttribute::Cabi),
         CompileType::Ref(reference) => contains_non_c_unit(reference.base, symbols, visited),
         CompileType::List(list) => contains_non_c_unit(list.element_type, symbols, visited),

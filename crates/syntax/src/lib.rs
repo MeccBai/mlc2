@@ -5,4 +5,5 @@ pub mod lexer;
 pub mod manifest;
 pub mod operators;
 pub mod parser;
+pub mod serialization;
 pub use language::{ImportModule, ValueType};

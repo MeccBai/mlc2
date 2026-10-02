@@ -1,3 +1,5 @@
+use mlc_syntax::manifest::SOURCE_SUFFIX;
+
 use super::*;
 use crate::ast::{
     AbstractSyntaxTree,
@@ -13,9 +15,9 @@ fn parse(source: &str) -> (AbstractSyntaxTree, PackageSymbolTable) {
         FileId::new(0),
         vec![],
         String::new(),
-        "generation.vl".into(),
-        ErrorHandle::new("generation.vl".into()),
-        WarningHandle::new("generation.vl".into()),
+        format!("generation{}", SOURCE_SUFFIX),
+        ErrorHandle::new(format!("generation{}", SOURCE_SUFFIX)),
+        WarningHandle::new(format!("generation{}", SOURCE_SUFFIX)),
     );
     let mut ast = AbstractSyntaxTree::new(config, module.unwrap());
     let mut package = PackageSymbolTable::new();

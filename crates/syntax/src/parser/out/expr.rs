@@ -1,7 +1,7 @@
 use super::{Span, Spanned, TempPath, TempType};
 use crate::operators::Operator;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum TempLiteralKind {
     Integer,
     Float,
@@ -10,7 +10,8 @@ pub enum TempLiteralKind {
     Null,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(tag = "kind", content = "data")]
 pub enum TempCallee {
     Expr(Box<Spanned<TempExpr>>),
     GenericPath {
@@ -35,7 +36,8 @@ impl TempCallee {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(tag = "kind", content = "data")]
 pub enum TempExpr {
     Literal {
         kind: TempLiteralKind,

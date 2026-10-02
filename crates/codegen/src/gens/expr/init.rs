@@ -12,7 +12,7 @@ impl Expander<'_> {
         expected: Option<TypeIndex>,
     ) -> Lowered {
         if let InitialList::String { value } = list {
-            return self.string(value);
+            return self.string(value, expected);
         }
         let (owner, values) = match list {
             InitialList::Array { ty, values } => (*ty, values),
@@ -127,16 +127,25 @@ impl Expander<'_> {
         IrValue::Reg(target)
     }
 
-    fn string(&mut self, value: &str) -> Lowered {
+    fn string(&mut self, value: &str, expected: Option<TypeIndex>) -> Lowered {
         // The frontend represents strings as byte arrays, without an implicit NUL.
         let bytes = value.as_bytes().to_vec();
         let name = memory::string_name(&bytes);
+        let length = expected
+            .map(|ty| match self.symbols.get_type(ty).unqualified() {
+                CompileType::List(array) => array.length,
+                _ => fail("Checked string destination is not an array"),
+            })
+            .unwrap_or(bytes.len());
+        if length < bytes.len() {
+            fail("Checked string exceeds destination capacity");
+        }
         let ty = LlvmType::Array {
             element: Box::new(LlvmType::Int(8)),
-            length: bytes.len(),
+            length,
         };
         let slot = self.allocate();
-        let code = vec![
+        let mut code = vec![
             Instruction::StringConstant {
                 name: name.clone(),
                 bytes: bytes.clone(),
@@ -147,8 +156,15 @@ impl Expander<'_> {
                 count: None,
                 align: Some(1),
             },
-            memory::copy(IrValue::Reg(slot), IrValue::Global(name), bytes.len()),
         ];
+        if length > bytes.len() {
+            code.push(memory::zero(IrValue::Reg(slot), length));
+        }
+        code.push(memory::copy(
+            IrValue::Reg(slot),
+            IrValue::Global(name),
+            bytes.len(),
+        ));
         Lowered {
             signed: false,
             value: LlvmValue {

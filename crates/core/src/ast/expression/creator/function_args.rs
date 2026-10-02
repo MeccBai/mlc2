@@ -1,3 +1,4 @@
+use crate::ast::symbols::Resolution;
 use crate::ast::{arena::FuncIndex, config::Config, expression::Expression, symbols::SymbolTable};
 use crate::diagnostic::error::{CompileError, IllegalUseError};
 use crate::parser::out::Span;
@@ -9,13 +10,13 @@ impl Expression {
         config: &mut Config,
         function: FuncIndex,
         args: &[Expression],
-        symbols: &mut SymbolTable,
+        symbols: &mut dyn Resolution,
         span: Span,
     ) -> bool {
         if config.is_poisoned() || args.iter().any(Expression::is_poisoned) {
             return false;
         }
-        let params = symbols.functions.get(function).params.clone();
+        let params = symbols.get_function_regular(function).params.clone();
         let variadic = params.last().is_some_and(|(_, name)| name == "...");
         let fixed = params.len() - usize::from(variadic);
         if args.len() < fixed || (!variadic && args.len() != fixed) {
@@ -30,15 +31,15 @@ impl Expression {
             if config.is_poisoned() {
                 return false;
             }
-            if found.is_empty() || !expected.type_check(false, &found, &symbols.types) {
+            if found.is_empty() || !expected.type_check(false, &found, symbols) {
                 let found = if found.is_empty() {
                     "void".to_owned()
                 } else {
-                    found.format(&symbols.types)
+                    found.format(symbols)
                 };
                 config.submit_error(
                     CompileError::IllegalUse(IllegalUseError::TypeMismatched {
-                        expected: expected.format(&symbols.types),
+                        expected: expected.format(symbols),
                         found,
                     }),
                     span,

@@ -1,1 +1,1 @@
-pub const SOURCE_SUFFIX: &str = ".vl";
+pub const SOURCE_SUFFIX: &str = ".m2";

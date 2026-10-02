@@ -2,6 +2,7 @@ use crate::ast::arena::{FuncIndex, InterfaceIndex};
 use crate::ast::config::Config;
 use crate::ast::expression::Expression;
 use crate::ast::symbol_name::SymbolName;
+use crate::ast::symbols::Resolution;
 use crate::ast::{EnumBool, SymbolTable};
 use crate::diagnostic::error::{CompileError, IllegalUseError, ResolveError};
 use crate::diagnostic::ice::ice;
@@ -23,7 +24,7 @@ impl Expression {
     pub fn search_interface(
         config: &mut Config,
         temp_expr: Spanned<TempExpr>,
-        symbols: &mut SymbolTable,
+        symbols: &mut dyn Resolution,
         context: Option<&crate::ast::symbols::StatementContext>,
     ) -> Option<(Expression, InterfaceIndex)> {
         if config.is_poisoned() {
@@ -51,30 +52,28 @@ impl Expression {
                 }
                 let owner_type = owner.type_inference(config, symbols);
                 let owner_type = if indirect && !receiver && !owner_type.is_empty() {
-                    if !owner_type.is_ref(&symbols.types) {
+                    if !owner_type.is_ref(symbols) {
                         config.submit_error(
                             CompileError::IllegalUse(IllegalUseError::MemberAccessViolation),
                             span,
                         );
                         return None;
                     }
-                    owner_type.deref(&mut symbols.types).unwrap()
+                    owner_type.deref(symbols).unwrap()
                 } else {
                     owner_type
                 };
                 if owner_type.is_empty() {
                     return None;
                 }
-                let owner_type =
-                    owner_type.into(crate::ast::types::ValueType::Flex, &mut symbols.types);
-                let interface_name =
-                    SymbolName::callable(Some(&owner_type.format(&symbols.types)), &name);
-                let Some(index) = symbols.interfaces.get_by_name(&interface_name) else {
+                let owner_type = owner_type.into(crate::ast::types::ValueType::Flex, symbols);
+                let interface_name = SymbolName::callable(Some(&owner_type.format(symbols)), &name);
+                let Some(index) = symbols.associated_interface(owner_type, &interface_name) else {
                     config
                         .submit_error(CompileError::Resolve(ResolveError::UnknownInterface), span);
                     return None;
                 };
-                if !receiver && !symbols.interfaces.get(index).public {
+                if !receiver && !symbols.get_interface_regular(index).public {
                     config.submit_error(
                         CompileError::IllegalUse(IllegalUseError::MemberAccessViolation),
                         span,
@@ -90,7 +89,7 @@ impl Expression {
     pub fn search_function(
         config: &mut Config,
         temp_expr: Spanned<TempExpr>,
-        symbols: &mut SymbolTable,
+        symbols: &mut dyn Resolution,
         context: Option<&crate::ast::symbols::StatementContext>,
     ) -> Option<EnumBool<InterfaceIndex, FuncIndex>> {
         Self::search_path_callable(config, temp_expr, symbols, context, false)
@@ -99,7 +98,7 @@ impl Expression {
     pub fn search_generic_function(
         config: &mut Config,
         temp_expr: Spanned<TempExpr>,
-        symbols: &mut SymbolTable,
+        symbols: &mut dyn Resolution,
         context: Option<&crate::ast::symbols::StatementContext>,
     ) -> Option<EnumBool<InterfaceIndex, FuncIndex>> {
         Self::search_path_callable(config, temp_expr, symbols, context, true)
@@ -108,7 +107,7 @@ impl Expression {
     fn search_path_callable(
         config: &mut Config,
         temp_expr: Spanned<TempExpr>,
-        symbols: &SymbolTable,
+        symbols: &dyn Resolution,
         context: Option<&crate::ast::symbols::StatementContext>,
         requires_generic: bool,
     ) -> Option<EnumBool<InterfaceIndex, FuncIndex>> {
@@ -122,9 +121,9 @@ impl Expression {
         let error = match symbols.resolve_path(config, &path, context) {
             Some(PathSymbol::Interface { index, generic }) if generic == requires_generic => {
                 let public = if generic {
-                    symbols.generics.interfaces.get(index).public
+                    symbols.get_interface(index, true).public
                 } else {
-                    symbols.interfaces.get(index).public
+                    symbols.get_interface_regular(index).public
                 };
                 if !public {
                     config.submit_error(

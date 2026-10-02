@@ -14,6 +14,7 @@ pub struct PackageSymbolTable {
     pub(super) configs: std::collections::HashMap<FileId, Config>,
     pub(super) exports: std::collections::HashMap<FileId, ExportTable>,
     pub(super) searchable: std::collections::HashMap<String, ExportSymbol>,
+    scopes: std::collections::HashMap<FileId, super::ResolveScope>,
 }
 
 impl Default for PackageSymbolTable {
@@ -30,11 +31,57 @@ impl PackageSymbolTable {
             configs: std::collections::HashMap::new(),
             exports: std::collections::HashMap::new(),
             searchable: std::collections::HashMap::new(),
+            scopes: std::collections::HashMap::new(),
         }
     }
 
     pub fn register(&mut self, id: FileId) -> Result<(), FileId> {
         self.arenas.register(id, SymbolTable::for_file(id))
+    }
+
+    pub fn set_imports(&mut self, current: FileId, imports: impl IntoIterator<Item = FileId>) {
+        self.scopes
+            .insert(current, super::ResolveScope::new(current, imports));
+    }
+
+    pub fn resolve_scope(&self, current: FileId) -> super::ResolveScope {
+        self.scopes
+            .get(&current)
+            .cloned()
+            .unwrap_or_else(|| super::ResolveScope::new(current, []))
+    }
+
+    pub fn resolve_context(&mut self, current: FileId) -> super::ResolveContext<'_> {
+        let scope = self.resolve_scope(current);
+        super::ResolveContext::new(self, scope)
+    }
+
+    pub fn lookup_in(&self, name: &str, scope: &super::ResolveScope) -> Option<ExportSymbol> {
+        self.searchable
+            .get(name)
+            .copied()
+            .filter(|symbol| {
+                symbol.file_id() == scope.current || scope.imports.contains(&symbol.file_id())
+            })
+            .or_else(|| {
+                self.exports
+                    .get(&scope.current)
+                    .and_then(|table| table.inner.get(name).copied())
+                    .filter(|symbol| {
+                        !matches!(symbol, ExportSymbol::Type(_))
+                            || self.local_type_name(scope.current, name)
+                    })
+            })
+    }
+
+    pub(crate) fn local_type_name(&self, current: FileId, name: &str) -> bool {
+        !name.contains("::")
+            || self
+                .file(current)
+                .is_some_and(|file| file.names.contains(name))
+            || self
+                .config(current)
+                .is_some_and(|config| name.starts_with(&format!("{}::", config.symbol_prefix())))
     }
 
     pub fn file(&self, id: FileId) -> Option<&SymbolTable> {

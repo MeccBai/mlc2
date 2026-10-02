@@ -2,6 +2,7 @@ use super::{
     Access, CompAtom, Composite, ConstValue, Expression, InitialList, UnaryExpr,
     operators::Operator,
 };
+use crate::ast::symbols::Resolution;
 use crate::ast::{
     config::Config,
     symbols::SymbolTable,
@@ -10,14 +11,12 @@ use crate::ast::{
 
 impl Expression {
     /// Unsupported or invalid arithmetic is preserved, not evaluated with host overflow rules.
-    pub fn const_fold(self, config: &mut Config, symbols: &SymbolTable) -> Self {
+    pub fn const_fold(self, config: &mut Config, symbols: &dyn Resolution) -> Self {
         if config.is_poisoned() {
             return Self::Poison;
         }
         match self {
-            Self::VarValueE(var)
-                if var.var_type.value_type(&symbols.types) == ValueType::Constant =>
-            {
+            Self::VarValueE(var) if var.var_type.value_type(symbols) == ValueType::Constant => {
                 (*var.init_val).clone()
             }
             Self::CompositeE(mut c) => {
@@ -82,11 +81,11 @@ impl Expression {
     }
 }
 
-fn fold_atom(a: CompAtom, config: &mut Config, symbols: &SymbolTable) -> CompAtom {
+fn fold_atom(a: CompAtom, config: &mut Config, symbols: &dyn Resolution) -> CompAtom {
     CompAtom::from_expr(a.to_expression().const_fold(config, symbols))
 }
 
-fn fold_composite(mut c: Composite, symbols: &SymbolTable) -> CompAtom {
+fn fold_composite(mut c: Composite, symbols: &dyn Resolution) -> CompAtom {
     if c.operators.is_empty() {
         return c.members.remove(0);
     }
@@ -124,16 +123,16 @@ fn arithmetic(
     a: &ConstValue,
     op: &Operator,
     b: &ConstValue,
-    symbols: &SymbolTable,
+    symbols: &dyn Resolution,
 ) -> Option<ConstValue> {
     use Operator::*;
     if a.ty.is_empty() || b.ty.is_empty() {
         return None;
     }
-    let CompileType::Base(ty) = symbols.types.get(a.ty).unqualified() else {
+    let CompileType::Base(ty) = symbols.get_type(a.ty).unqualified() else {
         return None;
     };
-    if symbols.types.get(a.ty).unqualified() != symbols.types.get(b.ty).unqualified() {
+    if symbols.get_type(a.ty).unqualified() != symbols.get_type(b.ty).unqualified() {
         return None;
     }
     let value = match ty.data_type() {

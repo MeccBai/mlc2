@@ -1,0 +1,169 @@
+mod frontend;
+mod link;
+use crate::cli::{Cli, Commands};
+use mlc_builder::{
+    config::GlobalConfig,
+    paths::PathResolver,
+    plan::BuildPlan,
+    project::{ProjectFile, TargetKind},
+    schedule::{self, BuildOptions, CompileOutput},
+};
+use std::{collections::HashMap, path::Path};
+
+pub fn run(cli: Cli) -> Result<(), String> {
+    let root = std::env::current_dir().map_err(|e| e.to_string())?;
+    let global = match &cli.config {
+        Some(path) => GlobalConfig::load(path)?,
+        None => GlobalConfig::load_default()?,
+    };
+    let targets = match &cli.command {
+        Some(Commands::Build { target }) => {
+            if cli.entry.is_some() {
+                return Err("Do not combine build with an entry file".into());
+            }
+            let project = ProjectFile::load(&root)?.ok_or("Project.toml not found")?;
+            let selected: Vec<_> = project
+                .project
+                .targets
+                .into_iter()
+                .filter(|t| target.as_ref().is_none_or(|name| name == &t.name))
+                .collect();
+            if selected.is_empty() {
+                return Err("No matching project target".into());
+            }
+            selected
+                .into_iter()
+                .map(|t| (root.join(t.entry), Some(t.name), t.kind))
+                .collect::<Vec<_>>()
+        }
+        None => vec![(
+            cli.entry
+                .clone()
+                .ok_or("Specify an entry file or use 'mlc build'; see --help")?,
+            None,
+            TargetKind::Bin,
+        )],
+    };
+    for (entry, name, kind) in targets {
+        build(
+            &cli,
+            &global,
+            &root,
+            &entry,
+            name.as_deref(),
+            cli.kind.map(Into::into).unwrap_or(kind),
+        )?;
+    }
+    Ok(())
+}
+
+fn build(
+    cli: &Cli,
+    global: &GlobalConfig,
+    root: &Path,
+    entry: &Path,
+    name: Option<&str>,
+    kind: TargetKind,
+) -> Result<(), String> {
+    let executable = std::env::current_exe().map_err(|e| e.to_string())?;
+    let mut paths = PathResolver::new(&executable, root, name, global)?;
+    if let Some(triplet) = &cli.triplet {
+        mlc_builder::paths::validate_triplet(triplet)?;
+        paths.triplet = triplet.clone();
+        for dir in &mut paths.imports.lib_dirs {
+            *dir = dir.parent().ok_or("Invalid library root")?.join(triplet);
+        }
+        paths.output = paths
+            .output
+            .parent()
+            .ok_or("Invalid output root")?
+            .join(triplet);
+        paths.lib_fallback = paths
+            .lib_fallback
+            .parent()
+            .ok_or("Invalid cache root")?
+            .join(triplet);
+        if let Some(dir) = &mut paths.lib_cache {
+            *dir = dir.parent().ok_or("Invalid cache root")?.join(triplet);
+        }
+    }
+    if !cli.lib_dirs.is_empty() {
+        paths.imports.lib_dirs = cli
+            .lib_dirs
+            .iter()
+            .map(|p| root.join(p).join(&paths.triplet))
+            .collect();
+    }
+    let output = cli
+        .output
+        .as_ref()
+        .map(|p| root.join(p))
+        .unwrap_or_else(|| {
+            paths
+                .output
+                .parent()
+                .and_then(Path::parent)
+                .unwrap()
+                .to_owned()
+        });
+    if cli.output.is_some() {
+        paths.output = output.join("objects").join(&paths.triplet);
+        paths.lib_fallback = output.join("objects/lib").join(&paths.triplet);
+    }
+    let plan = BuildPlan::discover_with_paths(entry, &paths)?;
+    let generated = frontend::generate(&plan, &paths.triplet, kind)?;
+    let fingerprint = mlc_builder::artifacts::semantic_hash(&generated.modules)?;
+    let modules: HashMap<_, _> = generated.modules.into_iter().collect();
+    let options = BuildOptions {
+        output: paths.output.clone(),
+        target: paths.triplet.clone(),
+        compiler_id: format!("mlc-{}-cli-v1", env!("CARGO_PKG_VERSION")),
+        // Conservative: full IR fixes file IDs and imported instance ownership.
+        compiler_options: vec![fingerprint],
+        workers: cli.jobs.unwrap_or_else(|| {
+            std::thread::available_parallelism()
+                .map(usize::from)
+                .unwrap_or(1)
+        }),
+    };
+    if options.workers == 0 {
+        return Err("--jobs must be greater than zero".into());
+    }
+    let report = schedule::build(plan, options, move |request| {
+        Ok(CompileOutput {
+            ir: Some(
+                modules
+                    .get(&request.target.id.0)
+                    .ok_or("Missing generated module")?
+                    .clone(),
+            ),
+        })
+    })?;
+    for warning in &report.warnings {
+        eprintln!("warning: {warning}");
+    }
+    if !report.succeeded() {
+        return Err(format!("Build failed: {:?}", report.results));
+    }
+    std::fs::create_dir_all(&paths.output).map_err(|e| e.to_string())?;
+    let mut objects = report.objects;
+    if let Some(ir) = generated.supplement {
+        let object = paths.output.join("__mlc_instances.obj");
+        mlc_builder::llvm::IrCompiler::init(&paths.triplet)
+            .map_err(|e| e.to_string())?
+            .emit(ir, &object)
+            .map_err(|e| e.to_string())?;
+        objects.push(object);
+    }
+    let stem = name
+        .map(str::to_owned)
+        .or_else(|| entry.file_stem().map(|s| s.to_string_lossy().into_owned()))
+        .ok_or("Entry has no filename")?;
+    let artifact = link::output_path(&output, &stem, kind, &paths.triplet);
+    if stem.is_empty() || stem == "." || stem == ".." || stem.contains(['/', '\\', ':']) {
+        return Err("Target name must be a filename, not a path".into());
+    }
+    link::link(cli, &objects, &artifact, kind, &paths.triplet)?;
+    println!("Built {}", artifact.display());
+    Ok(())
+}

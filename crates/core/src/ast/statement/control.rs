@@ -1,3 +1,4 @@
+use crate::ast::symbols::Resolution;
 use std::rc::Rc;
 
 use super::{
@@ -29,7 +30,7 @@ fn child_context(
 fn condition(
     config: &mut Config,
     prototype: Spanned<TempExpr>,
-    symbols: &mut SymbolTable,
+    symbols: &mut dyn Resolution,
     context: Option<&StatementContext>,
 ) -> Option<Expression> {
     let span = prototype.1;
@@ -52,11 +53,11 @@ fn same_type(
     config: &mut Config,
     expected: TypeIndex,
     found: TypeIndex,
-    symbols: &mut SymbolTable,
+    symbols: &mut dyn Resolution,
     span: Span,
 ) -> bool {
-    let expected = expected.into_value_type(ValueType::Flex, &mut symbols.types);
-    let found = found.into_value_type(ValueType::Flex, &mut symbols.types);
+    let expected = expected.into_value_type(ValueType::Flex, symbols);
+    let found = found.into_value_type(ValueType::Flex, symbols);
     if !expected.is_empty() && expected == found {
         return true;
     }
@@ -64,7 +65,7 @@ fn same_type(
         if ty.is_empty() {
             "void".to_owned()
         } else {
-            ty.format(&symbols.types)
+            ty.format(symbols)
         }
     };
     config.submit_error(
@@ -83,7 +84,7 @@ impl Statement {
         prototype: Spanned<TempExpr>,
         then_scope: TempScope,
         else_scope: Option<TempScope>,
-        symbols: &mut SymbolTable,
+        symbols: &mut dyn Resolution,
         context: Option<&StatementContext>,
     ) -> Self {
         let Some(condition) = condition(config, prototype, symbols, context) else {
@@ -117,7 +118,7 @@ impl Statement {
         config: &mut Config,
         prototype: Spanned<TempExpr>,
         scope: TempScope,
-        symbols: &mut SymbolTable,
+        symbols: &mut dyn Resolution,
         context: Option<&StatementContext>,
     ) -> Self {
         let Some(condition) = condition(config, prototype, symbols, context) else {
@@ -139,7 +140,7 @@ impl Statement {
         config: &mut Config,
         prototype: Spanned<TempExpr>,
         branches: Vec<(TempMatchPattern, TempScope)>,
-        symbols: &mut SymbolTable,
+        symbols: &mut dyn Resolution,
         context: Option<&StatementContext>,
     ) -> Self {
         let span = prototype.1;
@@ -206,7 +207,7 @@ impl Statement {
         start: Spanned<TempExpr>,
         end: Spanned<TempExpr>,
         scope: TempScope,
-        symbols: &mut SymbolTable,
+        symbols: &mut dyn Resolution,
         context: Option<&StatementContext>,
     ) -> Self {
         let start_span = start.1;
@@ -222,7 +223,7 @@ impl Statement {
         let start_ty = start.type_inference(config, symbols);
         let end_ty = end.type_inference(config, symbols);
         for (ty, span) in [(start_ty, start_span), (end_ty, end_span)] {
-            if ty.is_empty() || !ty.is_integer(&symbols.types) {
+            if ty.is_empty() || !ty.is_integer(symbols) {
                 config.submit_error(
                     CompileError::IllegalUse(IllegalUseError::ForBoundMustBeInteger),
                     span,
@@ -233,7 +234,7 @@ impl Statement {
         if !same_type(config, start_ty, end_ty, symbols, end_span) {
             return Self::Poison;
         }
-        let var_type = start_ty.into_value_type(ValueType::Flex, &mut symbols.types);
+        let var_type = start_ty.into_value_type(ValueType::Flex, symbols);
         let variable = Rc::new(Variable {
             name: binding.0,
             var_type,

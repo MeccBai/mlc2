@@ -135,7 +135,23 @@ where
                 mutable: mutable.is_some(),
             });
 
-        choice((reference, named))
+        let length = select! { TokenPack::Data { kind: Token::IntLiteral, text } => text }.try_map(
+            |text, span| {
+                text.parse::<usize>()
+                    .map_err(|_| Rich::custom(span, "Array length exceeds usize"))
+            },
+        );
+        let array = ty
+            .clone()
+            .then_ignore(operator(Token::Colon))
+            .then(length)
+            .delimited_by(keyword(Token::LeftBracket), keyword(Token::RightBracket))
+            .map(|(element, length)| TypeExpr::Array {
+                element: Box::new(element),
+                length,
+            });
+
+        choice((reference, array, named))
             .map_with(|ty, extra| (ty, extra.span()))
             .labelled("type")
     })

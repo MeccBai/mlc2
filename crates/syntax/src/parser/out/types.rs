@@ -1,6 +1,6 @@
 use super::Spanned;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct TempPath {
     pub segments: Vec<String>,
 }
@@ -11,8 +11,13 @@ impl TempPath {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(tag = "kind", content = "data")]
 pub enum TempType {
+    Array {
+        element: Box<Spanned<TempType>>,
+        length: usize,
+    },
     Path(TempPath),
     Generic {
         base: TempPath,
@@ -27,6 +32,7 @@ pub enum TempType {
 impl TempType {
     pub fn dump(&self) -> String {
         match self {
+            Self::Array { element, length } => format!("[{}:{length}]", element.0.dump()),
             Self::Path(path) => path.segments.join("::"),
             Self::Generic { base, args } => format!(
                 "{}<{}>",

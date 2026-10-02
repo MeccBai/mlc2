@@ -1,3 +1,4 @@
+use crate::ast::symbols::Resolution;
 use std::{
     collections::{HashMap, HashSet},
     rc::Rc,
@@ -21,7 +22,7 @@ pub(crate) fn generics(
     kind: &str,
     owner: &str,
     parameters: Vec<TempGenericParam>,
-    symbols: &mut SymbolTable,
+    symbols: &mut dyn Resolution,
 ) -> (
     Vec<String>,
     HashMap<String, GenericIndex>,
@@ -47,21 +48,31 @@ pub(crate) fn generics(
         let mut require = if let Some((path, span)) = parameter.constraint {
             let name = SymbolName::path(&path.segments);
             let Some(index) = symbols
+                .local()
                 .generics
                 .requires
                 .get_by_name(&config.symbol_name(&name))
-                .or_else(|| symbols.generics.requires.get_by_name(&name))
+                .or_else(|| symbols.local().generics.requires.get_by_name(&name))
+                .or_else(|| match symbols.named_export(config, &name) {
+                    Some(crate::ast::symbols::ExportSymbol::GenericRequire(index)) => Some(index),
+                    _ => None,
+                })
             else {
                 config.submit_error(CompileError::Resolve(ResolveError::UnknownConstraint), span);
                 break;
             };
-            symbols.generics.requires.get(index).clone()
+            symbols.get_generic(index).clone()
         } else {
             GenericRequire::empty(identity.clone())
         };
         require.name = identity.clone();
-        let index = symbols.generics.requires.insert(identity.clone(), require);
+        let index = symbols
+            .local_mut()
+            .generics
+            .requires
+            .insert(identity.clone(), require);
         let ty = symbols
+            .local_mut()
             .types
             .insert(SymbolName::generic_type(index), CompileType::Generic(index));
         types.insert(parameter.name.clone(), ty);
@@ -76,7 +87,7 @@ pub(super) fn signature(
     parameters: Vec<TempParam>,
     returns: Option<Spanned<TempType>>,
     types: &HashMap<String, TypeIndex>,
-    symbols: &mut SymbolTable,
+    symbols: &mut dyn Resolution,
 ) -> (Vec<(TypeIndex, String)>, Option<TypeIndex>) {
     let mut seen: HashSet<String> = types.keys().cloned().collect();
     let mut params = Vec::new();
@@ -111,7 +122,7 @@ pub(super) fn signature(
     }
     let ret = returns
         .and_then(|ty| resolve_type_with_bindings(config, ty, symbols, types))
-        .map(|ty| ty.into_value_type(crate::ast::types::ValueType::Flex, &mut symbols.types));
+        .map(|ty| ty.into_value_type(crate::ast::types::ValueType::Flex, symbols));
     (params, ret)
 }
 

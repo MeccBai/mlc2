@@ -1,3 +1,4 @@
+use crate::ast::symbols::Resolution;
 use std::{collections::HashMap, rc::Rc};
 
 use crate::{
@@ -36,7 +37,7 @@ impl Variable {
     pub fn new(
         config: &mut Config,
         temp_var: TempVar,
-        symbols: &mut SymbolTable,
+        symbols: &mut dyn Resolution,
         context: Option<&mut crate::ast::symbols::StatementContext>,
     ) -> Rc<Self> {
         let var_span = temp_var.initializer.1;
@@ -60,8 +61,8 @@ impl Variable {
                         config.submit_error(
                             crate::diagnostic::error::CompileError::IllegalUse(
                                 IllegalUseError::TypeMismatched {
-                                    expected: symbols.types.get(ty).format(&symbols.types),
-                                    found: symbols.types.get(inferred).format(&symbols.types),
+                                    expected: symbols.get_type(ty).format(symbols),
+                                    found: symbols.get_type(inferred).format(symbols),
                                 },
                             ),
                             var_span,
@@ -83,7 +84,7 @@ impl Variable {
                 inferred
             }
         }
-        .into_value_type(temp_var.value_type, &mut symbols.types);
+        .into_value_type(temp_var.value_type, symbols);
 
         if temp_var.value_type == ValueType::Constant && !init_val.is_const(symbols) {
             config.submit_error(
@@ -130,11 +131,11 @@ impl Variable {
 
                 let init_type = init.type_inference(config, symbols);
 
-                if var_type.type_check(true, &init_type, &symbols.types) == false {
+                if var_type.type_check(true, &init_type, symbols) == false {
                     config.submit_error(
                         CompileError::IllegalUse(IllegalUseError::TypeMismatched {
-                            expected: symbols.types.get(var_type).format(&symbols.types),
-                            found: symbols.types.get(init_type).format(&symbols.types),
+                            expected: symbols.get_type(var_type).format(symbols),
+                            found: symbols.get_type(init_type).format(symbols),
                         }),
                         span,
                     );

@@ -16,7 +16,7 @@ fn configuration_uses_executable_siblings() {
     let root = std::env::temp_dir().join("mlc2-layout");
     let config = BackendConfig::from_executable(root.join("mlc.exe")).unwrap();
     assert_eq!(config.lib, root.join("lib"));
-    assert_eq!(config.tools, root.join("tools"));
+    assert_eq!(config.tools, root);
     assert!(BackendConfig::from_executable("mlc.exe".into()).is_err());
 }
 

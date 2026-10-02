@@ -1,4 +1,5 @@
 use super::*;
+use crate::ast::symbols::Resolution;
 use crate::ast::{
     function::{FuncBody, Interface},
     statement::Variable,
@@ -6,7 +7,7 @@ use crate::ast::{
 
 pub(super) fn parse(
     mut config: &mut Config,
-    mut symbols: &mut SymbolTable,
+    mut symbols: &mut dyn Resolution,
     pending: PendingBodies,
 ) -> Vec<Function> {
     let PendingBodies {
@@ -25,7 +26,7 @@ pub(super) fn parse(
             let name = temp_variable.name.clone();
             temp_variable.name = config.symbol_name(&name);
             let var = Variable::new(&mut config, temp_variable, &mut symbols, None);
-            symbols.globals.insert(name, (order, var));
+            symbols.local_mut().globals.insert(name, (order, var));
         });
 
     temp_funcs.into_iter().for_each(|(index, temp_body)| {
@@ -56,18 +57,20 @@ pub(super) fn parse(
     });
 
     let mut functions = symbols
+        .local()
         .function_instances
         .values()
         .cloned()
         .collect::<Vec<_>>();
-    functions.sort_by_key(|body| symbols.functions.get(body.symbol).name.clone());
+    functions.sort_by_key(|body| symbols.get_function_regular(body.symbol).name.clone());
     body.extend(functions.into_iter().map(Function::Func));
     let mut interfaces = symbols
+        .local()
         .interface_instances
         .values()
         .cloned()
         .collect::<Vec<_>>();
-    interfaces.sort_by_key(|body| symbols.interfaces.get(body.symbol).name.clone());
+    interfaces.sort_by_key(|body| symbols.get_interface_regular(body.symbol).name.clone());
     body.extend(interfaces.into_iter().map(Function::Interface));
 
     body

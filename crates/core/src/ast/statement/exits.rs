@@ -1,4 +1,5 @@
 use super::{ReturnStatement, Statement};
+use crate::ast::symbols::Resolution;
 use crate::ast::{
     config::Config,
     expression::Expression,
@@ -11,16 +12,16 @@ impl Statement {
     pub(super) fn create_return(
         config: &mut Config,
         value: Option<Spanned<TempExpr>>,
-        symbols: &mut SymbolTable,
+        symbols: &mut dyn Resolution,
         context: Option<&StatementContext>,
         span: Span,
     ) -> Self {
         let expected = match context.map(|context| context.belong()) {
             Some(EnumBool::False(index)) if !index.is_empty() => {
-                symbols.functions.get(*index).ret_type
+                symbols.get_function_regular(*index).ret_type
             }
             Some(EnumBool::True(index)) if !index.is_empty() => {
-                symbols.interfaces.get(*index).ret_type
+                symbols.get_interface_regular(*index).ret_type
             }
             _ => {
                 config.submit_error(
@@ -49,11 +50,11 @@ impl Statement {
                 let found = if found.is_empty() {
                     "void".into()
                 } else {
-                    found.format(&symbols.types)
+                    found.format(symbols)
                 };
                 config.submit_error(
                     CompileError::IllegalUse(IllegalUseError::TypeMismatched {
-                        expected: expected.format(&symbols.types),
+                        expected: expected.format(symbols),
                         found,
                     }),
                     value_span,

@@ -1,0 +1,37 @@
+# Target-independent C declarations. No object or source hashes are required.
+[Config]
+FormatVersion = 2
+ModuleName = "c_std::io"
+Object = "None"
+
+# int printf(const char *format, ...);
+[[Symbols.Functions]]
+visibility = "Export"
+name = "printf"
+name_span = { start = 0, end = 0, context = { "$none" = true } }
+generics = []
+attributes = ["c_abi"]
+return_type = [
+    { kind = "Path", data = { segments = [
+        "i32",
+    ] } },
+    { start = 0, end = 0, context = { "$none" = true } },
+]
+
+[[Symbols.Functions.params]]
+name = "format"
+name_span = { start = 0, end = 0, context = { "$none" = true } }
+ty = [
+    { kind = "Reference", data = { mutable = false, inner = [
+        { kind = "Path", data = { segments = [
+            "i8",
+        ] } },
+        { start = 0, end = 0, context = { "$none" = true } },
+    ] } },
+    { start = 0, end = 0, context = { "$none" = true } },
+]
+
+[[Symbols.Functions.params]]
+name = "..."
+name_span = { start = 0, end = 0, context = { "$none" = true } }
+ty = { "$none" = true }

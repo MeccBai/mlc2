@@ -1,3 +1,4 @@
+use crate::ast::symbols::Resolution;
 pub mod cosnt_fold;
 pub mod creator;
 pub mod operators;
@@ -94,7 +95,7 @@ impl ConstValue {
         }
     }
 
-    pub fn new(value: (TempLiteralKind, String), symbols: &SymbolTable) -> Self {
+    pub fn new(value: (TempLiteralKind, String), symbols: &dyn Resolution) -> Self {
         let (kind, text) = value;
 
         let ty = match kind {
@@ -164,7 +165,7 @@ impl CompAtom {
         }
     }
 
-    pub fn type_inference(&self, config: &mut Config, symbols: &mut SymbolTable) -> TypeIndex {
+    pub fn type_inference(&self, config: &mut Config, symbols: &mut dyn Resolution) -> TypeIndex {
         if config.is_poisoned() {
             return TypeIndex::empty();
         }
@@ -173,26 +174,24 @@ impl CompAtom {
             CompAtom::VarValueA(var) => var.var_type,
             CompAtom::CompositeA(composite) => composite.type_inference(config, symbols),
             CompAtom::FuncCallA(func_call) => func_call.type_inference(symbols),
-            CompAtom::ConstValueA(const_value) => {
-                const_value.ty.into(ValueType::Constant, &mut symbols.types)
-            }
+            CompAtom::ConstValueA(const_value) => const_value.ty.into(ValueType::Constant, symbols),
             CompAtom::UnaryExprA(unary) => unary.type_inference(config, symbols),
         }
     }
 
-    pub fn is_condition(&self, config: &mut Config, symbols: &mut SymbolTable) -> bool {
+    pub fn is_condition(&self, config: &mut Config, symbols: &mut dyn Resolution) -> bool {
         self.clone().to_expression().is_condition(config, symbols)
     }
 
-    pub fn is_left_value(&self, config: &mut Config, symbols: &mut SymbolTable) -> bool {
+    pub fn is_left_value(&self, config: &mut Config, symbols: &mut dyn Resolution) -> bool {
         match self {
-            CompAtom::VarValueA(var) => var.var_type.value_type(&symbols.types) == ValueType::Flex,
+            CompAtom::VarValueA(var) => var.var_type.value_type(symbols) == ValueType::Flex,
             CompAtom::UnaryExprA(unary) => unary.is_left_value(config, symbols),
             _ => false,
         }
     }
 
-    pub fn is_const(&self, symbols: &SymbolTable) -> bool {
+    pub fn is_const(&self, symbols: &dyn Resolution) -> bool {
         match self {
             CompAtom::ConstValueA(_) => true,
             CompAtom::CompositeA(composite) => composite
@@ -200,9 +199,7 @@ impl CompAtom {
                 .iter()
                 .all(|member| member.is_const(symbols)),
             CompAtom::FuncCallA(_) => false,
-            CompAtom::VarValueA(var) => {
-                var.var_type.value_type(&symbols.types) == ValueType::Constant
-            }
+            CompAtom::VarValueA(var) => var.var_type.value_type(symbols) == ValueType::Constant,
             CompAtom::UnaryExprA(unary) => unary.is_const(symbols),
             _ => false,
         }
@@ -214,7 +211,7 @@ impl Expression {
         matches!(self, Self::Poison)
     }
 
-    pub fn type_inference(&self, config: &mut Config, symbols: &mut SymbolTable) -> TypeIndex {
+    pub fn type_inference(&self, config: &mut Config, symbols: &mut dyn Resolution) -> TypeIndex {
         if config.is_poisoned() {
             return TypeIndex::empty();
         }
@@ -222,7 +219,7 @@ impl Expression {
             Expression::Poison => TypeIndex::empty(),
             Expression::VarValueE(var) => var.var_type,
             Expression::ConstValueE(const_value) => {
-                const_value.ty.into(ValueType::Constant, &mut symbols.types)
+                const_value.ty.into(ValueType::Constant, symbols)
             }
             Expression::UnaryExprE(unary) => unary.type_inference(config, symbols),
             Expression::InitListE(init_list) => match init_list {
@@ -236,14 +233,14 @@ impl Expression {
                     } else {
                         ValueType::Flex
                     };
-                    (*ty).into(value, &mut symbols.types)
+                    (*ty).into(value, symbols)
                 }
                 InitialList::String { value } => {
                     let string_type = symbols.get_base(DataType::Integer, 8, true);
                     let ty = List(ListType::new(string_type, value.len()));
-                    let name = ty.format(&symbols.types);
+                    let name = ty.format(symbols);
                     let ident = get_ident(&name);
-                    symbols.types.insert(ident, ty)
+                    symbols.local_mut().types.insert(ident, ty)
                 }
             },
             Expression::CompositeE(composite) => composite.type_inference(config, symbols),
@@ -262,27 +259,25 @@ impl Expression {
         &self,
         target: &TypeIndex,
         config: &mut Config,
-        symbols: &mut SymbolTable,
+        symbols: &mut dyn Resolution,
     ) -> bool {
         if config.is_poisoned() || self.is_poisoned() {
             return false;
         }
         match self {
             Expression::Poison => false,
-            Expression::VarValueE(var) => target.type_check(true, &var.var_type, &symbols.types),
+            Expression::VarValueE(var) => target.type_check(true, &var.var_type, symbols),
             Expression::ConstValueE(const_value) => {
-                target.type_check(true, &const_value.ty, &symbols.types)
+                target.type_check(true, &const_value.ty, symbols)
             }
-            Expression::UnaryExprE(unary) => {
-                unary
-                    .type_inference(config, symbols)
-                    .type_check(true, &target, &symbols.types)
-            }
+            Expression::UnaryExprE(unary) => unary
+                .type_inference(config, symbols)
+                .type_check(true, &target, symbols),
             Expression::InitListE(init_list) => match init_list {
                 InitialList::List { onwer, values } => match onwer {
                     Some(ty) => ty == target,
                     None => {
-                        let check_list_types = match symbols.types.get(target.clone()).unqualified()
+                        let check_list_types = match symbols.get_type(target.clone()).unqualified()
                         {
                             CompileType::Unit(unit) => {
                                 let members: Vec<_> = unit
@@ -303,7 +298,7 @@ impl Expression {
                                     ty.type_check(
                                         true,
                                         &value.type_inference(config, symbols),
-                                        &symbols.types,
+                                        symbols,
                                     )
                                 })
                             }
@@ -312,10 +307,10 @@ impl Expression {
                     }
                 },
                 InitialList::Array { ty, values } => {
-                    if !target.type_check(true, ty, &symbols.types) {
+                    if !target.type_check(true, ty, symbols) {
                         return false;
                     }
-                    let element_type = match symbols.types.get(*ty).unqualified() {
+                    let element_type = match symbols.get_type(*ty).unqualified() {
                         CompileType::List(list_type) => list_type.element_type,
                         _ => return false,
                     };
@@ -323,58 +318,53 @@ impl Expression {
                         element_type.type_check(
                             true,
                             &value.type_inference(config, symbols),
-                            &symbols.types,
+                            symbols,
                         )
                     })
                 }
                 InitialList::String { value } => {
                     let string_type = symbols.get_base(DataType::Integer, 8, true);
-                    let target = symbols.types.get(target.clone()).unqualified();
+                    let target = symbols.get_type(target.clone()).unqualified();
 
                     let list = match target {
                         CompileType::List(list_type) => list_type,
                         _ => return false,
                     };
 
-                    if list.length != value.len() {
+                    if list.length < value.len() {
                         return false;
                     }
 
-                    list.element_type
-                        .type_check(false, &string_type, &symbols.types)
+                    list.element_type.type_check(false, &string_type, symbols)
                 }
             },
             Expression::CompositeE(composite) => composite
                 .type_inference(config, symbols)
-                .type_check(false, &target, &symbols.types),
-            Expression::FuncCallE(func_call) => {
-                func_call
-                    .type_inference(symbols)
-                    .type_check(false, &target, &symbols.types)
-            }
+                .type_check(false, &target, symbols),
+            Expression::FuncCallE(func_call) => func_call
+                .type_inference(symbols)
+                .type_check(false, &target, symbols),
         }
     }
 
-    pub fn is_condition(&self, config: &mut Config, symbols: &mut SymbolTable) -> bool {
+    pub fn is_condition(&self, config: &mut Config, symbols: &mut dyn Resolution) -> bool {
         let ty = self.type_inference(config, symbols);
         if ty.is_empty() {
             return false;
         }
         let boolean = symbols.get_base(DataType::Boolean, 8, true);
-        ty.type_check(false, &boolean, &symbols.types)
+        ty.type_check(false, &boolean, symbols)
     }
 
-    pub fn assignable(&self, config: &mut Config, symbols: &mut SymbolTable) -> bool {
+    pub fn assignable(&self, config: &mut Config, symbols: &mut dyn Resolution) -> bool {
         match self {
-            Expression::VarValueE(var) => {
-                var.var_type.value_type(&symbols.types) == ValueType::Flex
-            }
+            Expression::VarValueE(var) => var.var_type.value_type(symbols) == ValueType::Flex,
             Expression::UnaryExprE(unary) => unary.is_left_value(config, symbols),
             _ => false,
         }
     }
 
-    pub fn is_const(&self, symbols: &SymbolTable) -> bool {
+    pub fn is_const(&self, symbols: &dyn Resolution) -> bool {
         match self {
             Expression::ConstValueE(_) => true,
             Expression::CompositeE(composite) => composite
@@ -382,9 +372,7 @@ impl Expression {
                 .iter()
                 .all(|member| member.is_const(symbols)),
             Expression::UnaryExprE(unary) => unary.is_const(symbols),
-            Expression::VarValueE(var) => {
-                var.var_type.value_type(&symbols.types) == ValueType::Constant
-            }
+            Expression::VarValueE(var) => var.var_type.value_type(symbols) == ValueType::Constant,
             Expression::InitListE(
                 InitialList::Array { values, .. } | InitialList::List { values, .. },
             ) => values.iter().all(|value| value.is_const(symbols)),
@@ -399,7 +387,7 @@ impl Expression {
 }
 
 impl Composite {
-    fn type_inference(&self, config: &mut Config, symbols: &mut SymbolTable) -> TypeIndex {
+    fn type_inference(&self, config: &mut Config, symbols: &mut dyn Resolution) -> TypeIndex {
         if self
             .operators
             .first()
@@ -415,24 +403,24 @@ impl Composite {
 }
 
 impl FuncCall {
-    fn type_inference(&self, symbols: &SymbolTable) -> TypeIndex {
+    fn type_inference(&self, symbols: &dyn Resolution) -> TypeIndex {
         match self.func {
-            EnumBool::True(index) => symbols.interfaces.get(index).ret_type,
-            EnumBool::False(index) => symbols.functions.get(index).ret_type,
+            EnumBool::True(index) => symbols.get_interface_regular(index).ret_type,
+            EnumBool::False(index) => symbols.get_function_regular(index).ret_type,
         }
         .unwrap_or(TypeIndex::empty())
     }
 }
 
 impl UnaryExpr {
-    fn type_inference(&self, config: &mut Config, symbols: &mut SymbolTable) -> TypeIndex {
+    fn type_inference(&self, config: &mut Config, symbols: &mut dyn Resolution) -> TypeIndex {
         match self {
             Self::Operator { op, value } => {
                 let value_type = value.type_inference(config, symbols);
                 match op {
-                    Operator::AddressOf => value_type.make_ref(&mut symbols.types, false),
-                    Operator::MutOf => value_type.make_ref(&mut symbols.types, true),
-                    Operator::Dereference => value_type.deref(&mut symbols.types).unwrap(),
+                    Operator::AddressOf => value_type.make_ref(symbols, false),
+                    Operator::MutOf => value_type.make_ref(symbols, true),
+                    Operator::Dereference => value_type.deref(symbols).unwrap(),
                     _ => value_type,
                 }
             }
@@ -440,21 +428,21 @@ impl UnaryExpr {
         }
     }
 
-    fn is_left_value(&self, config: &mut Config, symbols: &mut SymbolTable) -> bool {
+    fn is_left_value(&self, config: &mut Config, symbols: &mut dyn Resolution) -> bool {
         match self {
             Self::Operator {
                 op: Operator::Dereference,
                 value,
             } => {
                 let ty = value.type_inference(config, symbols);
-                matches!(symbols.types.get(ty).unqualified(), CompileType::Ref(reference) if reference.mut_base)
+                matches!(symbols.get_type(ty).unqualified(), CompileType::Ref(reference) if reference.mut_base)
             }
             Self::Access(access) => access.is_left_value(config, symbols),
             _ => false,
         }
     }
 
-    fn is_const(&self, symbols: &SymbolTable) -> bool {
+    fn is_const(&self, symbols: &dyn Resolution) -> bool {
         match self {
             Self::Operator { value, .. } => value.is_const(symbols),
             Self::Access(access) => access.is_const(symbols),
@@ -463,7 +451,7 @@ impl UnaryExpr {
 }
 
 impl Access {
-    fn type_inference(&self, config: &mut Config, symbols: &mut SymbolTable) -> TypeIndex {
+    fn type_inference(&self, config: &mut Config, symbols: &mut dyn Resolution) -> TypeIndex {
         match self {
             Self::Member {
                 base,
@@ -471,39 +459,37 @@ impl Access {
                 name,
             } => {
                 let mut base_type = base.type_inference(config, symbols);
-                if *indirect && base_type.is_ref(&symbols.types) {
-                    base_type = base_type
-                        .deref(&mut symbols.types)
-                        .unwrap_or(TypeIndex::empty());
+                if *indirect && base_type.is_ref(symbols) {
+                    base_type = base_type.deref(symbols).unwrap_or(TypeIndex::empty());
                 }
-                let value = base_type.value_type(&symbols.types);
-                let member = match symbols.types.get(base_type).unqualified() {
+                let value = base_type.value_type(symbols);
+                let member = match symbols.get_type(base_type).unqualified() {
                     CompileType::Unit(unit) => unit
                         .get_member(name)
                         .map_or(TypeIndex::empty(), |member| member.member_type),
                     _ => TypeIndex::empty(),
                 };
-                member.into(value, &mut symbols.types)
+                member.into(value, symbols)
             }
             Self::Index { base, .. } => {
                 let base_type = base.type_inference(config, symbols);
-                let value = base_type.value_type(&symbols.types);
-                let element = match symbols.types.get(base_type).unqualified() {
+                let value = base_type.value_type(symbols);
+                let element = match symbols.get_type(base_type).unqualified() {
                     CompileType::List(list) => list.element_type(),
                     _ => TypeIndex::empty(),
                 };
-                element.into(value, &mut symbols.types)
+                element.into(value, symbols)
             }
         }
     }
 
-    fn is_left_value(&self, config: &mut Config, symbols: &mut SymbolTable) -> bool {
+    fn is_left_value(&self, config: &mut Config, symbols: &mut dyn Resolution) -> bool {
         match self {
             Self::Member { base, indirect, .. } => {
                 if *indirect {
                     let ty = base.type_inference(config, symbols);
                     matches!(
-                        symbols.types.get(ty).unqualified(),
+                        symbols.get_type(ty).unqualified(),
                         CompileType::Ref(reference) if reference.mut_base
                     )
                 } else {
@@ -514,7 +500,7 @@ impl Access {
         }
     }
 
-    fn is_const(&self, symbols: &SymbolTable) -> bool {
+    fn is_const(&self, symbols: &dyn Resolution) -> bool {
         match self {
             Self::Member { base, .. } => base.is_const(symbols),
             Self::Index { base, index } => base.is_const(symbols) && index.is_const(symbols),

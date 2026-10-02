@@ -3,6 +3,7 @@ use crate::ast::arena::FuncIndex;
 use crate::ast::config::Config;
 use crate::ast::expression::Expression;
 use crate::ast::statement::ReturnStatement;
+use crate::ast::symbols::Resolution;
 use crate::ast::symbols::{EnumBool, StatementContext, SymbolTable};
 use crate::diagnostic::error::CompileError;
 use crate::diagnostic::error::IllegalUseError;
@@ -12,7 +13,7 @@ impl Statement {
     pub fn new(
         config: &mut Config,
         prototype: Spanned<TempStmt>,
-        symbols: &mut SymbolTable,
+        symbols: &mut dyn Resolution,
         context: Option<&mut StatementContext>,
     ) -> Self {
         if config.is_poisoned() {
@@ -29,7 +30,7 @@ impl Statement {
     pub(crate) fn parse_scope(
         config: &mut Config,
         scope: crate::parser::Scope,
-        symbols: &mut SymbolTable,
+        symbols: &mut dyn Resolution,
         context: &mut StatementContext,
     ) -> Vec<Self> {
         let mut statements = Vec::new();
@@ -45,7 +46,7 @@ impl Statement {
     fn create(
         config: &mut Config,
         prototype: Spanned<TempStmt>,
-        symbols: &mut SymbolTable,
+        symbols: &mut dyn Resolution,
         mut context: Option<&mut StatementContext>,
     ) -> Self {
         let (stmt, span) = prototype;

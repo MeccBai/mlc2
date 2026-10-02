@@ -6,3 +6,6 @@ edition.workspace = true
 [dependencies]
 logos.workspace = true
 chumsky.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+toml.workspace = true

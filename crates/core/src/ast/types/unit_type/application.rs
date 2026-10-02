@@ -1,3 +1,4 @@
+use crate::ast::symbols::Resolution;
 use std::collections::HashMap;
 
 use super::UnitType;
@@ -20,17 +21,17 @@ impl UnitType {
     pub fn pending_application(
         template: UnitIndex,
         arguments: Vec<TypeIndex>,
-        symbols: &mut SymbolTable,
+        symbols: &mut dyn Resolution,
     ) -> TypeIndex {
-        let source = symbols.generics.units.get(template);
+        let source = symbols.get_generic_unit(template);
         let name = SymbolName::generic_instance(
             &source.name,
             &arguments
                 .iter()
-                .map(|ty| ty.format(&symbols.types))
+                .map(|ty| ty.format(symbols))
                 .collect::<Vec<_>>(),
         );
-        if let Some(index) = symbols.types.get_by_name(&name) {
+        if let Some(index) = symbols.local().types.get_by_name(&name) {
             return index;
         }
         let mut unit = UnitType::empty();
@@ -42,7 +43,10 @@ impl UnitType {
             template_name: source.name.clone(),
             arguments,
         });
-        symbols.types.insert(name, CompileType::Unit(unit))
+        symbols
+            .local_mut()
+            .types
+            .insert(name, CompileType::Unit(unit))
     }
 }
 
@@ -51,7 +55,7 @@ impl UnitApplication {
         self,
         config: &mut Config,
         params: &HashMap<GenericIndex, TypeIndex>,
-        symbols: &mut SymbolTable,
+        symbols: &mut dyn Resolution,
         actives: Option<&InstantiationActives>,
         span: Span,
     ) -> Option<TypeIndex> {
@@ -60,14 +64,14 @@ impl UnitApplication {
             .into_iter()
             .map(|ty| ty.instantiation(config, params, symbols, actives, span))
             .collect::<Option<Vec<_>>>()?;
-        if arguments.iter().any(|ty| ty.is_generic(&symbols.types)) {
+        if arguments.iter().any(|ty| ty.is_generic(symbols)) {
             return Some(UnitType::pending_application(
                 self.template,
                 arguments,
                 symbols,
             ));
         }
-        let unit = symbols.generics.units.get(self.template).clone();
+        let unit = symbols.get_generic_unit(self.template).clone();
         // Retain outer bindings alongside this Unit's own parameter bindings.
         let mut merged = params.clone();
         for (name, ty) in unit.generics.iter().zip(arguments) {
