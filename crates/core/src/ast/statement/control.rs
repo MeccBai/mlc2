@@ -58,7 +58,12 @@ fn same_type(
 ) -> bool {
     let expected = expected.into_value_type(ValueType::Flex, symbols);
     let found = found.into_value_type(ValueType::Flex, symbols);
-    if !expected.is_empty() && expected == found {
+    // Qualifier conversion can intern an imported type in the current arena.
+    // Equal checked types need not have the same arena/index identity.
+    if !expected.is_empty()
+        && !found.is_empty()
+        && (expected == found || symbols.get_type(expected) == symbols.get_type(found))
+    {
         return true;
     }
     let format = |ty: TypeIndex| {
@@ -181,7 +186,14 @@ impl Statement {
                     if !same_type(config, ty, branch_ty, symbols, span) {
                         return Self::Poison;
                     }
-                    MatchPattern::Value(pattern)
+                    if !pattern.is_const(symbols) {
+                        config.submit_error(
+                            CompileError::IllegalUse(IllegalUseError::NonConstantMatchCase),
+                            span,
+                        );
+                        return Self::Poison;
+                    }
+                    MatchPattern::Value(pattern.const_fold(config, symbols))
                 }
             };
             let body = Self::parse_scope(
@@ -236,6 +248,8 @@ impl Statement {
         }
         let var_type = start_ty.into_value_type(ValueType::Flex, symbols);
         let variable = Rc::new(Variable {
+            read_count: Default::default(),
+            declaration_span: (0..0).into(),
             name: binding.0,
             var_type,
             init_val: Box::new(start),

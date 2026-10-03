@@ -44,7 +44,10 @@ impl Project {
     fn build(&self, calls: Arc<AtomicUsize>) -> BuildReport {
         build(self.plan(), self.options(), move |_| {
             calls.fetch_add(1, Ordering::SeqCst);
-            Ok(CompileOutput { ir: None })
+            Ok(CompileOutput {
+                ir: None,
+                global_init: None,
+            })
         })
         .unwrap()
     }
@@ -123,7 +126,13 @@ fn compiler_options_invalidate_cache() {
     project.build(count());
     let mut options = project.options();
     options.compiler_options.push("optimize".into());
-    let report = build(project.plan(), options, |_| Ok(CompileOutput { ir: None })).unwrap();
+    let report = build(project.plan(), options, |_| {
+        Ok(CompileOutput {
+            ir: None,
+            global_init: None,
+        })
+    })
+    .unwrap();
     assert_eq!(built(&report), 1);
 }
 
@@ -150,7 +159,10 @@ fn result_failure_blocks_dependants_but_not_independent_tasks() {
         if request.target.module_name == "bad" {
             Err("intentional semantic failure".into())
         } else {
-            Ok(CompileOutput { ir: None })
+            Ok(CompileOutput {
+                ir: None,
+                global_init: None,
+            })
         }
     })
     .unwrap();
@@ -184,6 +196,7 @@ fn llvm_emits_object_cache_detects_corruption_and_link_key_tracks_body() {
         };
         let value = if text.contains("return 2") { 2 } else { 1 };
         Ok(CompileOutput {
+            global_init: None,
             ir: Some(format!("define i32 @main() {{ ret i32 {value} }}")),
         })
     };
@@ -251,7 +264,7 @@ fn local_declaration_wins_over_system_source() {
         .artifact()
         .unwrap()
         .clone();
-    fs::copy(&artifact.path, project.root.path().join("leaf.toml")).unwrap();
+    fs::copy(&artifact.path, project.root.path().join("leaf.sym")).unwrap();
     project.write("lib/leaf.m2", "func system() {}");
     let resolver = ImportResolver {
         lib_dirs: vec![project.root.path().join("lib")],
@@ -261,12 +274,7 @@ fn local_declaration_wins_over_system_source() {
         resolver
             .resolve(&project.root.path().join("main.m2"), &import)
             .unwrap(),
-        project
-            .root
-            .path()
-            .join("leaf.toml")
-            .canonicalize()
-            .unwrap()
+        project.root.path().join("leaf.sym").canonicalize().unwrap()
     );
 }
 

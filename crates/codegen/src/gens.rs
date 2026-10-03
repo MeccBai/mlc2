@@ -6,7 +6,6 @@ use crate::ast::function::{FuncSymbol, InterfaceSymbol};
 use crate::ast::symbols;
 use crate::ast::{Function, GlobalStatement, symbols::PackageSymbolTable, types::UnitType};
 
-pub mod ast;
 pub mod func;
 pub mod value;
 pub use value::LlvmValue;

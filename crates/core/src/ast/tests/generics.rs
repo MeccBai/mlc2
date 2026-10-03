@@ -46,7 +46,7 @@ valid_case!(
 );
 valid_case!(
     generic_control_flow,
-    "func<T> run(value:T) { if (value == value) { for i in [0,2] { match (value) { value => { var copy:T = value; }, _ => {} } } } } func main() { run<i32>(1); }"
+    "func<T> run(value:T) { if (value == value) { for i in [0,2] { match (value) { cast<T>(1) => { var copy:T = value; }, _ => {} } } } } func main() { run<i32>(1); }"
 );
 
 semantic_case!(unknown_generic_constraint, "func<T:Missing> wrong(a:T) {}");

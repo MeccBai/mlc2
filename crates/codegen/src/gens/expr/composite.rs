@@ -172,14 +172,17 @@ impl Expander<'_> {
             let CompileType::Ref(reference) = self.symbols.get_type(source).unqualified() else {
                 fail("Checked expression has inconsistent lowering types");
             };
-            if reference.level != 1 {
-                unsupported("multi-level reference dereference");
-            }
             let base = reference.base;
             self.load(&mut operand.value);
-            operand.value.ty = IrGenerator::type_lowering(base, self.symbols);
+            operand.value.ty = if reference.deref_reference().is_some() {
+                LlvmType::Ptr
+            } else if reference.level == 1 {
+                IrGenerator::type_lowering(base, self.symbols)
+            } else {
+                fail("Checked reference has zero indirection levels");
+            };
             operand.value.in_reg = false;
-            operand.signed = self.signed(base);
+            operand.signed = reference.level == 1 && self.signed(base);
             return operand;
         }
         if matches!(op, AstOp::AddressOf | AstOp::MutOf) {

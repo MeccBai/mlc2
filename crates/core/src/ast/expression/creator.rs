@@ -1,4 +1,5 @@
 use crate::ast::symbols::Resolution;
+mod builtins;
 mod calls;
 mod function_args;
 mod generic_call;
@@ -75,14 +76,26 @@ impl Expression {
                 },
             },
             Path(path) => {
-                use crate::ast::symbols::PathSymbol;
-                let error = match symbols.resolve_path(config, &path, context) {
-                    Some(PathSymbol::Variable(variable)) => return Self::VarValueE(variable),
-                    Some(PathSymbol::EnumValue(value)) => {
-                        return Self::ConstValueE(ConstValue {
+                if path.segments.len() > 1 {
+                    return match symbols.enum_value(config, &path) {
+                        Ok(value) => Self::ConstValueE(ConstValue {
                             value: value.value.to_string(),
                             ty: value.enum_type,
-                        });
+                        }),
+                        Err(error) => {
+                            config.submit_error(CompileError::Resolve(error), span);
+                            Self::Poison
+                        }
+                    };
+                }
+                use crate::ast::symbols::PathSymbol;
+                let error = match symbols.resolve_path(config, &path, context) {
+                    Some(PathSymbol::Variable(variable)) => {
+                        variable.read_count.set(variable.read_count.get() + 1);
+                        return Self::VarValueE(variable);
+                    }
+                    Some(PathSymbol::EnumValue(_)) => {
+                        CompileError::IllegalUse(IllegalUseError::EnumValueRequiresPrefix)
                     }
                     Some(PathSymbol::GenericParameter(_)) => {
                         CompileError::IllegalUse(IllegalUseError::TypeUsedAsValue)

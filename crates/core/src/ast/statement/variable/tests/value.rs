@@ -27,6 +27,8 @@ fn const_requires_constant_initializer() {
         (
             0,
             Rc::new(Variable {
+                read_count: Default::default(),
+                declaration_span: (0..0).into(),
                 name: "runtime".into(),
                 var_type: i32_type,
                 init_val: Box::new(Expression::null()),

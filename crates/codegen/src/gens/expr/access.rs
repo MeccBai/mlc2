@@ -53,7 +53,17 @@ impl Expander<'_> {
                 op: Operator::Dereference,
                 value,
             } => match self.symbols.get_type(self.atom_type(value)?).unqualified() {
-                CompileType::Ref(reference) => Some(reference.base),
+                CompileType::Ref(reference) => match reference.deref_reference() {
+                    Some(remaining) => {
+                        let name = remaining.format(self.symbols);
+                        self.symbols
+                            .arenas()
+                            .iter()
+                            .find_map(|(_, file)| file.types.get_by_name(&name))
+                    }
+                    None if reference.level == 1 => Some(reference.base),
+                    None => None,
+                },
                 _ => None,
             },
             UnaryExpr::Operator {

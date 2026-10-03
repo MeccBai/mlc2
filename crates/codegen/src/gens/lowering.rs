@@ -4,8 +4,8 @@ use crate::{
         symbols::PackageSymbolTable,
         types::{
             BaseType,
-            CompileType::{Base, List, Ref, Unit},
-            ListType, UnitType,
+            CompileType::{Base, Enum, List, Ref, Unit},
+            EnumType, ListType, UnitType,
             base_type::DataType,
         },
     },
@@ -45,14 +45,21 @@ impl IrGenerator {
         LlvmType::Named(format!("struct.{}", unit.name))
     }
 
+    /// Current enums are ordinal-only; keep their representation policy here.
+    /// This agrees with EnumType's four-byte size and alignment.
+    pub fn enum_lowering(_enumeration: &EnumType) -> LlvmType {
+        LlvmType::Int(32)
+    }
+
     pub fn type_lowering(index: TypeIndex, symbols: &PackageSymbolTable) -> LlvmType {
         let ty = symbols.get_type(index);
         match ty.unqualified() {
             Base(base) => Self::base_lowering(base),
+            Enum(enumeration) => Self::enum_lowering(enumeration),
             Ref(ref_ty) => LlvmType::Ptr,
             List(list) => Self::list_lowering(list, symbols),
             Unit(unit) => Self::unit_lowering(unit, symbols),
-            _ => fail("Generic type cannot to be lowering!"),
+            _ => fail("Generic type cannot be lowered."),
         }
     }
 }

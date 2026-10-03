@@ -4,7 +4,7 @@ mod error;
 mod link;
 mod target;
 
-use crate::manifest::{EXE_SUFFIX, LLD_COFF, LLD_ELF};
+use crate::manifest;
 pub use config::BackendConfig;
 pub use error::{BackendError, DiagnosticLine, DiagnosticSeverity, LinkDiagnostic};
 use llvm_sys::target_machine::*;
@@ -66,12 +66,13 @@ impl IrCompiler {
 
     /// Arguments include objects, output path, SDK libraries and any linker script.
     pub fn link(&self, arguments: &[OsString]) -> Result<LinkDiagnostic, BackendError> {
-        let windows = self.triplet.to_bytes().windows(7).any(|s| s == b"windows");
-        let program = self.config.tools.join(format!(
-            "{}{}",
-            if windows { LLD_COFF } else { LLD_ELF },
-            EXE_SUFFIX
-        ));
+        let windows = self
+            .triplet
+            .to_bytes()
+            .windows(12)
+            .any(|s| s == b"windows-msvc");
+        let program = manifest::lld_path(&self.config.executable, windows)
+            .ok_or_else(|| BackendError::Config("executable has no parent directory".into()))?;
         let mut args = vec![if windows {
             OsString::from(format!("/libpath:{}", self.config.lib.display()))
         } else {

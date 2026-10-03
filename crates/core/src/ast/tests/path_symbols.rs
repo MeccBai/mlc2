@@ -19,7 +19,7 @@ fn callable_paths_as_values_are_recognized_but_not_supported() {
     );
     error_contains(
         "unit A {}; A::func item() {} func main() { var x = A::item; }",
-        "UnsupportedSymbolValue",
+        "NotAnEnum",
     );
 }
 
@@ -83,11 +83,47 @@ fn enum_values_preserve_type_and_ordinal_and_precede_globals() {
 fn invalid_enum_variants_and_enum_calls_are_rejected() {
     error_contains(
         "enum State { Ready, }; func main() { var x = State::Missing; }",
-        "UnknownVariable",
+        "UnknownEnumVariant",
     );
     error_contains(
         "enum State { Ready, }; func main() { State::Ready(); }",
         "SymbolNotCallable",
+    );
+}
+
+#[test]
+fn enum_alias_values_require_an_explicit_prefix() {
+    error_contains(
+        "enum Color { Red }; using red = Color::Red; func main() { var c = red; }",
+        "EnumValueRequiresPrefix",
+    );
+    valid("enum Color { Red }; func main() { var c = Color::Red; }");
+}
+
+#[test]
+fn enum_lookup_errors_preserve_names_and_full_path_spans() {
+    use crate::diagnostic::error::ResolveError;
+    assert_error(
+        "enum Color { Red }; func main() { var c = Color::Nope; }",
+        "Color::Nope",
+        CompileError::Resolve(ResolveError::UnknownEnumVariant {
+            owner: "Color".into(),
+            variant: "Nope".into(),
+        }),
+    );
+    assert_error(
+        "func main() { var c = Missing::Red; }",
+        "Missing::Red",
+        CompileError::Resolve(ResolveError::UnknownEnum {
+            name: "Missing".into(),
+        }),
+    );
+    assert_error(
+        "unit Point { pub x:i32; }; func main() { var c = Point::Red; }",
+        "Point::Red",
+        CompileError::Resolve(ResolveError::NotAnEnum {
+            name: "Point".into(),
+        }),
     );
 }
 

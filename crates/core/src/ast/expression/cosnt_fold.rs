@@ -36,7 +36,57 @@ impl Expression {
                     .into_iter()
                     .map(|a| a.const_fold(config, symbols))
                     .collect();
+                if let crate::ast::symbols::EnumBool::False(index) = call.func {
+                    let symbol = symbols.get_function_regular(index);
+                    if symbol.builtin() == Some(crate::ast::builtins::Builtin::Cast) {
+                        if let (Some(target), Some(Self::ConstValueE(input))) =
+                            (symbol.ret_type, call.args.first())
+                        {
+                            if let CompileType::Base(ty) = symbols.get_type(target).unqualified() {
+                                if ty.data_type() == DataType::Integer {
+                                    if let Ok(value) = input.value.parse::<i128>() {
+                                        let bits = ty.bits();
+                                        let modulus = 1i128 << bits;
+                                        let mut converted = value & (modulus - 1);
+                                        if ty.signed() && converted >= (1i128 << (bits - 1)) {
+                                            converted -= modulus;
+                                        }
+                                        return Self::ConstValueE(ConstValue {
+                                            value: converted.to_string(),
+                                            ty: target,
+                                        });
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
                 Self::FuncCallE(call)
+            }
+            Self::UnaryExprE(UnaryExpr::Operator {
+                op: Operator::Negate,
+                value,
+            }) => {
+                let value = fold_atom(*value, config, symbols);
+                if let CompAtom::ConstValueA(constant) = &value {
+                    if constant.ty.is_integer(symbols) {
+                        if let Some(negated) = constant
+                            .value
+                            .parse::<i128>()
+                            .ok()
+                            .and_then(i128::checked_neg)
+                        {
+                            return Self::ConstValueE(ConstValue {
+                                value: negated.to_string(),
+                                ty: constant.ty,
+                            });
+                        }
+                    }
+                }
+                Self::UnaryExprE(UnaryExpr::Operator {
+                    op: Operator::Negate,
+                    value: Box::new(value),
+                })
             }
             Self::UnaryExprE(unary) => Self::UnaryExprE(match unary {
                 UnaryExpr::Operator { op, value } => UnaryExpr::Operator {

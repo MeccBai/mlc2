@@ -32,7 +32,7 @@ pub enum TokenPack {
 impl fmt::Display for TokenPack {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::KeyWord(token) | Self::Operator(token) => write!(f, "{token:?}"),
+            Self::KeyWord(token) | Self::Operator(token) => write!(f, "{token}"),
             Self::Ident(ident) => write!(f, "{ident}"),
             Self::Data { text, .. } => write!(f, "{text}"),
         }
@@ -43,6 +43,12 @@ impl fmt::Display for TokenPack {
 pub struct TokenError {
     pub span: Range<usize>,
     pub context: String,
+}
+
+impl TokenError {
+    pub fn message(&self) -> String {
+        format!("Unrecognized token `{}`", self.context.escape_debug())
+    }
 }
 
 pub fn tokenize(source: &str) -> Result<Lexed, TokenError> {
@@ -82,6 +88,24 @@ pub fn tokenize(source: &str) -> Result<Lexed, TokenError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn windows_line_endings_preserve_original_offsets() {
+        let source = "func main() {\r\n    // comment\r\n    var text = \"hello\";\r\n}\r\n";
+        let lexed = tokenize(source).unwrap();
+        let variable = lexed
+            .tokens
+            .iter()
+            .find(|(token, _)| matches!(token, TokenPack::KeyWord(Token::Variable)))
+            .unwrap();
+        assert_eq!(variable.1.start, source.find("var").unwrap());
+        assert_eq!(&source[variable.1.into_range()], "var");
+        let (module, errors) = crate::parser::parse(&lexed.tokens, source.len());
+        assert!(errors.is_empty(), "{errors:?}");
+        assert!(module.is_some());
+        assert_eq!(lexed.comments.len(), 1);
+        assert_eq!(lexed.comments[0].text, "// comment");
+    }
 
     #[test]
     fn retains_comment_text_and_source_span_outside_the_parser_stream() {

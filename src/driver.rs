@@ -12,11 +12,30 @@ use std::{collections::HashMap, path::Path};
 
 pub fn run(cli: Cli) -> Result<(), String> {
     let root = std::env::current_dir().map_err(|e| e.to_string())?;
-    let global = match &cli.config {
-        Some(path) => GlobalConfig::load(path)?,
-        None => GlobalConfig::load_default()?,
-    };
     let targets = match &cli.command {
+        Some(Commands::Symbols { input }) => {
+            if cli.entry.is_some() {
+                return Err("Do not combine symbols with an entry file".into());
+            }
+            let output = cli
+                .output
+                .clone()
+                .unwrap_or_else(|| input.with_extension("sym"));
+            mlc_builder::artifacts::convert_toml(input, &output)?;
+            println!("Written {}", output.display());
+            return Ok(());
+        }
+        Some(Commands::Example { name }) => {
+            if cli.entry.is_some() {
+                return Err("Do not combine example with an entry file".into());
+            }
+            let output = mlc_examples::render(name)?;
+            use std::io::Write;
+            return std::io::stdout()
+                .lock()
+                .write_all(output.as_bytes())
+                .map_err(|error| error.to_string());
+        }
         Some(Commands::Build { target }) => {
             if cli.entry.is_some() {
                 return Err("Do not combine build with an entry file".into());
@@ -43,6 +62,10 @@ pub fn run(cli: Cli) -> Result<(), String> {
             None,
             TargetKind::Bin,
         )],
+    };
+    let global = match &cli.config {
+        Some(path) => GlobalConfig::load(path)?,
+        None => GlobalConfig::load_default()?,
     };
     for (entry, name, kind) in targets {
         build(
@@ -114,6 +137,7 @@ fn build(
     let generated = frontend::generate(&plan, &paths.triplet, kind)?;
     let fingerprint = mlc_builder::artifacts::semantic_hash(&generated.modules)?;
     let modules: HashMap<_, _> = generated.modules.into_iter().collect();
+    let global_inits: HashMap<_, _> = generated.global_inits.into_iter().collect();
     let options = BuildOptions {
         output: paths.output.clone(),
         target: paths.triplet.clone(),
@@ -131,6 +155,7 @@ fn build(
     }
     let report = schedule::build(plan, options, move |request| {
         Ok(CompileOutput {
+            global_init: global_inits.get(&request.target.id.0).cloned(),
             ir: Some(
                 modules
                     .get(&request.target.id.0)

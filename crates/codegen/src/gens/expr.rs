@@ -12,6 +12,7 @@ use crate::ast::{
 use std::collections::HashMap;
 
 mod access;
+mod builtins;
 mod calls;
 mod composite;
 mod init;

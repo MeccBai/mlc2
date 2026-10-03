@@ -28,6 +28,8 @@ fn address_of_preserves_mutability_in_type_identity() {
         (
             0,
             Rc::new(Variable {
+                read_count: Default::default(),
+                declaration_span: (0..0).into(),
                 name: "a".into(),
                 var_type: base_type,
                 init_val: Box::new(Expression::null()),
@@ -116,6 +118,8 @@ fn val_can_only_produce_immutable_reference() {
         (
             0,
             Rc::new(Variable {
+                read_count: Default::default(),
+                declaration_span: (0..0).into(),
                 name: "fixed".into(),
                 var_type: final_type,
                 init_val: Box::new(Expression::null()),
@@ -176,6 +180,8 @@ fn final_binding_does_not_freeze_mutable_reference_target() {
         (
             0,
             Rc::new(Variable {
+                read_count: Default::default(),
+                declaration_span: (0..0).into(),
                 name: "reference".into(),
                 var_type: reference,
                 init_val: Box::new(Expression::null()),

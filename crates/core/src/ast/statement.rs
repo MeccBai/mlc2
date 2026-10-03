@@ -4,10 +4,14 @@ use std::rc::Rc;
 mod control;
 pub mod creator;
 mod exits;
+mod usage;
 pub mod variable;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Variable {
+    /// Source references, excluding scope bookkeeping and constant folding.
+    pub read_count: std::cell::Cell<usize>,
+    pub declaration_span: crate::parser::out::Span,
     pub name: String,
     pub var_type: TypeIndex,
     pub init_val: Box<Expression>,

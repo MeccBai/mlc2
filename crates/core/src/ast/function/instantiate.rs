@@ -166,6 +166,9 @@ impl FuncIndex {
         symbol.generics.clear();
         symbol.generic_map.clear();
         let index = symbols.local_mut().functions.insert(name.clone(), symbol);
+        if symbols.get_function_regular(index).builtin().is_some() {
+            return index;
+        }
         actives
             .borrow_mut()
             .insert(key.clone(), InstanceIndex::Function(index));

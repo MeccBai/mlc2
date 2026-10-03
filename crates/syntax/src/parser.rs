@@ -1,3 +1,4 @@
+pub mod diagnostic;
 mod expr;
 mod func;
 mod generic;

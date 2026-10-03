@@ -1,4 +1,5 @@
 use super::*;
+mod binary;
 mod modes;
 
 fn parse(source: &str) -> TempModule {

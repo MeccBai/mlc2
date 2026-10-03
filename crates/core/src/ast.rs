@@ -1,5 +1,6 @@
 pub mod arena;
 pub mod attribute;
+pub mod builtins;
 pub mod config;
 pub mod expression;
 pub mod function;

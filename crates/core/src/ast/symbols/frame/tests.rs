@@ -6,6 +6,8 @@ use crate::diagnostic::warning::WarningHandle;
 
 fn variable(name: &str) -> Rc<Variable> {
     Rc::new(Variable {
+        read_count: Default::default(),
+        declaration_span: (0..0).into(),
         name: name.into(),
         var_type: TypeIndex::empty(),
         init_val: Box::new(Expression::null()),

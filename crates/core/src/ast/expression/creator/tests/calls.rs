@@ -92,6 +92,8 @@ fn member_call_resolves_interface_and_prepends_owner() {
         (
             0,
             Rc::new(Variable {
+                read_count: Default::default(),
+                declaration_span: (0..0).into(),
                 name: "point".into(),
                 var_type: point_type,
                 init_val: Box::new(Expression::null()),

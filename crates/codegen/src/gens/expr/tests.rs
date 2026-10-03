@@ -98,6 +98,8 @@ fn grouping_and_unsigned_operations() {
 fn variable_binding_is_loaded_without_replaying_initialization() {
     let (package, ty) = setup(true);
     let variable = std::rc::Rc::new(crate::ast::statement::Variable {
+        read_count: Default::default(),
+        declaration_span: (0..0).into(),
         name: "a".into(),
         var_type: ty,
         init_val: Box::new(Expression::Poison),

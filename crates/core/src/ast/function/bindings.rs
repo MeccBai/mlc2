@@ -143,6 +143,8 @@ pub(super) fn context(
         context.insert_self(
             config,
             Rc::new(Variable {
+                read_count: Default::default(),
+                declaration_span: (0..0).into(),
                 name: "self".into(),
                 var_type: ty,
                 init_val: Box::new(Expression::null()),
@@ -164,6 +166,8 @@ pub(super) fn context(
         context.insert_parameter(
             config,
             Rc::new(Variable {
+                read_count: Default::default(),
+                declaration_span: (0..0).into(),
                 name: name.clone(),
                 var_type: *ty,
                 init_val: Box::new(Expression::null()),

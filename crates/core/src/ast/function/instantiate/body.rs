@@ -44,7 +44,9 @@ fn build_body(
     context.set_instantiation_actives(actives.clone());
     // Each statement is built once, with concrete parameter variables and the
     // newly registered symbol as its owner. No post-build substitution pass.
-    Statement::parse_scope(config, scope, symbols, &mut context)
+    let body = Statement::parse_scope(config, scope, symbols, &mut context);
+    Statement::warn_unused(&body, config);
+    body
 }
 
 impl FuncBody {

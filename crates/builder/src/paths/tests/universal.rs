@@ -24,7 +24,9 @@ fn fixture() -> (tempfile::TempDir, PathResolver, PathBuf) {
     fs::write(&entry, "import c_std::io; func main() {}").unwrap();
     let universal = root.path().join("lib/universal/c_std");
     fs::create_dir_all(&universal).unwrap();
-    fs::write(universal.join("io.toml"), IO).unwrap();
+    let input = universal.join("io.toml");
+    fs::write(&input, IO).unwrap();
+    artifacts::convert_toml(&input, &universal.join("io.sym")).unwrap();
     (root, paths, entry)
 }
 
@@ -83,8 +85,10 @@ fn all_target_directories_precede_universal_fallback() {
 #[test]
 fn universal_rejects_non_declaration_artifacts_and_ignores_sources() {
     let (root, paths, entry) = fixture();
-    let file = root.path().join("lib/universal/c_std/io.toml");
-    fs::write(&file, IO.replace("Object = \"None\"", "Object = \"Only\"")).unwrap();
+    let file = root.path().join("lib/universal/c_std/io.sym");
+    let mut manifest = artifacts::load(&file).unwrap().manifest;
+    manifest.config.object = ObjectMode::Only;
+    fs::write(&file, artifacts::to_binary(&manifest).unwrap()).unwrap();
     assert!(
         BuildPlan::discover_with_paths(&entry, &paths)
             .unwrap_err()

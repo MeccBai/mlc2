@@ -72,6 +72,9 @@ pub(super) fn run(
         dependencies,
         options,
     })?;
+    if compiled.global_init.is_some() && compiled.ir.is_none() {
+        return Err("Global initialization entry requires generated IR".into());
+    }
     let symbols = Symbols::from_module(module);
     let templates = artifacts::has_templates(module).then(|| GenericBundle {
         format_version: FORMAT_VERSION,
@@ -99,6 +102,7 @@ pub(super) fn run(
             object_hash: None,
             generic: None,
             generic_file_hash: None,
+            global_init: compiled.global_init,
             dependencies: hashes,
         },
         symbols,

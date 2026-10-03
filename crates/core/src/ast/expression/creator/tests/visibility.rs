@@ -50,6 +50,8 @@ fn fields_and_interfaces_enforce_receiver_and_public_rules() {
                     let mut context = StatementContext::new(EnumBool::True(method));
                     let name = if receiver { "self" } else { "other" };
                     let variable = Rc::new(Variable {
+                        read_count: Default::default(),
+                        declaration_span: (0..0).into(),
                         name: name.into(),
                         var_type: owner,
                         init_val: Box::new(Expression::null()),

@@ -39,7 +39,7 @@ impl ImportResolver {
         let local = importer.parent().ok_or("Importing file has no directory")?;
         for root in std::iter::once(local).chain(self.lib_dirs.iter().map(PathBuf::as_path)) {
             // The directory priority is stronger than the source/declaration preference.
-            for extension in [SOURCE_SUFFIX.trim_start_matches('.'), "toml"] {
+            for extension in [SOURCE_SUFFIX.trim_start_matches('.'), "sym"] {
                 let candidate = root.join(&relative).with_extension(extension);
                 if candidate.is_file() {
                     return candidate.canonicalize().map_err(|e| e.to_string());
@@ -55,7 +55,7 @@ impl ImportResolver {
             let candidate = parent
                 .join(crate::manifest::UNIVERSAL_LIB_DIR)
                 .join(&relative)
-                .with_extension("toml");
+                .with_extension("sym");
             if candidate.is_file() {
                 let artifact = crate::artifacts::load(&candidate)?;
                 if artifact.manifest.config.object != crate::artifacts::ObjectMode::None {

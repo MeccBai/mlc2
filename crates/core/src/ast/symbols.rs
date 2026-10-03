@@ -40,7 +40,7 @@ impl SymbolTable {
 
     pub fn for_file(file_id: crate::ast::config::FileId) -> Self {
         let (types, view) = TypeArena::new_for_file(file_id);
-        let mut temp = Self {
+        Self {
             types,
             functions: FuncArena::for_file(file_id),
             interfaces: InterfaceArena::for_file(file_id),
@@ -52,29 +52,7 @@ impl SymbolTable {
             base_type_view: view,
             function_instances: HashMap::new(),
             interface_instances: HashMap::new(),
-        };
-        let base_types = BaseType::base_types();
-        base_types
-            .into_iter()
-            .for_each(|(_, base_type)| match base_type {
-                Base(base) => {
-                    let name = base.name();
-                    let ident = arena::get_ident(&name);
-                    let ret_type = temp.types.get_by_ident(ident.clone()).unwrap();
-                    let func = FuncSymbol {
-                        name,
-                        params: vec![(TypeIndex::empty(), "...".to_string())],
-                        ret_type: Some(ret_type),
-                        generics: Vec::new(),
-                        attributes: Default::default(),
-                        generic_map: HashMap::new(),
-                        exported: false,
-                    };
-                    temp.functions.insert(ident, func);
-                }
-                _ => ice("Expected a Base type."),
-            });
-        temp
+        }
     }
 
     pub fn get_base(&self, data: DataType, bits: usize, signed: bool) -> TypeIndex {

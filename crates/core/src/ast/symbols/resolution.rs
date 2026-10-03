@@ -132,6 +132,39 @@ pub trait Resolution: TypeStorage {
         None
     }
 
+    /// Shared enum lookup for value expressions and callable classification.
+    fn enum_value(
+        &self,
+        config: &Config,
+        path: &TempPath,
+    ) -> Result<crate::ast::expression::EnumValue, crate::diagnostic::error::ResolveError> {
+        use crate::diagnostic::error::ResolveError;
+        let owner = path.segments[..path.segments.len().saturating_sub(1)].join("::");
+        let variant = path.segments.last().cloned().unwrap_or_default();
+        let index = self
+            .local_type(&config.symbol_name(&owner))
+            .or_else(|| self.local_type(&owner))
+            .or_else(|| match self.named_export(config, &owner) {
+                Some(ExportSymbol::Type(index)) => Some(index),
+                _ => None,
+            })
+            .ok_or_else(|| ResolveError::UnknownEnum {
+                name: owner.clone(),
+            })?;
+        let CompileType::Enum(enumeration) = self.get_type(index).unqualified() else {
+            return Err(ResolveError::NotAnEnum { name: owner });
+        };
+        let value = enumeration
+            .variants
+            .iter()
+            .position(|name| name == &variant)
+            .ok_or_else(|| ResolveError::UnknownEnumVariant { owner, variant })?;
+        Ok(crate::ast::expression::EnumValue {
+            enum_type: index,
+            value,
+        })
+    }
+
     fn export_path(
         &self,
         config: &Config,
@@ -139,28 +172,10 @@ pub trait Resolution: TypeStorage {
         kind: PathSymbolKind,
     ) -> Option<PathSymbol> {
         if kind == PathSymbolKind::EnumValue {
-            let (variant, owner) = path.segments.split_last()?;
-            let name = owner.join("::");
-            let index = self
-                .local_type(&config.symbol_name(&name))
-                .or_else(|| self.local_type(&name))
-                .or_else(|| match self.named_export(config, &name) {
-                    Some(ExportSymbol::Type(index)) => Some(index),
-                    _ => None,
-                })?;
-            let CompileType::Enum(enumeration) = self.get_type(index).unqualified() else {
-                return None;
-            };
-            return enumeration
-                .variants
-                .iter()
-                .position(|name| name == variant)
-                .map(|value| {
-                    PathSymbol::EnumValue(crate::ast::expression::EnumValue {
-                        enum_type: index,
-                        value,
-                    })
-                });
+            return self
+                .enum_value(config, path)
+                .ok()
+                .map(PathSymbol::EnumValue);
         }
         match (kind, self.named_export(config, &path.segments.join("::"))?) {
             (PathSymbolKind::Function, ExportSymbol::Function { index, generic }) => {

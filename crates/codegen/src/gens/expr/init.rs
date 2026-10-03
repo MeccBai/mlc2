@@ -32,7 +32,7 @@ impl Expander<'_> {
             CompileType::Unit(unit) => (unit.members.iter().map(|m| m.member_type).collect(), true),
             _ => fail("Initializer destination is not an aggregate"),
         };
-        if values.len() != fields.len() {
+        if values.len() > fields.len() || (structure && values.len() != fields.len()) {
             fail("Checked initializer field count mismatch");
         }
         let ty = IrGenerator::type_lowering(owner, self.symbols);

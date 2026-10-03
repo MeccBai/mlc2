@@ -61,6 +61,20 @@ impl IrGenerator {
             }
         }
         for name in intrinsics {
+            if name == "malloc" || name == "free" {
+                if self.remember_symbol(name.clone()) {
+                    let declaration = if name == "malloc" {
+                        "declare ptr @malloc(i64)"
+                    } else {
+                        "declare void @free(ptr)"
+                    };
+                    let start = self.defines.len();
+                    writeln!(self.defines, "{declaration}").expect("String write");
+                    self.declarations
+                        .push((name.clone(), start..self.defines.len()));
+                }
+                continue;
+            }
             if self.remember_symbol(format!("intrinsic::{name}")) {
                 let signature = match name.as_str() {
                     MEMSET => "ptr, i8, i64, i1 immarg",

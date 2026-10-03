@@ -40,7 +40,10 @@ fn compile(request: CompileRequest<'_>) -> Result<CompileOutput, String> {
     }
     generator
         .finish()
-        .map(|ir| CompileOutput { ir: Some(ir) })
+        .map(|ir| CompileOutput {
+            ir: Some(ir),
+            global_init: None,
+        })
         .map_err(|e| format!("{e:?}"))
 }
 
@@ -95,7 +98,7 @@ fn semantic_error_is_a_node_result_and_publishes_no_manifest() {
     };
     let report = schedule::build(plan, options, compile).unwrap();
     assert!(matches!(report.results[0], NodeResult::Failed { .. }));
-    assert!(!root.path().join("out/main.toml").exists());
+    assert!(!root.path().join("out/main.sym").exists());
 }
 
 #[test]

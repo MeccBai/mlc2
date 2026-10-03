@@ -78,15 +78,22 @@ impl FunctionGenerator<'_> {
                 self.exit(kind, to, label);
             }
             Statement::AnonymousBlock(block) => {
-                let next = self.label("scope.end");
-                if self.scope(&block.statements, next.clone()) {
-                    self.block(next);
-                }
+                self.anonymous_scope(&block.statements);
             }
             Statement::IfBlock(statement) => self.if_statement(statement),
             Statement::WhileBlock(statement) => self.while_statement(statement),
             Statement::ForBlock(statement) => self.for_statement(statement),
             Statement::MatchBlock(statement) => self.match_statement(statement),
+        }
+    }
+
+    pub(super) fn anonymous_scope(&mut self, statements: &[Statement]) {
+        if statements.is_empty() {
+            return;
+        }
+        let next = self.label("scope.end");
+        if self.scope(statements, next.clone()) {
+            self.block(next);
         }
     }
 

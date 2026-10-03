@@ -1,0 +1,46 @@
+# Compiler-backed memory operations; imported through normal symbol visibility.
+[Config]
+FormatVersion = 2
+ModuleName = "std::mem"
+Object = "None"
+
+[[Symbols.Functions]]
+visibility = "Export"
+name = "alloc"
+name_span = { start = 0, end = 0, context = { "$none" = true } }
+attributes = []
+generics = [{ name = "T", name_span = { start = 0, end = 0, context = { "$none" = true } }, constraint = { "$none" = true } }]
+return_type = [
+    { kind = "Reference", data = { mutable = true, inner = [
+        { kind = "Path", data = { segments = ["T"] } },
+        { start = 0, end = 0, context = { "$none" = true } },
+    ] } },
+    { start = 0, end = 0, context = { "$none" = true } },
+]
+
+[[Symbols.Functions.params]]
+name = "count"
+name_span = { start = 0, end = 0, context = { "$none" = true } }
+ty = [
+    { kind = "Path", data = { segments = ["u64"] } },
+    { start = 0, end = 0, context = { "$none" = true } },
+]
+
+[[Symbols.Functions]]
+visibility = "Export"
+name = "dealloc"
+name_span = { start = 0, end = 0, context = { "$none" = true } }
+attributes = []
+generics = [{ name = "T", name_span = { start = 0, end = 0, context = { "$none" = true } }, constraint = { "$none" = true } }]
+return_type = { "$none" = true }
+
+[[Symbols.Functions.params]]
+name = "pointer"
+name_span = { start = 0, end = 0, context = { "$none" = true } }
+ty = [
+    { kind = "Reference", data = { mutable = true, inner = [
+        { kind = "Path", data = { segments = ["T"] } },
+        { start = 0, end = 0, context = { "$none" = true } },
+    ] } },
+    { start = 0, end = 0, context = { "$none" = true } },
+]
