@@ -205,7 +205,7 @@ fn duplicate_default_and_out_of_scope_counter_are_rejected() {
 #[test]
 fn instantiated_function_body_traverses_if_for_and_match() {
     let ast = compile(
-        "func<T> run(value:T) { if (value == value) { for i in [0, 2] { match (value) { value => { var local:T = value; }, _ => {} } } } } func main() { run<i32>(1); }",
+        "func<T> run(value:T) { if (value == value) { for i in [0, 2] { match (value) { cast<T>(1) => { var local:T = value; }, _ => {} } } } } func main() { run<i32>(1); }",
     );
     assert_ok(&ast);
     assert_eq!(ast.symbols.function_instances.len(), 1);

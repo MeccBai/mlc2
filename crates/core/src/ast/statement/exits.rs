@@ -36,6 +36,12 @@ impl Statement {
         if config.is_poisoned() {
             return Self::Poison;
         }
+        if let (Some(expected), Some(value)) = (expected, &value) {
+            value.check_constant_range(expected, config, symbols, value_span);
+            if config.is_poisoned() {
+                return Self::Poison;
+            }
+        }
         match (expected, &value) {
             (Some(_), None) => config.submit_error(
                 CompileError::IllegalUse(IllegalUseError::ReturnValueRequired),

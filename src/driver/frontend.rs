@@ -17,11 +17,25 @@ use mlc_core::{
     },
     diagnostic::{error::ErrorHandle, warning::WarningHandle},
 };
+#[cfg(test)]
+mod enum_tests;
+#[cfg(test)]
+mod examples_tests;
 mod names;
+#[cfg(test)]
+mod optimization_tests;
+mod startup;
+#[cfg(test)]
+mod startup_tests;
+#[cfg(test)]
+mod string_tests;
+#[cfg(test)]
+mod tests;
 
 pub struct Generated {
     pub modules: Vec<(usize, String)>,
     pub supplement: Option<String>,
+    pub global_inits: Vec<(usize, String)>,
 }
 
 pub fn generate(plan: &BuildPlan, triplet: &str, kind: TargetKind) -> Result<Generated, String> {
@@ -66,6 +80,20 @@ pub fn generate(plan: &BuildPlan, triplet: &str, kind: TargetKind) -> Result<Gen
     names::qualify(&mut package, plan);
     let mut modules = vec![];
     let mut initializers = vec![];
+    let mut global_inits = vec![];
+    let init_names: std::collections::HashMap<_, _> = plan
+        .targets
+        .iter()
+        .filter_map(|target| {
+            let name = match &target.input {
+                TargetInput::Source { .. } => Some(
+                    mlc_core::ast::symbol_name::SymbolName::module_initializer(&target.module_name),
+                ),
+                TargetInput::Declaration(manifest) => manifest.config.global_init.clone(),
+            };
+            name.map(|name| (target.id, name))
+        })
+        .collect();
     let mut entry = None;
     for (id, ast) in asts {
         if !matches!(plan.targets[id.0].input, TargetInput::Source { .. }) {
@@ -75,6 +103,23 @@ pub fn generate(plan: &BuildPlan, triplet: &str, kind: TargetKind) -> Result<Gen
         generator.generate_globals(ast.config.file_id(), &package);
         let file_initializers = generator.global_initializers().to_vec();
         for function in ast.body {
+            // AST bodies include local instances for standalone generation. In a
+            // package build, their definitions belong exclusively to the supplement.
+            let is_instance = match &function {
+                Function::Func(body) => package
+                    .file(body.symbol.file_id())
+                    .expect("analyzed file")
+                    .function_instances
+                    .contains_key(&body.symbol),
+                Function::Interface(body) => package
+                    .file(body.symbol.file_id())
+                    .expect("analyzed file")
+                    .interface_instances
+                    .contains_key(&body.symbol),
+            };
+            if is_instance {
+                continue;
+            }
             if id == plan.entry {
                 if let Function::Func(body) = &function {
                     let symbol = package.get_function(body.symbol, false);
@@ -98,14 +143,22 @@ pub fn generate(plan: &BuildPlan, triplet: &str, kind: TargetKind) -> Result<Gen
             generator.generate(&package, function);
         }
         let mut ir = generator.finish().map_err(|e| format!("{e:?}"))?;
-        for init in file_initializers {
-            let entry = format!("{init}.entry");
-            ir.push_str(&format!(
-                "define hidden void {}() {{\nentry:\n  call void {}()\n  ret void\n}}\n",
-                IrValue::Global(entry.clone()),
-                IrValue::Global(init)
-            ));
-            initializers.push(entry);
+        let init_name = init_names.get(&id).expect("source initializer");
+        let dependencies = plan.targets[id.0]
+            .requires
+            .iter()
+            .filter_map(|dependency| init_names.get(dependency).cloned())
+            .collect::<Vec<_>>();
+        startup::append_initializer(
+            &mut ir,
+            init_name,
+            &dependencies,
+            &file_initializers,
+            kind == TargetKind::Shared && id == plan.entry,
+        );
+        global_inits.push((id.0, init_name.clone()));
+        if id == plan.entry {
+            initializers.push(init_name.clone());
         }
         modules.push((id.0, ir));
     }
@@ -168,15 +221,15 @@ pub fn generate(plan: &BuildPlan, triplet: &str, kind: TargetKind) -> Result<Gen
             extra = true;
         }
     } else if !initializers.is_empty() {
-        if kind == TargetKind::Static {
-            return Err("Static library global startup needs archive entry orchestration; not supported yet".into());
+        if kind == TargetKind::Shared {
+            append_startup(&mut ir, &initializers);
+            extra = true;
         }
-        append_startup(&mut ir, &initializers);
-        extra = true;
     }
     Ok(Generated {
         modules,
         supplement: extra.then_some(ir),
+        global_inits,
     })
 }
 
@@ -198,8 +251,21 @@ fn append_startup(ir: &mut String, initializers: &[String]) {
 }
 
 fn checked(ast: &AbstractSyntaxTree) -> Result<(), String> {
+    for info in &ast.config.warning_handle().warnings {
+        let source = std::fs::read_to_string(&ast.config.warning_handle().file).unwrap_or_default();
+        let message = info.warning.to_string();
+        let diagnostic = ast.config.error_handle().render_warning(
+            &source,
+            info.span.start..info.span.end,
+            &message,
+        );
+        eprintln!("{diagnostic}");
+    }
     if ast.config.is_poisoned() {
-        Err(format!("{:?}", ast.config.error_handle()))
+        let handle = ast.config.error_handle();
+        let source = std::fs::read_to_string(&handle.file)
+            .map_err(|e| format!("Cannot read source file {}: {e}", handle.file))?;
+        Err(handle.render(&source))
     } else {
         Ok(())
     }

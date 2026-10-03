@@ -101,11 +101,9 @@ fn function_initializer_calls_refs_and_aggregate_writes() {
 }
 
 #[test]
-fn local_and_explicit_global_with_same_source_name_use_distinct_storage() {
-    let (ir, _) =
-        generate("global var value = 1; func main() { var value = 2; test::value = value; }");
-    assert!(ir.contains("ptr @\"test::value\""));
-    verify(ir, "shadow");
+fn qualified_global_variable_access_is_rejected_by_frontend() {
+    let (ast, _) = parse("global var value = 1; func main() { test::value = 2; }");
+    assert!(ast.config.is_poisoned());
 }
 
 #[test]

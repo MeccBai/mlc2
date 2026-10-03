@@ -14,6 +14,7 @@ use crate::ast::{
 use crate::gens::func::SymbolIr;
 use std::fmt::Write;
 
+mod constant;
 mod control;
 mod globals;
 mod statements;
@@ -408,7 +409,11 @@ impl<'a> FunctionGenerator<'a> {
                 Instruction::Call {
                     func: IrValue::Global(name),
                     ..
-                } if name == super::memory::MEMSET || name == super::memory::MEMCPY => {
+                } if name == super::memory::MEMSET
+                    || name == super::memory::MEMCPY
+                    || name == "malloc"
+                    || name == "free" =>
+                {
                     Some(name.clone())
                 }
                 _ => None,

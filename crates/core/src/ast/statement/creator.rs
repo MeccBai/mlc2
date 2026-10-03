@@ -82,6 +82,8 @@ impl Statement {
                     );
                     return Self::Poison;
                 }
+                let target_type = left_expr.type_inference(config, symbols);
+                right_expr.check_constant_range(target_type, config, symbols, span);
                 Self::Assignment(super::Assignment {
                     variable: Box::new(left_expr),
                     value: Box::new(right_expr),

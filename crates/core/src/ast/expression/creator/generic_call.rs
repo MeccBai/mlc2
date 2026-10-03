@@ -37,6 +37,29 @@ impl Expression {
             return Self::Poison;
         }
 
+        if path.segments.len() == 1 {
+            if let Some(definition) = crate::ast::builtins::lookup(&path.segments[0]) {
+                if params.len() != definition.type_arguments {
+                    config.submit_error(
+                        CompileError::IllegalUse(
+                            crate::diagnostic::error::IllegalUseError::GenericCountMismatch,
+                        ),
+                        span,
+                    );
+                    return Self::Poison;
+                }
+                return Self::new_builtin_call(
+                    config,
+                    definition.kind,
+                    params.first().copied().unwrap_or(TypeIndex::empty()),
+                    args,
+                    span,
+                    symbols,
+                    context,
+                );
+            }
+        }
+
         let func = match Self::search_generic_function(config, (Path(path), span), symbols, context)
         {
             Some(index) => index,
@@ -87,6 +110,20 @@ impl Expression {
             }
             EnumBool::False(func_index) => {
                 let symbol = symbols.get_function(func_index, true);
+                if let Some(kind) = symbol.builtin() {
+                    if params.len() != 1 {
+                        config.submit_error(
+                            CompileError::IllegalUse(
+                                crate::diagnostic::error::IllegalUseError::GenericCountMismatch,
+                            ),
+                            span,
+                        );
+                        return Self::Poison;
+                    }
+                    return Self::new_builtin_call(
+                        config, kind, params[0], args, span, symbols, context,
+                    );
+                }
                 let generics_names = &symbol.generics;
                 if generics_names.len() != params.len() {
                     config.submit_error(

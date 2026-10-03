@@ -1,5 +1,5 @@
 use super::*;
-use mlc_syntax::serialization::{from_toml, to_toml};
+use mlc_syntax::serialization::from_toml;
 use std::{
     fs,
     io::Write,
@@ -15,7 +15,7 @@ pub struct ArtifactPaths {
 impl ArtifactPaths {
     pub fn new(stem: &Path, target: &str) -> Self {
         Self {
-            manifest: stem.with_extension("toml"),
+            manifest: stem.with_extension("sym"),
             object: stem.with_extension(if target.contains("windows") {
                 "obj"
             } else {
@@ -37,8 +37,8 @@ pub struct Artifact {
 }
 
 pub fn load(path: &Path) -> Result<Artifact, String> {
-    let text = fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
-    let manifest: Manifest = from_toml(&text)?;
+    let bytes = fs::read(path).map_err(|e| format!("{}: {e}", path.display()))?;
+    let manifest: Manifest = from_binary(&bytes)?;
     if manifest.config.format_version != FORMAT_VERSION {
         return Err("Unsupported artifact format version".into());
     }
@@ -55,6 +55,9 @@ pub fn load(path: &Path) -> Result<Artifact, String> {
         }
     }
     let root = path.parent().ok_or("Manifest has no parent")?;
+    if manifest.config.global_init.is_some() && manifest.config.object_file.is_none() {
+        return Err("Global initialization entry requires an object artifact".into());
+    }
     if manifest.config.object == ObjectMode::Source
         && (manifest.config.object_file.is_some() != manifest.config.object_hash.is_some()
             || manifest.config.generic.is_some() != manifest.config.generic_file_hash.is_some())
@@ -89,8 +92,7 @@ pub fn load(path: &Path) -> Result<Artifact, String> {
             } else {
                 return Err("Missing generic file hash".into());
             }
-            let bundle: GenericBundle =
-                from_toml(&fs::read_to_string(file).map_err(|e| e.to_string())?)?;
+            let bundle: GenericBundle = from_binary(&fs::read(file).map_err(|e| e.to_string())?)?;
             if bundle.format_version != FORMAT_VERSION
                 || bundle.module_name != manifest.config.module_name
                 || (manifest.config.object == ObjectMode::Source
@@ -169,13 +171,37 @@ pub fn publish(
         manifest.config.object_hash = Some(content_hash(bytes));
     }
     if let Some(bundle) = &templates {
-        let text = to_toml(bundle)?;
-        write_atomic(&paths.generic, text.as_bytes())?;
+        let bytes = to_binary(bundle)?;
+        write_atomic(&paths.generic, &bytes)?;
         manifest.config.generic = Some(filename(&paths.generic)?);
-        manifest.config.generic_file_hash = Some(content_hash(text.as_bytes()));
+        manifest.config.generic_file_hash = Some(content_hash(&bytes));
     }
-    write_atomic(&paths.manifest, to_toml(&manifest)?.as_bytes())?;
+    write_atomic(&paths.manifest, &to_binary(&manifest)?)?;
     load(&paths.manifest)
+}
+
+/// Compile a hand-written, declaration-only TOML into a binary symbol artifact.
+pub fn convert_toml(input: &Path, output: &Path) -> Result<(), String> {
+    if output
+        .extension()
+        .is_none_or(|extension| extension != "sym")
+    {
+        return Err("Symbol output must use the .sym extension".into());
+    }
+    let text = fs::read_to_string(input).map_err(|e| format!("{}: {e}", input.display()))?;
+    let mut manifest: Manifest = from_toml(&text)?;
+    if !matches!(manifest.config.format_version, 2 | FORMAT_VERSION) {
+        return Err("Unsupported artifact format version".into());
+    }
+    if manifest.config.object != ObjectMode::None
+        || manifest.config.object_file.is_some()
+        || manifest.config.generic.is_some()
+        || manifest.config.global_init.is_some()
+    {
+        return Err("TOML conversion requires a declaration-only Object = None manifest".into());
+    }
+    manifest.config.format_version = FORMAT_VERSION;
+    write_atomic(output, &to_binary(&manifest)?)
 }
 
 fn filename(path: &Path) -> Result<String, String> {

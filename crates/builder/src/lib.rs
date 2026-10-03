@@ -3,7 +3,6 @@
 pub mod artifacts;
 pub mod build;
 pub mod config;
-pub mod import;
 pub mod llvm;
 pub mod manifest;
 pub mod paths;

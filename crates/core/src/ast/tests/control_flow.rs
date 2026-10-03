@@ -5,6 +5,18 @@ use crate::ast::{
 };
 use std::rc::Rc;
 
+#[test]
+fn match_case_requires_a_compile_time_constant() {
+    assert_error(
+        "func main() { var value = 1; match (value) { value+0 => {} } }",
+        "value+0",
+        CompileError::IllegalUse(crate::diagnostic::error::IllegalUseError::NonConstantMatchCase),
+    );
+    valid(
+        "func main() { const case_value = 2*3; var value = 6; match (value) { case_value => {}, _ => {} } }",
+    );
+}
+
 valid_case!(
     nested_if_and_boolean_conditions,
     "func main() { if (true) { if (1 < 2) { var a = 1; } else { var a = 2; } } else {} }"

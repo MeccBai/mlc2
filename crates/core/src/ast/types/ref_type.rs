@@ -38,7 +38,7 @@ impl RefType {
         arena: &mut (impl crate::ast::types::TypeStorage + ?Sized),
     ) -> Option<TypeIndex> {
         if self.level > 1 {
-            self.level -= 1;
+            self = self.deref_reference()?;
             let type_str = self.format(arena);
             let ident: Ident = get_ident(&type_str);
             Some(arena.insert_type(ident, Ref(self)))
@@ -47,6 +47,11 @@ impl RefType {
         } else {
             None
         }
+    }
+
+    /// The remaining reference after one dereference, without interning a type.
+    pub fn deref_reference(&self) -> Option<Self> {
+        (self.level > 1).then(|| Self::new(self.base, self.level - 1, self.mut_base))
     }
 
     pub fn size(&self) -> usize {

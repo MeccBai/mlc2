@@ -34,6 +34,10 @@ pub struct Cli {
 
 #[derive(Debug, Subcommand)]
 pub enum Commands {
+    /// Convert a hand-written declaration TOML to a binary .sym symbol table.
+    Symbols { input: PathBuf },
+    /// List bundled examples or print one example's source code.
+    Example { name: String },
     /// Build one named target, or all targets in Project.toml.
     Build { target: Option<String> },
 }

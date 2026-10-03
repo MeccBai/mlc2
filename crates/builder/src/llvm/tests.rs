@@ -1,7 +1,5 @@
 use super::*;
-use crate::manifest::{
-    AARCH64_NONE_ELF, RISCV32_NONE_ELF, THUMBV7EM_NONE_EABI, X86_64_PC_WINDOWS_MSVC,
-};
+use crate::manifest::X86_64_PC_WINDOWS_MSVC;
 #[cfg(unix)]
 use std::os::unix::process::ExitStatusExt;
 #[cfg(windows)]
@@ -30,12 +28,7 @@ fn unsupported_triplet_returns_an_error() {
 
 #[test]
 fn preset_targets_initialize_repeatedly() {
-    for triplet in [
-        X86_64_PC_WINDOWS_MSVC,
-        THUMBV7EM_NONE_EABI,
-        AARCH64_NONE_ELF,
-        RISCV32_NONE_ELF,
-    ] {
+    for triplet in [X86_64_PC_WINDOWS_MSVC] {
         for _ in 0..2 {
             IrCompiler::init(triplet).unwrap();
         }

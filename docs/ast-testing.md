@@ -17,8 +17,8 @@ entry 持有唯一的 PackageSymbolTable，各翻译单元始终在其中登记 
 `package.concat(export_table)` 接收普通导出表，不接收另一个 package；export 自动调用
 此入口发布导出索引，冲突时 package 不改变。lookup 先查 searchable，再查调用文件的 inner。
 所有翻译单元共用同一个 GlobalConfig（克隆共享计数），由它递增分配 FileId。
-import 的源码获取扩展接口 `ImportFetch::fetch(&global)` 暂为显式 `todo!()`；
-当前不自动加载 import，完整的跨文件语义分析接入仍待完成。
+core 不负责读取 import 文件；builder 的 BuildPlan 递归发现源码和声明文件，
+由顶层 driver 在同一个 package 中执行多文件 export/analysis 并登记导入范围。
 
 项目已拆为 workspace。前端测试属于 mlc_core library 的内部 `#[cfg(test)]` 模块，
 使用 `cargo test -p mlc_core` 独立运行，不依赖 LLVM；它们不是根目录 `tests/` 独立测试 crate。

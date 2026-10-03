@@ -69,7 +69,12 @@ impl FuncSymbol {
         symbols: &mut dyn Resolution,
     ) -> (Self, Span) {
         let name_span = prototype.name_span;
-        let attributes = FuncAttibute::parse(config, prototype.attributes, name_span);
+        let mut attributes = FuncAttibute::parse(config, prototype.attributes, name_span);
+        if let Some(kind) =
+            crate::ast::builtins::module_builtin(&config.symbol_prefix(), &prototype.name)
+        {
+            attributes.insert(FuncAttibute::Builtin(kind));
+        }
         crate::ast::attribute::validate::callable(
             config,
             &attributes,
@@ -132,6 +137,7 @@ impl FuncBody {
             Vec::new()
         };
 
+        Statement::warn_unused(&body, config);
         Self {
             symbol: index,
             body,
@@ -173,7 +179,7 @@ impl InterfaceSymbol {
         );
 
         let (public, exported) = match prototype.visibility {
-            TempVisibility::Public => (true, true),
+            TempVisibility::Public => (true, false),
             TempVisibility::Private => (false, false),
             TempVisibility::Export => (false, true),
             TempVisibility::Api => (true, true),
@@ -265,6 +271,7 @@ impl Interface {
             Vec::new()
         };
 
+        Statement::warn_unused(&body, config);
         Self {
             symbol: index,
             body,

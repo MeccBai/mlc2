@@ -34,6 +34,13 @@ impl SymbolTable {
                 }
                 TempGlobalStmt::Import(_) => continue,
             };
+            if crate::ast::builtins::lookup(name.rsplit("::").next().unwrap_or(&name)).is_some() {
+                config.submit_error(
+                    CompileError::IllegalUse(IllegalUseError::DuplicateSymbol { name }),
+                    span,
+                );
+                return;
+            }
             if !self.names.insert(name.clone()) {
                 config.submit_error(
                     CompileError::IllegalUse(IllegalUseError::DuplicateSymbol { name }),

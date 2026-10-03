@@ -53,6 +53,8 @@ fn list_index_becomes_unary_access_with_element_type() {
         (
             0,
             Rc::new(Variable {
+                read_count: Default::default(),
+                declaration_span: (0..0).into(),
                 name: "values".into(),
                 var_type: list_type,
                 init_val: Box::new(Expression::null()),

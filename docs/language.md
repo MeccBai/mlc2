@@ -21,6 +21,17 @@ global const limit:i32 = 10;
 
 全局变量不能使用 `export` 或 `api`；它们只在当前编译模块内部参与解析和生成。
 
+值表达式中的多阶 Path 专用于枚举值：必须写 `Enum::Variant` 或
+`module::Enum::Variant`，不允许用单阶 using 别名代替枚举值。
+变量使用单阶名称，不支持 `module::variable` 访问；函数调用目标单独查询，
+因此 `module::function(...)` 不受此规则影响。
+
+`match` 的 case 值必须是编译期常量，`_` 为默认分支。生成端仅对能安全求值的
+常量控制流进行消除：if/match 保留选中分支的独立作用域，false while 与
+确定零次迭代且初始化可安全省略的 for 不生成代码。常量 match 无命中且无
+默认分支时直接跳过 match，不会 break 外层循环；暂不展开循环。
+无法展开的常量和未知表达式保留原控制流，短路与副作用顺序不变。
+
 ## 定义函数
 ```
 func test(a:i8) -> i8 {

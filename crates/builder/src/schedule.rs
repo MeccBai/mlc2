@@ -33,6 +33,7 @@ pub struct CompileRequest<'a> {
 /// Returning no IR explicitly creates a declarations-only artifact.
 pub struct CompileOutput {
     pub ir: Option<String>,
+    pub global_init: Option<String>,
 }
 
 #[derive(Debug, Clone)]

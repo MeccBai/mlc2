@@ -45,12 +45,23 @@ pub fn link(
         command
     } else {
         let mut command = Command::new(&cli.linker);
-        command.arg("-fuse-ld=lld");
-        // The development UCRT driver accepts scalar/pointer Win64 objects emitted
-        // for MSVC. Other targets are forwarded explicitly to the driver.
-        if triplet != "x86_64-pc-windows-msvc" {
-            command.arg(format!("--target={triplet}"));
+        let executable = std::env::current_exe().map_err(|e| e.to_string())?;
+        let coff = triplet.contains("windows-msvc");
+        let lld = mlc_builder::manifest::lld_path(&executable, coff)
+            .ok_or("Compiler executable has no parent")?;
+        if !lld.is_file() {
+            return Err(format!("Distribution linker not found: {}", lld.display()));
         }
+        command.arg("-fuse-ld=lld");
+        if coff {
+            // Clang's MSVC toolchain ignores --ld-path; -B controls FindProgramPath.
+            command
+                .arg("-B")
+                .arg(lld.parent().ok_or("Linker has no parent")?);
+        } else {
+            command.arg(format!("--ld-path={}", lld.display()));
+        }
+        command.arg(format!("--target={triplet}"));
         if kind == TargetKind::Shared {
             command.arg("-shared");
         }

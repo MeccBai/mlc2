@@ -101,6 +101,8 @@ fn only_const_variables_are_expanded() {
     let base = symbols.get_base(DataType::Integer, 32, true);
     for state in [ValueType::Flex, ValueType::Final, ValueType::Constant] {
         let variable = Rc::new(Variable {
+            read_count: Default::default(),
+            declaration_span: (0..0).into(),
             name: "a".into(),
             var_type: base.into(state, &mut symbols.types),
             init_val: Box::new(literal("5", &symbols).to_expression()),

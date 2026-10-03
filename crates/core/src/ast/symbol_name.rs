@@ -36,6 +36,20 @@ impl SymbolName {
         format!("{owner}::{name}")
     }
 
+    pub fn builtin(name: &str, target: &str, source: &str) -> String {
+        format!(".mlc.builtin.{name}<{target},{source}>")
+    }
+
+    pub fn module_initializer(module: &str) -> String {
+        use std::fmt::Write;
+        let mut name = String::from("__mlc__");
+        for byte in module.bytes() {
+            write!(name, "{byte:02x}").expect("String write");
+        }
+        name.push_str("__global__init");
+        name
+    }
+
     pub fn generic_instance(name: &str, arguments: &[String]) -> String {
         format!("{name}<{}>", arguments.join(","))
     }

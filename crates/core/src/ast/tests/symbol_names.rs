@@ -3,7 +3,7 @@ use super::*;
 #[test]
 fn using_tables_support_forward_names_chains_values_calls_and_types() {
     let ast = valid(
-        "using Alias = Point; using Call = make; using Next = Call; using Int = i32; using Ready = State::Ready; unit Point { x:Int; }; enum State { Ready, }; func make() -> i32 { return 1; } func main() { var p = Alias{1}; var x = Next(); var s:State = Ready; }",
+        "using Alias = Point; using Call = make; using Next = Call; using Int = i32; using Ready = State::Ready; unit Point { x:Int; }; enum State { Ready, }; func make() -> i32 { return 1; } func main() { var p = Alias{1}; var x = Next(); var s:State = State::Ready; }",
     );
     assert_eq!(
         ast.symbols.usings[&ast.config.symbol_name("Alias")],

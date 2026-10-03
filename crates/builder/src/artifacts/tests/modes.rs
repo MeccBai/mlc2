@@ -1,5 +1,4 @@
 use super::*;
-use mlc_syntax::serialization::to_toml;
 use std::fs;
 
 fn fixture(mode: ObjectMode) -> (tempfile::TempDir, ArtifactPaths, Manifest, GenericBundle) {
@@ -33,6 +32,28 @@ fn fixture(mode: ObjectMode) -> (tempfile::TempDir, ArtifactPaths, Manifest, Gen
 }
 
 #[test]
+fn global_init_is_serialized_and_part_of_declaration_hash() {
+    let (_root, paths, mut manifest, bundle) = fixture(ObjectMode::Source);
+    let previous = manifest.computed_symbols_hash().unwrap();
+    manifest.config.global_init = Some("__mlc__test__global__init".into());
+    manifest.config.symbols_hash = manifest.computed_symbols_hash().unwrap();
+    assert_ne!(previous, manifest.config.symbols_hash);
+    let artifact = publish(&paths, manifest, Some(bundle), Some(b"object")).unwrap();
+    assert_eq!(
+        artifact.manifest.config.global_init.as_deref(),
+        Some("__mlc__test__global__init")
+    );
+    let mut changed = artifact.manifest;
+    changed.config.global_init = Some("different_entry".into());
+    fs::write(&paths.manifest, to_binary(&changed).unwrap()).unwrap();
+    assert!(
+        load(&paths.manifest)
+            .unwrap_err()
+            .contains("Declaration hash mismatch")
+    );
+}
+
+#[test]
 fn source_checks_source_object_declarations_and_templates() {
     for component in ["source", "object", "symbols", "templates"] {
         let (_root, paths, manifest, bundle) = fixture(ObjectMode::Source);
@@ -44,7 +65,7 @@ fn source_checks_source_object_declarations_and_templates() {
             _ => {
                 let mut manifest = artifact.manifest;
                 manifest.config.symbols_hash = "wrong".into();
-                fs::write(&paths.manifest, to_toml(&manifest).unwrap()).unwrap();
+                fs::write(&paths.manifest, to_binary(&manifest).unwrap()).unwrap();
             }
         }
         assert!(load(&paths.manifest).is_err(), "{component}");
@@ -89,7 +110,7 @@ fn none_rejects_binary_payload_and_only_still_rejects_path_traversal() {
     let (_root, paths, mut manifest, _bundle) = fixture(ObjectMode::Only);
     manifest.config.generic_hash.clear();
     manifest.config.object_file = Some("../outside.obj".into());
-    fs::write(&paths.manifest, to_toml(&manifest).unwrap()).unwrap();
+    fs::write(&paths.manifest, to_binary(&manifest).unwrap()).unwrap();
     assert!(load(&paths.manifest).is_err());
 }
 
@@ -105,7 +126,7 @@ fn only_requires_both_template_hashes() {
         } else {
             manifest.config.generic_hash = "wrong".into();
         }
-        fs::write(&paths.manifest, to_toml(&manifest).unwrap()).unwrap();
+        fs::write(&paths.manifest, to_binary(&manifest).unwrap()).unwrap();
         assert!(load(&paths.manifest).is_err());
     }
 }

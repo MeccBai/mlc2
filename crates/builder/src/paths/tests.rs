@@ -113,13 +113,16 @@ fn imports_and_cache_fallback_are_target_specific() {
         workers: 2,
     };
     let report = schedule::build(plan.clone(), options.clone(), |_| {
-        Ok(CompileOutput { ir: None })
+        Ok(CompileOutput {
+            ir: None,
+            global_init: None,
+        })
     })
     .unwrap();
     assert!(report.succeeded(), "{:?}", report.results);
     assert_eq!(report.warnings.len(), 1);
-    assert!(paths.output.join("main.toml").is_file());
-    assert!(paths.lib_fallback.join("leaf.toml").is_file());
+    assert!(paths.output.join("main.sym").is_file());
+    assert!(paths.lib_fallback.join("leaf.sym").is_file());
     let cached = schedule::build(plan, options, |_| Err("must reuse cache".into())).unwrap();
     assert!(cached.succeeded());
 }

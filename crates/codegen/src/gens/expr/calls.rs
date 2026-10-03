@@ -4,6 +4,12 @@ use crate::gens::func::SymbolIr;
 
 impl Expander<'_> {
     pub(super) fn call(&mut self, call: &FuncCall) -> Lowered {
+        if let EnumBool::False(index) = call.func {
+            let symbol = self.symbols.get_function(index, false);
+            if let Some(kind) = symbol.builtin() {
+                return self.builtin(kind, symbol, &call.args[0]);
+            }
+        }
         let (func, returns) = match call.func {
             EnumBool::True(index) => {
                 let symbol = self.symbols.get_interface(index, false);

@@ -1,5 +1,5 @@
 use super::*;
-use mlc_syntax::{ImportModule, parser::out::TempGlobalStmt, serialization::from_toml};
+use mlc_syntax::{ImportModule, parser::out::TempGlobalStmt};
 use std::{collections::HashMap, fs};
 
 #[derive(Clone, Copy, PartialEq)]
@@ -57,20 +57,41 @@ impl Scanner<'_> {
                 .collect();
             return Err(format!("Import cycle: {}", cycle.join(" -> ")));
         }
-        let text = fs::read_to_string(&file).map_err(|e| format!("{}: {e}", file.display()))?;
-        let (input, imports, declared_name) = if file.extension().is_some_and(|ext| ext == "toml") {
-            let manifest: Manifest = from_toml(&text)?;
+        let (input, imports, declared_name) = if file.extension().is_some_and(|ext| ext == "sym") {
+            let manifest = crate::artifacts::load(&file)?.manifest;
             (
                 TargetInput::Declaration(manifest.clone()),
                 manifest.requires.clone(),
                 Some(manifest.config.module_name),
             )
         } else {
-            let tokens = mlc_syntax::lexer::tokenize(&text)
-                .map_err(|e| format!("{}: {e:?}", file.display()))?;
+            let text = fs::read_to_string(&file).map_err(|e| format!("{}: {e}", file.display()))?;
+            let diagnostics =
+                crate::diagnostic::error::ErrorHandle::new(file.to_string_lossy().into_owned());
+            let tokens = mlc_syntax::lexer::tokenize(&text).map_err(|e| {
+                let message = e.message();
+                crate::diagnostic::error::ErrorHandle::summarize(
+                    &diagnostics.render_error(&text, e.span, &message),
+                    1,
+                )
+            })?;
             let (module, errors) = mlc_syntax::parser::parse(&tokens.tokens, text.len());
             if !errors.is_empty() {
-                return Err(format!("{}: {errors:?}", file.display()));
+                let rendered = errors
+                    .iter()
+                    .map(|e| {
+                        diagnostics.render_error(
+                            &text,
+                            e.span().into_range(),
+                            &mlc_syntax::parser::diagnostic::message(e),
+                        )
+                    })
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                return Err(crate::diagnostic::error::ErrorHandle::summarize(
+                    &rendered,
+                    errors.len(),
+                ));
             }
             let module = module.ok_or("Parser returned no module")?;
             let imports: Vec<ImportModule> = module

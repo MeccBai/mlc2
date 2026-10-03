@@ -150,26 +150,6 @@ impl SymbolTable {
         config: &Config,
         path: &TempPath,
     ) -> Option<crate::ast::expression::EnumValue> {
-        let (variant, owner) = path.segments.split_last()?;
-        if owner.is_empty() {
-            return None;
-        }
-        let name = SymbolName::path(owner);
-        let index = self
-            .types
-            .get_by_name(&name)
-            .or_else(|| self.types.get_by_name(&config.symbol_name(&name)))?;
-        let crate::ast::types::CompileType::Enum(enumeration) = self.types.get(index).unqualified()
-        else {
-            return None;
-        };
-        let value = enumeration
-            .variants
-            .iter()
-            .position(|name| name == variant)?;
-        Some(crate::ast::expression::EnumValue {
-            enum_type: index,
-            value,
-        })
+        super::Resolution::enum_value(self, config, path).ok()
     }
 }

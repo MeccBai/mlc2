@@ -1,4 +1,5 @@
 use mlc_syntax::manifest::SOURCE_SUFFIX;
+mod constant_control;
 
 use super::*;
 use crate::ast::{
@@ -106,7 +107,7 @@ fn calls_and_member_assignments() {
 #[test]
 fn break_cleans_loop_binding_but_continue_keeps_it() {
     let (ast, package) = parse(
-        "func main() { var outer = 0; for i in [0,2] { var local = i; if (true) { continue; } else { break; } } }",
+        "func main() { var outer = 0; for i in [0,2] { var local = i; if (i == 0) { continue; } else { break; } } }",
     );
     let generated = FunctionGenerator::generate(&ast.body[0], &package);
     for kind in [ExitKind::Break, ExitKind::Continue] {

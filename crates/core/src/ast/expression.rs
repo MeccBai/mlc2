@@ -2,6 +2,7 @@ use crate::ast::symbols::Resolution;
 pub mod cosnt_fold;
 pub mod creator;
 pub mod operators;
+mod range_check;
 
 use std::rc::Rc;
 
@@ -198,7 +199,7 @@ impl CompAtom {
                 .members
                 .iter()
                 .all(|member| member.is_const(symbols)),
-            CompAtom::FuncCallA(_) => false,
+            CompAtom::FuncCallA(call) => call.is_const(symbols),
             CompAtom::VarValueA(var) => var.var_type.value_type(symbols) == ValueType::Constant,
             CompAtom::UnaryExprA(unary) => unary.is_const(symbols),
             _ => false,
@@ -311,7 +312,12 @@ impl Expression {
                         return false;
                     }
                     let element_type = match symbols.get_type(*ty).unqualified() {
-                        CompileType::List(list_type) => list_type.element_type,
+                        CompileType::List(list_type) => {
+                            if values.len() > list_type.length {
+                                return false;
+                            }
+                            list_type.element_type
+                        }
                         _ => return false,
                     };
                     values.iter().all(|value| {
@@ -377,6 +383,7 @@ impl Expression {
                 InitialList::Array { values, .. } | InitialList::List { values, .. },
             ) => values.iter().all(|value| value.is_const(symbols)),
             Expression::InitListE(InitialList::String { .. }) => true,
+            Expression::FuncCallE(call) => call.is_const(symbols),
             _ => false,
         }
     }

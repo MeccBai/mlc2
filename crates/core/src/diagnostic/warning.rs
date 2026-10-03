@@ -4,7 +4,22 @@ use crate::lexer::Span;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Warning {
+    UnusedVariable { name: String },
     AttributeNotFound,
+    ArrayInitializerZeroFilled { supplied: usize, length: usize },
+}
+
+impl std::fmt::Display for Warning {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::UnusedVariable { name } => write!(f, "Variable `{name}` is never used"),
+            Self::AttributeNotFound => write!(f, "Unknown attribute"),
+            Self::ArrayInitializerZeroFilled { supplied, length } => write!(
+                f,
+                "Array initializer supplies {supplied} of {length} elements; remaining elements are zero-initialized"
+            ),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

@@ -7,7 +7,7 @@ fn main() -> std::process::ExitCode {
     match driver::run(cli::Cli::parse()) {
         Ok(()) => std::process::ExitCode::SUCCESS,
         Err(error) => {
-            eprintln!("error: {error}");
+            eprintln!("{error}");
             std::process::ExitCode::FAILURE
         }
     }

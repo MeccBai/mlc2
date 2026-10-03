@@ -13,10 +13,35 @@ pub const LLD_ELF: &str = "ld.lld";
 pub const IR_BUFFER_NAME: &std::ffi::CStr = c"mlc";
 
 pub const X86_64_PC_WINDOWS_MSVC: &str = "x86_64-pc-windows-msvc";
-pub const THUMBV7EM_NONE_EABI: &str = "thumbv7em-none-eabi";
-pub const AARCH64_NONE_ELF: &str = "aarch64-none-elf";
-pub const RISCV32_NONE_ELF: &str = "riscv32-unknown-none-elf";
+
+/// Resolve a linker in the compiler distribution, never through PATH.
+pub fn lld_path(executable: &std::path::Path, coff: bool) -> Option<std::path::PathBuf> {
+    Some(executable.parent()?.join(format!(
+        "{}{}",
+        if coff { LLD_COFF } else { LLD_ELF },
+        EXE_SUFFIX
+    )))
+}
 
 /// Current development installation, used by the Cargo build script.
 pub const LLVM_INSTALL_DIR: &str = r"F:\Develop\scoop\apps\llvm-dev\current";
 pub const LLVM_C_LIBRARY: &str = "LLVM-C";
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn linker_paths_are_executable_siblings() {
+        let root = std::env::temp_dir().join("mlc-distribution");
+        let executable = root.join(format!("{EXECUTABLE_NAME}{EXE_SUFFIX}"));
+        assert_eq!(
+            lld_path(&executable, true),
+            Some(root.join(format!("{LLD_COFF}{EXE_SUFFIX}")))
+        );
+        assert_eq!(
+            lld_path(&executable, false),
+            Some(root.join(format!("{LLD_ELF}{EXE_SUFFIX}")))
+        );
+    }
+}

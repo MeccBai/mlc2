@@ -22,6 +22,7 @@ static UNIT_ATTRIBUTE_MAP: LazyLock<HashMap<&'static str, UnitAttribute>> = Lazy
 pub enum FuncAttibute {
     Empty,
     Cabi,
+    Builtin(crate::ast::builtins::Builtin),
 }
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub enum UnitAttribute {

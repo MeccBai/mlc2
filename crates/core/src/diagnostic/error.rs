@@ -1,10 +1,11 @@
 use crate::lexer::TokenError;
 use crate::parser::ParseError;
 use crate::parser::out::Span;
-use colored::Colorize;
 use std::collections::HashSet;
 
 use std::ops::Range;
+mod messages;
+mod render;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum ConstraintError {
@@ -22,6 +23,9 @@ pub enum CompileError {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum ResolveError {
+    UnknownEnum { name: String },
+    NotAnEnum { name: String },
+    UnknownEnumVariant { owner: String, variant: String },
     UnknownType,
     UnknownGeneric,
     UnknownConstraint,
@@ -34,7 +38,12 @@ pub enum ResolveError {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum IllegalUseError {
+    NonConstantMatchCase,
+    EnumValueRequiresPrefix,
     InvalidStringLiteral,
+    InvalidBuiltinArgument { name: String },
+    IntegerConstantOutOfRange { value: String, target: String },
+    ArrayInitializerRequiresBrackets,
     CAbi(CAbiError),
     InvalidExportTable,
     DuplicateFileId,
@@ -116,51 +125,51 @@ impl ErrorHandle {
         after_lines: usize,
         span: Range<usize>,
     ) -> String {
-        let lines: Vec<&str> = source.lines().collect();
-        let error_line = source[..span.start].matches('\n').count();
-        let start = error_line.saturating_sub(pre_lines);
-        let end = (error_line + after_lines + 1).min(lines.len());
-        let mut result = String::new();
-        let line_start = source[..span.start].rfind('\n').map(|x| x + 1).unwrap_or(0);
-        let local_start = span.start - line_start;
-        let local_end = span.end - line_start;
-        for i in start..end {
-            let mut line = lines[i].to_string();
-            if i == error_line {
-                let before = &line[..local_start];
-                let error = &line[local_start..local_end];
-                let after = &line[local_end..];
+        render::context(source, pre_lines, after_lines, span)
+    }
 
-                line = format!("{}{}{}", before, error.red().bold().underline(), after);
-            }
-            result.push_str(&format!("{:4} | {}\n", i + 1, line));
-        }
-        result
+    pub fn render_error(&self, source: &str, span: Range<usize>, message: &str) -> String {
+        render::diagnostic(&self.file, source, span, message)
+    }
+
+    pub fn render_warning(&self, source: &str, span: Range<usize>, message: &str) -> String {
+        render::warning(&self.file, source, span, message)
+    }
+
+    pub fn render(&self, source: &str) -> String {
+        let mut errors: Vec<_> = self.errors.iter().collect();
+        errors.sort_by_key(|info| (info.span.start, info.span.end, info.error.to_string()));
+        let diagnostics = errors
+            .iter()
+            .map(|info| self.render_error(source, info.span.into_range(), &info.error.to_string()))
+            .collect::<Vec<_>>()
+            .join("\n");
+        Self::summarize(&diagnostics, errors.len())
+    }
+
+    pub fn summarize(diagnostics: &str, count: usize) -> String {
+        format!(
+            "{}\n{count} {} generated.",
+            diagnostics.trim_end(),
+            if count == 1 { "error" } else { "errors" }
+        )
     }
 
     pub fn token_error(&self, token_error: TokenError, source: &str) {
-        let message = format!(
-            "{} : {} , {} : `{}` at position {};",
-            "Error in file".red().bold(),
-            format!("\"{}\"", self.file.green().bold()),
-            "Type".red().bold(),
-            token_error.context.yellow().bold(),
-            token_error.span.start
-        );
-        eprintln!("{}", message);
-        eprintln!("{}", self.get_context(source, 2, 2, token_error.span));
+        let message = token_error.message();
+        eprintln!("{}", self.render_error(source, token_error.span, &message));
     }
 
     pub fn parse_error(&self, parse_error: &ParseError<'_>, source: &str) {
         let span = parse_error.span().into_range();
         eprintln!(
-            "{}: {} at {}..{}",
-            "Syntax error".red().bold(),
-            parse_error.reason(),
-            span.start,
-            span.end,
+            "{}",
+            self.render_error(
+                source,
+                span,
+                &crate::parser::diagnostic::message(parse_error)
+            )
         );
-        eprintln!("{}", self.get_context(source, 2, 2, span));
     }
 
     pub fn submit_error(&mut self, error: CompileError, span: Span) {

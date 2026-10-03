@@ -13,7 +13,7 @@ installation/
   lib/
     <triplet>/
       std/
-        io.m2 或 io.toml
+        io.m2 或 io.sym
 ```
 
 `BackendConfig.tools` 指向安装根目录，不再指向 `tools/` 子目录。
@@ -22,10 +22,10 @@ installation/
 
 `import std::io;` 查找顺序为：
 
-1. 当前导入文件所在目录的 `std/io.m2`、`std/io.toml`。
-2. 各系统库目录的 `std/io.m2`、`std/io.toml`。
+1. 当前导入文件所在目录的 `std/io.m2`、`std/io.sym`。
+2. 各系统库目录的 `std/io.m2`、`std/io.sym`。
 
-目录优先级高于文件格式优先级：本地 `.toml` 优先于系统 `.m2`。
+目录优先级高于文件格式优先级：本地 `.sym` 优先于系统 `.m2`。
 所有存在的文件路径规范化后去重；重复 import 只产生一条依赖边。
 递归扫描会在启动线程池前发现并返回依赖环。
 
@@ -59,15 +59,18 @@ taskflowrs 的任务没有业务返回值，因此这里使用每节点一个
 `build/objects/lib/<triplet>/std/io.*`，并收集警告。
 低层 `BuildPlan::discover()` 仍保留调用方直接指定输出目录的接口。
 
-- `.toml`：版本、模块名、源文件路径、目标、构建键、依赖指纹、声明。
+- `.sym`：MessagePack 二进制，保存版本、模块名、源文件路径、目标、构建键、依赖指纹和声明。
 - `.obj` / `.o`：LLVM 输出，根据 target 选择后缀。
-- `.mg`：存在泛型模板时保存 TempModule 的 TOML 表示。
+- `.mg`：存在泛型模板时保存 TempModule 的 MessagePack 二进制表示。
 
 `.mg` 暂时保存整个翻译单元，包含私有 helper、using、全局变量和函数体，
 以保留模板的依赖闭包。普通函数声明只保存 symbol，不在声明表内保存 body。
 inner 声明不等于对外可见声明，不能直接拼接进公共搜索空间。
 
 序列化保留 Span 和现有类型字段，不持久化运行期 arena index 或 Rc。
+二进制文件带有 magic 和版本头；旧格式构建缓存需要重新生成。
+手写 C 声明仍可维护为 TOML，通过 `mlc symbols io.toml` 生成 `io.sym` 后导入。
+普通 import 不再直接读取 TOML；Project.toml 和全局配置格式不变。
 TOML 没有 null：编译器生成格式用保留表 `{ "$none" = true }`
 表示 `None` 和 unit 值；因此这不是最终面向人工编写的精简 C FFI 格式。
 
@@ -103,8 +106,8 @@ object 和模板先写入，manifest 最后原子替换。不再被引用的旧�
 同一级 `LibDirs` 数组按顺序查找，显式配置替换下一级目录列表。
 当前导入文件所在目录仍优先于所有库目录。
 所有 triplet 库目录都未找到模块时，再依次搜索对应库根目录的
-`universal/<module>.toml`。该回退仅接受 `Object = "None"`，不读取源码。
-仓库提供 `lib/universal/c_std/io.toml` 中的 C ABI `printf` 声明，
+`universal/<module>.sym`。该回退仅接受 `Object = "None"`，不读取源码。
+仓库提供 `lib/universal/c_std/io.sym` 中的 C ABI `printf` 声明，
 通过 `import c_std::io;` 使用；实际实现和链接库由目标 C 运行时提供。
 项目配置的相对路径基于项目根目录，全局配置的相对路径基于配置文件目录。
 
@@ -155,7 +158,7 @@ cargo test --manifest-path experiments/taskflow/Cargo.toml
 覆盖 Temp 往返、源码到 object、增量缓存、损坏恢复、模板变化、
 传递依赖变化、独立任务失败隔离、目录优先级、重复依赖和环检测。
 
-Windows 的 `hello_world` 测试加载仓库 `lib/universal/c_std/io.toml`，
+Windows 的 `hello_world` 测试加载仓库 `lib/universal/c_std/io.sym`，
 编译 `tests/fixtures/hello_world.m2`：构造 i8 数组、手动将最后一项写为 0，
 将第一项的引用传给 printf。MLC/LLVM 生成 object 后，使用 PATH 中的
 LLVM-MinGW/UCRT `clang -fuse-ld=lld` 链接（可用 `MLC_TEST_CLANG` 指定驱动）。

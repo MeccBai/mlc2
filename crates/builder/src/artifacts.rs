@@ -1,18 +1,20 @@
 //! Portable declarations and template artifacts; never persist arena indices.
+mod binary;
 mod hashes;
 mod storage;
 mod symbols;
 #[cfg(test)]
 mod tests;
+pub use binary::{from_binary, to_binary};
 pub use hashes::{content_hash, semantic_hash};
 use mlc_syntax::{ImportModule, parser::out::TempModule};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
-pub use storage::{Artifact, ArtifactPaths, load, publish};
+pub use storage::{Artifact, ArtifactPaths, convert_toml, load, publish};
 pub use symbols::Symbols;
 pub(crate) use symbols::has_templates;
 
-pub const FORMAT_VERSION: u32 = 2;
+pub const FORMAT_VERSION: u32 = 3;
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ObjectMode {
@@ -46,6 +48,7 @@ pub struct Metadata {
     pub object_hash: Option<String>,
     pub generic: Option<String>,
     pub generic_file_hash: Option<String>,
+    pub global_init: Option<String>,
     pub dependencies: BTreeMap<String, DependencyHash>,
 }
 
@@ -76,7 +79,12 @@ impl Manifest {
     /// Temp signatures are not resolved layouts yet. Include dependency fingerprints
     /// conservatively so a changed imported type cannot leave transitive users stale.
     pub fn computed_symbols_hash(&self) -> Result<String, String> {
-        semantic_hash(&(self.symbols.public_hash()?, &self.config.dependencies))
+        match &self.config.global_init {
+            Some(init) => {
+                semantic_hash(&(self.symbols.public_hash()?, &self.config.dependencies, init))
+            }
+            None => semantic_hash(&(self.symbols.public_hash()?, &self.config.dependencies)),
+        }
     }
 
     pub fn dependency_hash(&self) -> Result<DependencyHash, String> {
