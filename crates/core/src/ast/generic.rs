@@ -19,6 +19,7 @@ use crate::parser::Scope;
 use crate::parser::out::{Span, TempConstraints, TempGeneric, TempInterfaceSymbol, TempPath};
 use std::collections::HashMap;
 use std::sync::LazyLock;
+mod diagnostics;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InterfaceRequire {
@@ -72,43 +73,7 @@ impl InterfaceRequire {
     }
 
     pub fn check(&self, param: TypeIndex, symbols: &dyn Resolution) -> bool {
-        let param_name = symbols.get_type(param).unqualified().format(symbols);
-        let interface_name = SymbolName::callable(Some(&param_name), &self.name);
-        let interface = symbols.associated_interface(param, &interface_name);
-
-        let interface = match interface {
-            Some(interface) => symbols.get_interface_regular(interface),
-            None => return false,
-        };
-
-        let ret_type = &interface.ret_type;
-        if !interface.public {
-            return false;
-        }
-        if match (self.ret_type, *ret_type) {
-            (Some(expected), Some(found)) => !expected.type_check(false, &found, symbols),
-            (None, None) => false,
-            _ => true,
-        } {
-            return false;
-        }
-        if self.mutable != interface.mutable {
-            return false;
-        }
-        if self.has_self != interface.has_self {
-            return false;
-        }
-        if self.params.len() != interface.params.len() {
-            return false;
-        }
-        if self.params.iter().zip(interface.params.iter()).any(
-            |((param_type, _), (expected_type, _))| {
-                !param_type.type_check(false, expected_type, symbols)
-            },
-        ) {
-            return false;
-        }
-        true
+        self.failure(param, symbols).is_none()
     }
 }
 
@@ -333,8 +298,6 @@ impl GenericIndex {
         symbols: &dyn Resolution,
         span: Span,
     ) -> Option<TypeIndex> {
-        let require = symbols.get_generic(self);
-
         let param = match params.get(&self) {
             Some(param) => *param,
             None => {
@@ -343,13 +306,9 @@ impl GenericIndex {
             }
         };
 
-        if require.check(param, symbols) {
+        if self.check_and_submit(param, symbols, config, span) {
             Some(param)
         } else {
-            config.submit_error(
-                CompileError::IllegalUse(IllegalUseError::RequirementUnmet),
-                span,
-            );
             None
         }
     }
@@ -371,6 +330,8 @@ impl TypeIndex {
         let ty = symbols.get_type(self).unqualified().clone();
         match ty {
             Base(_) | Enum(_) => Some(self),
+            CompileType::Function(function) if !function.is_generic(symbols) => Some(self),
+            CompileType::Function(function) => function.instantiation(config, params, symbols, actives, span).map(|index| index.into_value_type(value, symbols)),
             CompileType::Generic(generic) => generic
                 .instantiation(config, params, symbols, span)
                 .map(|index| index.into_value_type(value, symbols)),

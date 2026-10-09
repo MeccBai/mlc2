@@ -110,6 +110,7 @@ fn imports_and_cache_fallback_are_target_specific() {
         target: paths.triplet.clone(),
         compiler_id: "test".into(),
         compiler_options: vec![],
+        module_fingerprints: Default::default(),
         workers: 2,
     };
     let report = schedule::build(plan.clone(), options.clone(), |_| {

@@ -20,6 +20,8 @@ mlc lib.m2 --type shared
 mlc example list          # 列出内嵌示例
 mlc example hello-world   # 仅打印源码，不编译或运行
 mlc example generics
+mlc ll main.m2             # 仅生成 LLVM IR，默认 build/ll
+mlc ll main.m2 -o ir       # 指定 .ll 输出目录
 mlc symbols lib/universal/c_std/io.toml  # 输出同名 io.sym
 mlc symbols c_api.toml -o lib/universal/c_api.sym
 ```
@@ -50,9 +52,11 @@ MSVC 使用 `lld-link.exe`，GNU 使用 `ld.lld.exe`，不再从 PATH 搜索 LLD
 通过 --linker 指定驱动、--link-arg 添加参数。静态库使用 llvm-ar，可用
 --archiver 指定。两者均通过进程参数数组调用，不经过 shell。
 
-当前只保留 Windows x64 MSVC target 预设。此前 LLVM-MinGW/UCRT 的临时
-混合链接路径已移除；运行需要在 mlc 同目录放置 lld-link，并提供 MSVC CRT/SDK。
-GNU 链接器名称映射保留，但 GNU target 的 LLVM 初始化预设尚未加入。
+Windows 默认 target 为 `x86_64-pc-windows-gnu`，默认链接驱动为
+`x86_64-w64-mingw32-clang`（LLVM-MinGW/UCRT，需要在 PATH 中），
+并在 mlc 同目录提供 `ld.lld.exe`。目标库及对象目录也按 GNU triplet 分开。
+MSVC target 仍可显式指定；同时用 `--linker clang` 选择 MSVC 驱动，
+并在 mlc 同目录提供 `lld-link.exe` 和相应 MSVC CRT/SDK 环境。
 bin 入口要求 main 无参数，返回 i32 或 void。
 shared 和 static 均支持全局运行期初始化。
 

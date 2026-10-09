@@ -78,6 +78,8 @@ pub(super) fn parse(
             }
         });
 
+    crate::ast::types::unit_type::prepare_deconstructs(symbols);
+
     let temp_funcs = funcs
         .into_iter()
         .filter_map(|temp_func| {
@@ -111,6 +113,15 @@ pub(super) fn parse(
                 return None;
             }
             let (symbol, body) = temp_interface.split();
+            if symbol.owner.is_some() && symbol.name == "deconstruct" {
+                config.submit_error(
+                    crate::diagnostic::error::CompileError::IllegalUse(
+                        crate::diagnostic::error::IllegalUseError::ReservedDeconstruct,
+                    ),
+                    symbol.name_span,
+                );
+                return None;
+            }
             let (symbol, _span) = InterfaceSymbol::new(&mut config, symbol, &mut symbols);
             let ident = get_ident(&symbol.name);
             let index = if symbol.has_generics() {

@@ -162,6 +162,20 @@ impl Statement {
             return Self::Poison;
         }
         let mut default_seen = false;
+        if matches!(symbols.get_type(ty).unqualified(), crate::ast::types::CompileType::Unit(unit) if unit.variant.is_some()) {
+            config.submit_error(CompileError::IllegalUse(IllegalUseError::InvalidUnion { reason: "Union match requires y = @x or y = @mut x; by-value match is not supported".into() }), span);
+            return Self::Poison;
+        }
+        if matches!(
+            symbols.get_type(ty).unqualified(),
+            crate::ast::types::CompileType::Function(_)
+        ) {
+            config.submit_error(
+                CompileError::IllegalUse(IllegalUseError::InvalidFunctionPointerOperation),
+                span,
+            );
+            return Self::Poison;
+        }
         let mut parsed = Vec::new();
         for (pattern, scope) in branches {
             let pattern = match pattern {
@@ -206,6 +220,13 @@ impl Statement {
                 return Self::Poison;
             }
             parsed.push((pattern, body));
+        }
+        if !default_seen {
+            config.submit_error(
+                CompileError::IllegalUse(IllegalUseError::MissingDefaultBranch),
+                span,
+            );
+            return Self::Poison;
         }
         Self::MatchBlock(MatchStatement {
             value: Box::new(value),

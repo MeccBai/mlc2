@@ -33,7 +33,7 @@ fn builtins_lower_without_external_language_symbols() {
     let entry = root.path().join("main.m2");
     std::fs::write(
         &entry,
-        "import std::mem; #[c_abi]# func main() -> i32 { var p = std::mem::alloc<i32>(2); $p = 42; \
+        "import std::mem; #[c_abi]# func main() -> i32 { var p:res $mut i32 = std::mem::alloc<i32>(2); $p = 42; \
          var value = $p; var narrow:i8 = cast<i8>(300); \
          var wide = cast<i32>(narrow); std::mem::dealloc<i32>(p); return value + wide; }",
     )
@@ -124,8 +124,8 @@ fn builtin_casts_and_generic_allocations_pass_llvm_verification() {
     let entry = root.path().join("main.m2");
     std::fs::write(
         &entry,
-        "import std::mem; func<T> make(n:i32) -> $mut T { return std::mem::alloc<T>(n); } \
-         func main() -> i32 { var p = make<i32>(1); $p = 10; std::mem::dealloc<i32>(p); \
+        "import std::mem; func<T> make(n:i32) -> res $mut T { return std::mem::alloc<T>(n); } \
+         func main() -> i32 { var p:res $mut i32 = make<i32>(1); $p = 10; std::mem::dealloc<i32>(p); \
          var v = 300; var narrow = cast<i8>(v); var f = cast<f64>(v); \
          var single = cast<f32>(f); var integer = cast<i32>(single); \
          var big = cast<i64>(4294967296); const folded:i8 = cast<i8>(300); \

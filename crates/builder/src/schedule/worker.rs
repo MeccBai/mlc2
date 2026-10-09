@@ -46,6 +46,7 @@ pub(super) fn run(
         &options.target,
         &options.compiler_id,
         &options.compiler_options,
+        options.module_fingerprints.get(&target.module_name),
         &file_hash,
         &hashes,
     ))?;

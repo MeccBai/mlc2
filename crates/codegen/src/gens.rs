@@ -9,6 +9,8 @@ use crate::ast::{Function, GlobalStatement, symbols::PackageSymbolTable, types::
 pub mod func;
 pub mod value;
 pub use value::LlvmValue;
+mod deconstruct;
+mod union;
 pub mod error;
 pub mod expr;
 pub mod function;
@@ -111,11 +113,14 @@ impl IrGenerator {
             return;
         }
 
-        let members = unit
+        let members = if let Some(variant) = &unit.variant {
+            let align = variant.align(symbols);
+            vec![instruction::LlvmType::Int(32), instruction::LlvmType::Array { element: Box::new(instruction::LlvmType::Int((align * 8) as u32)), length: variant.payload_size(symbols) / align }]
+        } else { unit
             .members
             .iter()
             .map(|member| Self::type_lowering(member.member_type.clone(), symbols))
-            .collect::<Vec<_>>();
+            .collect::<Vec<_>>() };
 
         let struct_def = format!(
             "{} = type {{ {} }}\n",
@@ -127,6 +132,7 @@ impl IrGenerator {
                 .join(", ")
         );
         self.header.push_str(&struct_def);
+        self.add_deconstruct(unit, symbols);
     }
 
     pub fn add_func_decl(
@@ -212,6 +218,14 @@ impl IrGenerator {
             }
             crate::ast::types::CompileType::Ref(reference) => {
                 self.ensure_type(reference.base, package, visited)
+            }
+            crate::ast::types::CompileType::Function(signature) => {
+                for parameter in &signature.params {
+                    self.ensure_type(*parameter, package, visited);
+                }
+                if let Some(result) = signature.returns {
+                    self.ensure_type(result, package, visited);
+                }
             }
             _ => {}
         }

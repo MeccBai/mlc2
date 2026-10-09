@@ -3,6 +3,12 @@ use crate::ast::types::base_type::DataType;
 pub struct SymbolName;
 
 impl SymbolName {
+    pub fn function_signature(signature: &str) -> String {
+        format!(".mlc.signature.{signature}")
+    }
+    pub fn deconstruct(symbol_name: &str) -> String {
+        Self::member(symbol_name, "deconstruct")
+    }
     pub fn global_initializer(file: crate::ast::config::FileId) -> String {
         format!(".mlc.init.{}", file.index())
     }
@@ -69,6 +75,10 @@ impl SymbolName {
     pub fn reference(base: &str, level: usize, mut_base: bool) -> String {
         let mutability = if mut_base { "mut " } else { "" };
         format!("{}{}{base}", "$".repeat(level), mutability)
+    }
+
+    pub fn resource(reference: &str) -> String {
+        format!("res {reference}")
     }
 
     pub fn array(element: &str, length: usize) -> String {

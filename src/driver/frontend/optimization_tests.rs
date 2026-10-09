@@ -16,7 +16,7 @@ fn pruned_control_flow_preserves_side_effects_and_unmatched_match_fallthrough() 
             while (false) { touch(); }
             for i in [3,1] { touch(); }
             for j in [0,3] {
-                match (99) { 1 => { break; } }
+                match (99) { 1 => { break; }, _ => {} }
                 hits = hits+1;
             }
             match (2) { _ => { hits = hits+100; }, 2 => { hits = hits+1; } }

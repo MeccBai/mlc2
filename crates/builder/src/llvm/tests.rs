@@ -28,7 +28,10 @@ fn unsupported_triplet_returns_an_error() {
 
 #[test]
 fn preset_targets_initialize_repeatedly() {
-    for triplet in [X86_64_PC_WINDOWS_MSVC] {
+    for triplet in [
+        X86_64_PC_WINDOWS_MSVC,
+        crate::manifest::X86_64_PC_WINDOWS_GNU,
+    ] {
         for _ in 0..2 {
             IrCompiler::init(triplet).unwrap();
         }

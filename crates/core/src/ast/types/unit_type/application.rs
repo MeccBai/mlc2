@@ -15,6 +15,8 @@ pub struct UnitApplication {
     pub template: UnitIndex,
     pub template_name: String,
     pub arguments: Vec<TypeIndex>,
+    /// Retain provenance for inference without treating a concrete instance as generic.
+    pub concrete: bool,
 }
 
 impl UnitType {
@@ -42,6 +44,7 @@ impl UnitType {
             template,
             template_name: source.name.clone(),
             arguments,
+            concrete: false,
         });
         symbols
             .local_mut()

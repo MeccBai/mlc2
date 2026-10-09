@@ -11,9 +11,12 @@ name_span = { start = 0, end = 0, context = { "$none" = true } }
 attributes = []
 generics = [{ name = "T", name_span = { start = 0, end = 0, context = { "$none" = true } }, constraint = { "$none" = true } }]
 return_type = [
+    { kind = "Resource", data = { inner = [
     { kind = "Reference", data = { mutable = true, inner = [
         { kind = "Path", data = { segments = ["T"] } },
         { start = 0, end = 0, context = { "$none" = true } },
+    ] } },
+    { start = 0, end = 0, context = { "$none" = true } },
     ] } },
     { start = 0, end = 0, context = { "$none" = true } },
 ]
@@ -38,9 +41,12 @@ return_type = { "$none" = true }
 name = "pointer"
 name_span = { start = 0, end = 0, context = { "$none" = true } }
 ty = [
+    { kind = "Resource", data = { inner = [
     { kind = "Reference", data = { mutable = true, inner = [
         { kind = "Path", data = { segments = ["T"] } },
         { start = 0, end = 0, context = { "$none" = true } },
+    ] } },
+    { start = 0, end = 0, context = { "$none" = true } },
     ] } },
     { start = 0, end = 0, context = { "$none" = true } },
 ]

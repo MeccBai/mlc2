@@ -26,6 +26,7 @@ enum RawItem {
         name: Spanned<String>,
         generics: Vec<TempGenericParam>,
         members: Vec<TempUnitMember>,
+        is_union: bool,
     },
     Using {
         name: Spanned<String>,
@@ -64,9 +65,20 @@ where
             ty,
             public,
         });
-    let unit = keyword(Token::Unit)
-        .ignore_then(spanned_ident())
+    let aggregate_name = generic_params()
+        .then(spanned_ident())
         .then(generic_params())
+        .try_map(|((prefix, name), suffix), span| {
+            if !prefix.is_empty() && !suffix.is_empty() {
+                return Err(Rich::custom(
+                    span,
+                    "Declare generic parameters either before or after the name, not both",
+                ));
+            }
+            Ok((name, if prefix.is_empty() { suffix } else { prefix }))
+        });
+    let unit = keyword(Token::Unit)
+        .ignore_then(aggregate_name.clone())
         .then(
             member
                 .repeated()
@@ -78,6 +90,34 @@ where
             name,
             generics,
             members,
+            is_union: false,
+        });
+
+    let union = keyword(Token::Union)
+        .ignore_then(aggregate_name)
+        .then(
+            type_parser()
+                .separated_by(operator(Token::Comma))
+                .at_least(1)
+                .allow_trailing()
+                .collect::<Vec<_>>()
+                .delimited_by(keyword(Token::LeftBracket), keyword(Token::RightBracket)),
+        )
+        .then_ignore(keyword(Token::Semicolon))
+        .map(|((name, generics), candidates)| RawItem::Unit {
+            name,
+            generics,
+            is_union: true,
+            members: candidates
+                .into_iter()
+                .enumerate()
+                .map(|(index, ty)| TempUnitMember {
+                    name: format!("$variant{index}"),
+                    name_span: ty.1,
+                    ty,
+                    public: false,
+                })
+                .collect(),
         });
 
     let using = keyword(Token::Using)
@@ -130,7 +170,7 @@ where
     let declaration = attributes()
         .then(visibility().map_with(|visibility, extra| (visibility, extra.span())))
         .then(choice((
-            import, unit, using, generic, enum_, interface, function,
+            import, union, unit, using, generic, enum_, interface, function,
         )))
         .try_map(|((attributes, (visibility, visibility_span)), raw), _| {
             if !matches!(raw, RawItem::Interface(_))
@@ -160,7 +200,9 @@ where
                     name: (name, name_span),
                     generics,
                     members,
+                    is_union,
                 } => TempGlobalStmt::Unit(TempUnit {
+                    is_union,
                     visibility,
                     name,
                     name_span,

@@ -4,6 +4,7 @@ use super::Token;
 impl std::fmt::Display for Token {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(match self {
+            Self::Union => "union",
             Self::AttributeStart => "#[",
             Self::AttributeEnd => "]#",
             Self::Pipe => "|>",
@@ -48,6 +49,7 @@ impl std::fmt::Display for Token {
             Self::Value => "val",
             Self::Constant => "const",
             Self::Mut => "mut",
+            Self::Resource => "res",
             Self::Unit => "unit",
             Self::Using => "using",
             Self::Generic => "generic",

@@ -4,6 +4,8 @@ mod display;
 #[derive(Logos, Debug, PartialEq, Clone)]
 #[logos(skip r"[ \t\r\n\f]+")]
 pub enum Token {
+    #[token("union")]
+    Union,
     #[regex(r"//[^\r\n]*", allow_greedy = true)]
     SingleLineComment,
 
@@ -114,6 +116,8 @@ pub enum Token {
     Constant,
     #[token("mut")]
     Mut,
+    #[token("res")]
+    Resource,
     #[token("unit")]
     Unit,
     #[token("using")]

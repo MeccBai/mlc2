@@ -14,6 +14,15 @@ impl TempPath {
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(tag = "kind", content = "data")]
 pub enum TempType {
+    Function {
+        params: Vec<Spanned<TempType>>,
+        returns: Option<Box<Spanned<TempType>>>,
+        variadic: bool,
+    },
+    InferredResource,
+    Resource {
+        inner: Box<Spanned<TempType>>,
+    },
     Array {
         element: Box<Spanned<TempType>>,
         length: usize,
@@ -32,6 +41,23 @@ pub enum TempType {
 impl TempType {
     pub fn dump(&self) -> String {
         match self {
+            Self::Function {
+                params,
+                returns,
+                variadic,
+            } => {
+                let mut params = params.iter().map(|ty| ty.0.dump()).collect::<Vec<_>>();
+                if *variadic {
+                    params.push("...".into());
+                }
+                let returns = returns
+                    .as_ref()
+                    .map(|ty| format!(" -> {}", ty.0.dump()))
+                    .unwrap_or_default();
+                format!("func({}){returns}", params.join(", "))
+            }
+            Self::InferredResource => "res".into(),
+            Self::Resource { inner } => format!("res {}", inner.0.dump()),
             Self::Array { element, length } => format!("[{}:{length}]", element.0.dump()),
             Self::Path(path) => path.segments.join("::"),
             Self::Generic { base, args } => format!(

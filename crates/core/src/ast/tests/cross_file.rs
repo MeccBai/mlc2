@@ -42,3 +42,5 @@ fn analyze(package: &mut PackageSymbolTable, ast: &mut AbstractSyntaxTree) {
 mod access;
 mod instantiation;
 mod visibility;
+mod union;
+mod function_pointer;

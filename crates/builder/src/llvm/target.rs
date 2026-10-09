@@ -1,11 +1,11 @@
 use super::BackendError;
-use crate::manifest::X86_64_PC_WINDOWS_MSVC;
+use crate::manifest::{X86_64_PC_WINDOWS_GNU, X86_64_PC_WINDOWS_MSVC};
 use llvm_sys::target::*;
 use std::sync::Mutex;
 
 /// Initialize only the currently supported target family, once per process.
 pub(super) fn initialize(triplet: &str) -> Result<(), BackendError> {
-    if triplet != X86_64_PC_WINDOWS_MSVC {
+    if ![X86_64_PC_WINDOWS_MSVC, X86_64_PC_WINDOWS_GNU].contains(&triplet) {
         return Err(BackendError::Target(format!(
             "unsupported triplet: {triplet}"
         )));

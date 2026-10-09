@@ -14,6 +14,8 @@ pub struct RefType {
     pub base: TypeIndex,
     pub mut_base: bool,
     pub level: usize,
+    /// Owns the allocation; ordinary references never carry destruction responsibility.
+    pub ownership: bool,
 }
 
 const REF_SIZE: usize = 8;
@@ -26,11 +28,35 @@ impl RefType {
             base,
             level,
             mut_base,
+            ownership: false,
         }
     }
 
+    pub fn owned(mut self) -> Self {
+        self.ownership = true;
+        self
+    }
+
+    pub fn borrowed(mut self, mutable: bool) -> Self {
+        self.ownership = false;
+        self.mut_base &= mutable;
+        self
+    }
+
     pub fn format(&self, arena: &(impl crate::ast::types::TypeLookup + ?Sized)) -> String {
-        SymbolName::reference(&self.base.format(arena), self.level, self.mut_base)
+        self.decorate(SymbolName::reference(
+            &self.base.format(arena),
+            self.level,
+            self.mut_base,
+        ))
+    }
+
+    fn decorate(&self, name: String) -> String {
+        if self.ownership {
+            SymbolName::resource(&name)
+        } else {
+            name
+        }
     }
 
     pub fn deref(
@@ -70,11 +96,11 @@ impl RefType {
         arena: &(impl crate::ast::types::TypeLookup + ?Sized),
         params: &HashMap<GenericIndex, TypeIndex>,
     ) -> String {
-        SymbolName::reference(
+        self.decorate(SymbolName::reference(
             &self.base.generic_instance_name(arena, params),
             self.level,
             self.mut_base,
-        )
+        ))
     }
 
     pub fn instantiation(
@@ -88,7 +114,10 @@ impl RefType {
         let child = self
             .base
             .instantiation(config, params, symbols, actives, span)?;
-        let instance = RefType::new(child, self.level, self.mut_base);
+        let instance = RefType {
+            base: child,
+            ..self
+        };
 
         let name = instance.format(symbols);
         let ident = get_ident(&name);
@@ -105,6 +134,9 @@ impl RefType {
         other: &RefType,
         symbols: &(impl crate::ast::types::TypeLookup + ?Sized),
     ) -> bool {
+        if self.ownership && !other.ownership {
+            return false;
+        }
         if !self.base.type_check(false, &other.base, symbols) {
             return false;
         }

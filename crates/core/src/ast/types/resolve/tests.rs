@@ -17,6 +17,41 @@ fn config() -> Config {
     )
 }
 
+#[test]
+fn resource_identity_is_distinct_and_dereferencing_does_not_transfer_ownership() {
+    let mut config = config();
+    let mut symbols = SymbolTable::new();
+    let plain = resolve_type_with_bindings(
+        &mut config,
+        reference("i32", true, 2),
+        &mut symbols,
+        &HashMap::<String, TypeIndex>::new(),
+    )
+    .unwrap();
+    let resource = resolve_type_with_bindings(
+        &mut config,
+        (
+            TempType::Resource {
+                inner: Box::new(reference("i32", true, 2)),
+            },
+            (0..8).into(),
+        ),
+        &mut symbols,
+        &HashMap::<String, TypeIndex>::new(),
+    )
+    .unwrap();
+    assert_ne!(plain, resource);
+    assert!(resource.is_resource(&symbols));
+    assert!(!plain.is_resource(&symbols));
+    assert_eq!(resource.format(&symbols), "res $$mut i32");
+    assert_eq!(resource.size(&symbols), plain.size(&symbols));
+    assert!(!resource.type_check(false, &plain, &symbols));
+    assert!(plain.type_check(false, &resource, &symbols));
+    let child = resource.deref(&mut symbols).unwrap();
+    assert!(!child.is_resource(&symbols));
+    assert_eq!(child.format(&symbols), "$mut i32");
+}
+
 fn reference(name: &str, mutable: bool, level: usize) -> Spanned<TempType> {
     let span = (4..8).into();
     let mut ty = (
@@ -35,6 +70,41 @@ fn reference(name: &str, mutable: bool, level: usize) -> Spanned<TempType> {
         );
     }
     ty
+}
+
+#[test]
+fn resource_generic_instantiation_preserves_ownership() {
+    let mut config = config();
+    let mut symbols = SymbolTable::new();
+    let generic = symbols
+        .generics
+        .requires
+        .insert("test::T".into(), GenericRequire::empty("test::T".into()));
+    let context = HashMap::from([("T".to_owned(), generic)]);
+    let resource = resolve_type(
+        &mut config,
+        (
+            TempType::Resource {
+                inner: Box::new(reference("T", true, 1)),
+            },
+            (0..10).into(),
+        ),
+        &mut symbols,
+        Some(&context),
+    )
+    .unwrap();
+    let concrete = symbols.get_base(crate::ast::types::base_type::DataType::Integer, 32, true);
+    let instance = resource
+        .instantiation(
+            &mut config,
+            &HashMap::from([(generic, concrete)]),
+            &mut symbols,
+            None,
+            (0..10).into(),
+        )
+        .unwrap();
+    assert!(instance.is_resource(&symbols));
+    assert_eq!(instance.format(&symbols), "res $mut i32");
 }
 
 #[test]

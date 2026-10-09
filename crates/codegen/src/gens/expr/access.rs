@@ -49,6 +49,7 @@ impl Expander<'_> {
 
     fn unary_type(&self, unary: &UnaryExpr) -> Option<TypeIndex> {
         match unary {
+            UnaryExpr::Function { ty, .. } => Some(*ty),
             UnaryExpr::Operator {
                 op: Operator::Dereference,
                 value,
@@ -100,10 +101,22 @@ impl Expander<'_> {
             }
             Access::Index { base, .. } => {
                 let owner = self.expression_type(base)?;
-                let CompileType::List(list) = self.symbols.get_type(owner).unqualified() else {
-                    return None;
-                };
-                Some((owner, list.element_type))
+                match self.symbols.get_type(owner).unqualified() {
+                    CompileType::List(list) => Some((owner, list.element_type)),
+                    CompileType::Ref(reference) if reference.level == 1 => {
+                        Some((reference.base, reference.base))
+                    }
+                    CompileType::Ref(reference) => {
+                        let name = reference.deref_reference()?.format(self.symbols);
+                        let element = self
+                            .symbols
+                            .arenas()
+                            .iter()
+                            .find_map(|(_, file)| file.types.get_by_name(&name))?;
+                        Some((element, element))
+                    }
+                    _ => None,
+                }
             }
         }
     }
@@ -175,8 +188,20 @@ impl Expander<'_> {
                 )
             }
             Access::Index { base, index } => {
+                let source = self
+                    .expression_type(base)
+                    .unwrap_or_else(|| fail("Missing index base type"));
+                let is_reference = matches!(
+                    self.symbols.get_type(source).unqualified(),
+                    CompileType::Ref(_)
+                );
                 let mut base = self.expression(base).value;
-                self.address(&mut base);
+                if is_reference {
+                    self.load(&mut base);
+                    base.in_reg = false;
+                } else {
+                    self.address(&mut base);
+                }
                 let mut index = self.expression(index).value;
                 if !matches!(index.ty, LlvmType::Int(_)) {
                     fail("Checked expression has inconsistent lowering types");
@@ -195,17 +220,25 @@ impl Expander<'_> {
         let pointer = self.address(&mut base);
         base.code.extend(index_code);
         let target = self.allocate();
-        base.code.push(Instruction::Gep {
-            target,
-            ty: IrGenerator::type_lowering(owner, self.symbols),
-            pointer,
-            indices: vec![
+        let pointer_index = matches!(access, Access::Index { base, .. }
+            if self.expression_type(base).is_some_and(|ty|
+                matches!(self.symbols.get_type(ty).unqualified(), CompileType::Ref(_))));
+        let indices = if pointer_index {
+            vec![index]
+        } else {
+            vec![
                 TypedValue {
                     ty: LlvmType::Int(32),
                     value: IrValue::Integer(0),
                 },
                 index,
-            ],
+            ]
+        };
+        base.code.push(Instruction::Gep {
+            target,
+            ty: IrGenerator::type_lowering(owner, self.symbols),
+            pointer,
+            indices,
             inbounds: false,
         });
         Lowered {

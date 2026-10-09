@@ -9,6 +9,14 @@ impl Statement {
         }
         for statement in body {
             match statement {
+                Self::VariantMatch(block) => {
+                    for (_, binding, body) in &block.branches {
+                        if binding.read_count.get() == 0 {
+                            config.submit_warning(Warning::UnusedVariable { name: binding.name.clone() }, binding.declaration_span);
+                        }
+                        Self::warn_unused(body, config);
+                    }
+                }
                 Self::VariableDecl(variable) if variable.read_count.get() == 0 => {
                     config.submit_warning(
                         Warning::UnusedVariable {

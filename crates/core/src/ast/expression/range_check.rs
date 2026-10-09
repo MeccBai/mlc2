@@ -66,5 +66,13 @@ impl Expression {
             }
             _ => {}
         }
+        if !config.is_poisoned() && folded.numeric_constant_loss(target, symbols) {
+            config.submit_error(
+                CompileError::IllegalUse(IllegalUseError::NumericConstantLoss {
+                    target: target.format(symbols),
+                }),
+                span,
+            );
+        }
     }
 }

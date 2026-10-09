@@ -19,7 +19,10 @@ use std::collections::{HashMap, HashSet};
 use std::hash::Hash;
 
 mod application;
+mod deconstruct;
 pub use application::UnitApplication;
+pub(crate) use deconstruct::prepare_deconstructs;
+pub use deconstruct::{Deconstruct, DropMember};
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct UnitMember {
@@ -30,6 +33,8 @@ pub struct UnitMember {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UnitType {
+    pub variant: Option<super::UnionType>,
+    pub deconstruct: Option<Deconstruct>,
     pub application: Option<UnitApplication>,
     pub name: String,
     pub members: Vec<UnitMember>,
@@ -55,6 +60,8 @@ impl UnitType {
     ) -> (Self, Span) {
         let name_span = prototype.name_span;
         let mut this = UnitType {
+            variant: prototype.is_union.then(|| super::UnionType { candidates: Vec::new() }),
+            deconstruct: None,
             application: None,
             name: prototype.name,
             attributes: UnitAttribute::parse(config, prototype.attributes, name_span),
@@ -95,11 +102,20 @@ impl UnitType {
             })
             .collect::<Vec<_>>();
 
+        if let Some(variant) = &mut this.variant {
+            variant.candidates = this.members.iter().map(|member| member.member_type).collect();
+            variant.validate(config, symbols, name_span);
+            if this.attributes.contains(&UnitAttribute::Cabi) {
+                config.submit_error(CompileError::IllegalUse(IllegalUseError::InvalidUnion { reason: "Union cannot use C ABI".into() }), name_span);
+            }
+        }
         (this, name_span)
     }
 
     pub fn empty() -> Self {
         Self {
+            variant: None,
+            deconstruct: None,
             application: None,
             name: String::new(),
             members: Vec::new(),
@@ -115,6 +131,7 @@ impl UnitType {
     }
 
     pub fn size(&self, arena: &(impl crate::ast::types::TypeLookup + ?Sized)) -> usize {
+        if let Some(variant) = &self.variant { return variant.size(arena); }
         let mut current_offset = 0;
         let mut max_align = 1;
 
@@ -131,6 +148,7 @@ impl UnitType {
     }
 
     pub fn align(&self, arena: &(impl crate::ast::types::TypeLookup + ?Sized)) -> usize {
+        if let Some(variant) = &self.variant { return variant.align(arena); }
         let mut max_align = 1;
 
         self.members.iter().for_each(|member| {
@@ -241,11 +259,7 @@ impl UnitType {
                 );
                 return None;
             };
-            if !generic.check(argument, symbols) {
-                config.submit_error(
-                    CompileError::IllegalUse(IllegalUseError::RequirementUnmet),
-                    span,
-                );
+            if !generic.check_and_submit(argument, symbols, config, span) {
                 return None;
             }
         }
@@ -299,8 +313,27 @@ impl UnitType {
             return None;
         };
 
-        let instance = UnitType {
-            application: None,
+        let template = symbols
+            .local()
+            .generics
+            .units
+            .get_by_name(&self.name)
+            .unwrap_or_else(|| {
+                symbols
+                    .local_mut()
+                    .generics
+                    .units
+                    .insert(self.name.clone(), self.clone())
+            });
+        let mut instance = UnitType {
+            variant: self.variant.as_ref().map(|_| super::UnionType { candidates: new_members.iter().map(|member| member.member_type).collect() }),
+            deconstruct: None,
+            application: Some(UnitApplication {
+                template,
+                template_name: self.name.clone(),
+                arguments,
+                concrete: true,
+            }),
             name: instance_name,
             members: new_members,
             attributes: self.attributes.clone(),
@@ -309,13 +342,25 @@ impl UnitType {
             exported: self.exported,
         };
 
+        instance.generate_deconstruct(symbols);
+        if let Some(variant) = &instance.variant {
+            variant.validate(config, symbols, span);
+            if config.is_poisoned() {
+                temp_actives.borrow_mut().remove(&active_key);
+                symbols.local_mut().types.forget_name(&instance.name);
+                return None;
+            }
+        }
         temp_actives.borrow_mut().remove(&active_key);
         symbols.local_mut().types.set(&holder_index, Unit(instance));
         Some(holder_index)
     }
 
     pub fn has_generic(&self) -> bool {
-        self.application.is_some() || !self.generics.is_empty()
+        self.application
+            .as_ref()
+            .is_some_and(|application| !application.concrete)
+            || !self.generics.is_empty()
     }
 
     pub fn generic_instance_name(

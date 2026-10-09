@@ -2,7 +2,9 @@ use crate::ast::symbols::Resolution;
 mod builtins;
 mod calls;
 mod function_args;
+mod function_pointer;
 mod generic_call;
+mod inferred_call;
 mod lookup;
 mod string;
 
@@ -113,6 +115,20 @@ impl Expression {
                 if expr.is_poisoned() {
                     return Self::Poison;
                 }
+                let unary_type = expr.type_inference(config, symbols);
+                if !unary_type.is_empty()
+                    && matches!(
+                        symbols.get_type(unary_type).unqualified(),
+                        CompileType::Function(_)
+                    )
+                    && !matches!(op, Operator::AddressOf | Operator::MutOf)
+                {
+                    config.submit_error(
+                        CompileError::IllegalUse(IllegalUseError::InvalidFunctionPointerOperation),
+                        span,
+                    );
+                    return Self::Poison;
+                }
                 if op == Operator::MutOf && !expr.assignable(config, symbols) {
                     config.submit_error(
                         CompileError::IllegalUse(IllegalUseError::InvalidAssignment),
@@ -149,7 +165,7 @@ impl Expression {
                     if (!base_type.is_empty()
                         && !matches!(
                             symbols.get_type(base_type).unqualified(),
-                            CompileType::List(_)
+                            CompileType::List(_) | CompileType::Ref(_)
                         ))
                         || (!index_type.is_empty() && !index_type.is_integer(symbols))
                     {
@@ -176,6 +192,17 @@ impl Expression {
                 }
                 expressions.iter().for_each(|expr| {
                     let ty = expr.type_inference(config, symbols);
+                    if !ty.is_empty()
+                        && matches!(symbols.get_type(ty).unqualified(), CompileType::Function(_))
+                    {
+                        config.submit_error(
+                            CompileError::IllegalUse(
+                                IllegalUseError::InvalidFunctionPointerOperation,
+                            ),
+                            span,
+                        );
+                        return;
+                    }
                     if !ty.is_empty() && ty.is_ref(symbols) {
                         config.submit_error(
                             CompileError::IllegalUse(IllegalUseError::CannotInferenceType),
@@ -199,7 +226,7 @@ impl Expression {
                 }
                 TempCallee::Expr(callee) => {
                     if matches!(callee.0, Member { .. }) {
-                        Self::new_interface_call(config, *callee, args, span, symbols, context)
+                        Self::new_member_callable(config, *callee, args, span, symbols, context)
                     } else {
                         Self::new_function_call(config, *callee, args, span, symbols, context)
                     }
@@ -270,6 +297,23 @@ impl Expression {
                     ),
                     None => None,
                 };
+
+                if let Some(owner) = ty {
+                    if let CompileType::Unit(unit) = symbols.get_type(owner).unqualified() {
+                        if let Some(variant) = &unit.variant {
+                            let candidates = variant.candidates.clone();
+                            if values.len() != 1 {
+                                config.submit_error(CompileError::IllegalUse(IllegalUseError::InvalidUnion { reason: "Union construction requires exactly one candidate value".into() }), span);
+                                return Self::Poison;
+                            }
+                            let source = values[0].type_inference(config, symbols);
+                            if source.is_empty() || !candidates.iter().any(|candidate| symbols.get_type(*candidate).unqualified().format(symbols) == symbols.get_type(source).unqualified().format(symbols)) {
+                                config.submit_error(CompileError::IllegalUse(IllegalUseError::InvalidUnion { reason: "Initializer type is not a union candidate; use an explicit cast if necessary".into() }), span);
+                                return Self::Poison;
+                            }
+                        }
+                    }
+                }
 
                 InitListE(InitialList::List {
                     onwer: ty,

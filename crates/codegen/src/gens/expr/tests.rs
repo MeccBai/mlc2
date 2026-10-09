@@ -23,6 +23,47 @@ fn literal(ty: TypeIndex, text: &str) -> CompAtom {
         ty,
     })
 }
+
+#[test]
+fn reference_index_loads_pointer_and_uses_single_gep_index() {
+    let (mut package, element) = setup(true);
+    let symbols = package.file_mut(FileId::new(0)).unwrap();
+    let reference = crate::ast::types::ref_type::RefType::new(element, 1, true);
+    let ty = symbols.types.insert(
+        reference.format(&symbols.types),
+        CompileType::Ref(reference),
+    );
+    let variable = std::rc::Rc::new(crate::ast::statement::Variable {
+        read_count: Default::default(),
+        declaration_span: (0..0).into(),
+        name: "pointer".into(),
+        var_type: ty,
+        init_val: Box::new(Expression::Poison),
+    });
+    let bindings = HashMap::from([(
+        "pointer".into(),
+        LlvmValue {
+            code: vec![],
+            ty: LlvmType::Ptr,
+            reg: Some(0),
+            in_reg: false,
+        },
+    )]);
+    let expr = Expression::UnaryExprE(UnaryExpr::Access(crate::ast::expression::Access::Index {
+        base: Box::new(Expression::VarValueE(variable)),
+        index: Box::new(literal(element, "2").to_expression()),
+    }));
+    let (_, value) = IrGenerator::expression_expand(1, &expr, &package, &bindings);
+    assert!(matches!(
+        value.code.first(),
+        Some(Instruction::Load {
+            pointer: IrValue::Reg(0),
+            ..
+        })
+    ));
+    assert!(value.code.iter().any(|instruction| matches!(instruction,
+        Instruction::Gep { ty: LlvmType::Int(32), indices, .. } if indices.len() == 1)));
+}
 fn expr(ty: TypeIndex, ops: Vec<AstOp>) -> Expression {
     Expression::CompositeE(Composite {
         members: ["20", "3", "2"].map(|v| literal(ty, v)).to_vec(),
@@ -288,6 +329,7 @@ fn array_index_and_call_pass_llvm_verification() {
         index: Box::new(literal(ty, "1").to_expression()),
     }));
     let expression = Expression::FuncCallE(FuncCall {
+        callee: None,
         func: EnumBool::False(func),
         args: vec![argument],
     });

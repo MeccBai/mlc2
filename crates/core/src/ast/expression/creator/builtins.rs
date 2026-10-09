@@ -64,7 +64,9 @@ impl Expression {
             ),
             Builtin::Dealloc => match symbols.get_type(source).unqualified() {
                 CompileType::Ref(reference) => {
-                    reference.level == 1 && target.type_check(false, &reference.base, symbols)
+                    reference.ownership
+                        && reference.level == 1
+                        && target.type_check(false, &reference.base, symbols)
                 }
                 _ => false,
             },
@@ -73,6 +75,13 @@ impl Expression {
             return Self::invalid_builtin(config, definition.name, span);
         }
         if kind == Builtin::Alloc {
+            if target.has_res(symbols) {
+                config.submit_error(
+                    CompileError::IllegalUse(IllegalUseError::ResourceAggregateUnsupported),
+                    span,
+                );
+                return Self::Poison;
+            }
             let size_ty = symbols.get_base(DataType::Integer, 64, false);
             args[0].check_constant_range(size_ty, config, symbols, span);
             if config.is_poisoned() {
@@ -85,7 +94,16 @@ impl Expression {
                     .get_base(DataType::Integer, 8, true)
                     .make_ref(symbols, false),
             ),
-            Builtin::Alloc => Some(target.make_ref(symbols, true)),
+            Builtin::Alloc => {
+                let reference = crate::ast::types::RefType::new(target, 1, true).owned();
+                let name = reference.format(symbols);
+                Some(
+                    symbols
+                        .local_mut()
+                        .types
+                        .insert(name, CompileType::Ref(reference)),
+                )
+            }
             Builtin::Cast => Some(target.into(ValueType::Flex, symbols)),
             Builtin::Dealloc => None,
         };
@@ -107,6 +125,7 @@ impl Expression {
             },
         );
         Self::FuncCallE(FuncCall {
+            callee: None,
             func: EnumBool::False(index),
             args,
         })

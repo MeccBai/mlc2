@@ -21,7 +21,7 @@ pub struct Cli {
     #[arg(long, global = true)]
     pub config: Option<PathBuf>,
     /// Clang linker driver, providing the platform CRT/SDK paths.
-    #[arg(long, default_value = "clang", global = true)]
+    #[arg(long, default_value = default_linker(), global = true)]
     pub linker: PathBuf,
     #[arg(long, default_value = "llvm-ar", global = true)]
     pub archiver: PathBuf,
@@ -32,8 +32,18 @@ pub struct Cli {
     pub jobs: Option<usize>,
 }
 
+fn default_linker() -> &'static str {
+    if cfg!(windows) {
+        mlc_builder::manifest::DEFAULT_WINDOWS_LINKER
+    } else {
+        "clang"
+    }
+}
+
 #[derive(Debug, Subcommand)]
 pub enum Commands {
+    /// Generate LLVM IR (.ll) only, without object emission or linking.
+    Ll { input: PathBuf },
     /// Convert a hand-written declaration TOML to a binary .sym symbol table.
     Symbols { input: PathBuf },
     /// List bundled examples or print one example's source code.

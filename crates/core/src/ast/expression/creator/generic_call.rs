@@ -21,6 +21,9 @@ impl Expression {
         symbols: &mut dyn Resolution,
         context: Option<&crate::ast::symbols::StatementContext>,
     ) -> Self {
+        if Self::is_function_builtin(&path) {
+            return Self::new_function_pointer(config, generic_args, args, span, symbols, context);
+        }
         let params = generic_args
             .into_iter()
             .map(|arg| {
@@ -175,6 +178,10 @@ impl Expression {
                 return Self::Poison;
             }
         }
-        Self::FuncCallE(FuncCall { func, args })
+        Self::FuncCallE(FuncCall {
+            callee: None,
+            func,
+            args,
+        })
     }
 }

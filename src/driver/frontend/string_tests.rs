@@ -25,7 +25,7 @@ fn memory_intrinsics_require_import_and_have_no_bare_alias() {
         assert!(result.is_err(), "{statement}");
     }
     let (_, result) = generate_source(
-        "import std::mem; using allocate = std::mem::alloc; func main() -> i32 { var p = allocate<i32>(1); std::mem::dealloc<i32>(p); return 0; }",
+        "import std::mem; using allocate = std::mem::alloc; func main() -> i32 { var p:res $mut i32 = allocate<i32>(1); std::mem::dealloc<i32>(p); return 0; }",
     );
     assert!(result.is_ok(), "{:?}", result.err());
 }

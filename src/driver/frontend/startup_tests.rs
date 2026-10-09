@@ -121,6 +121,7 @@ fn prebuilt_imports_keep_global_init_metadata_and_startup_calls() {
             target: "x86_64-pc-windows-msvc".into(),
             compiler_id: "startup-test".into(),
             compiler_options: vec![],
+            module_fingerprints: Default::default(),
             workers: 1,
         },
         move |request| {

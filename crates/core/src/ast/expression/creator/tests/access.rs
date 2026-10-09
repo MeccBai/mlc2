@@ -42,6 +42,58 @@ fn index(base: TempExpr, offset: TempExpr) -> TempExpr {
 }
 
 #[test]
+fn reference_index_uses_pointee_mutability_not_binding_mutability() {
+    for mutable in [false, true] {
+        let (mut config, mut symbols) = setup();
+        let element = symbols.get_base(DataType::Integer, 32, true);
+        let reference = crate::ast::types::ref_type::RefType::new(element, 1, mutable);
+        let ty = symbols.types.insert(
+            reference.format(&symbols.types),
+            CompileType::Ref(reference),
+        );
+        let ty = ty.into(ValueType::Final, &mut symbols.types);
+        symbols.globals.insert(
+            "pointer".into(),
+            (
+                0,
+                Rc::new(Variable {
+                    read_count: Default::default(),
+                    declaration_span: (0..0).into(),
+                    name: "pointer".into(),
+                    var_type: ty,
+                    init_val: Box::new(Expression::null()),
+                }),
+            ),
+        );
+        let expr = Expression::new(
+            &mut config,
+            (
+                index(
+                    TempExpr::Path(TempPath {
+                        segments: vec!["pointer".into()],
+                    }),
+                    integer("1"),
+                ),
+                (0..1).into(),
+            ),
+            &mut symbols,
+            None,
+        );
+        let inferred = expr.type_inference(&mut config, &mut symbols);
+        assert_eq!(
+            inferred.value_type(&symbols),
+            if mutable {
+                ValueType::Flex
+            } else {
+                ValueType::Final
+            }
+        );
+        assert_eq!(expr.assignable(&mut config, &mut symbols), mutable);
+        assert!(config.error_handle().errors.is_empty());
+    }
+}
+
+#[test]
 fn list_index_becomes_unary_access_with_element_type() {
     let (mut config, mut symbols) = setup();
     let element_type = symbols.get_base(DataType::Integer, 32, true);

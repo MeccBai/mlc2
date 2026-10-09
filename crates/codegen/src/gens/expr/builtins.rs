@@ -44,7 +44,9 @@ impl Expander<'_> {
         }
         // Literals have a default frontend i32 type. Explicit casts must not
         // truncate large literals to that default before converting to their target.
-        let mut input = if let Expression::ConstValueE(value) = argument {
+        let mut input = if kind == Builtin::Dealloc {
+            self.expression_expected(argument, Some(symbol.params[0].0))
+        } else if let Expression::ConstValueE(value) = argument {
             if let Ok(integer) = value.value.parse::<i128>() {
                 if value.ty.is_integer(self.symbols)
                     && (integer < i32::MIN as i128 || integer > i32::MAX as i128)

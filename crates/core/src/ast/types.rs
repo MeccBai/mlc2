@@ -13,6 +13,10 @@ pub use list_type::ListType;
 pub mod enum_type;
 
 pub use enum_type::EnumType;
+pub mod function_type;
+pub mod union_type;
+pub use function_type::FunctionType;
+pub use union_type::UnionType;
 
 mod lookup;
 mod resolve;
@@ -33,6 +37,7 @@ use crate::parser::out::{Spanned, TempType};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CompileType {
+    Function(FunctionType),
     Base(BaseType),
     Ref(RefType),
     Unit(UnitType),
@@ -67,6 +72,7 @@ impl CompileType {
             Self::Qualified { base, .. } => base.is_generic(arena),
             Generic(_) => true,
             Base(_) | Enum(_) => false,
+            Self::Function(function) => function.is_generic(arena),
             Ref(ref_type) => ref_type.base.is_generic(arena),
             Unit(unit_type) => unit_type.has_generic(),
             List(list_type) => list_type.is_generic(arena),
@@ -75,6 +81,7 @@ impl CompileType {
 
     pub fn format(&self, arena: &(impl crate::ast::types::TypeLookup + ?Sized)) -> String {
         match self {
+            Self::Function(function) => function.format(arena),
             Self::Qualified { base, value } => format!("{}{}", value.prefix(), base.format(arena)),
             Base(base_type) => base_type.name(),
             Ref(ref_type) => ref_type.format(arena),
@@ -87,6 +94,7 @@ impl CompileType {
 
     pub fn dump(&self, arena: &(impl crate::ast::types::TypeLookup + ?Sized)) -> String {
         match self {
+            Self::Function(function) => function.format(arena),
             Self::Qualified { base, value } => format!("{}{}", value.prefix(), base.dump(arena)),
             Base(base) => base.dump(),
             Ref(reference) => reference.dump(arena),
@@ -99,6 +107,7 @@ impl CompileType {
 
     pub fn size(&self, arena: &(impl crate::ast::types::TypeLookup + ?Sized)) -> usize {
         match self {
+            Self::Function(_) => 8,
             Self::Qualified { base, .. } => base.size(arena),
             Base(base) => base.size(),
             Ref(reference) => reference.size(),
@@ -168,6 +177,7 @@ impl TypeIndex {
     pub fn size(&self, arena: &(impl crate::ast::types::TypeLookup + ?Sized)) -> usize {
         let ty = arena.get_type(*self).unqualified();
         match ty {
+            CompileType::Function(_) => 8,
             Base(base) => base.size(),
             Ref(ref_type) => ref_type.size(),
             Unit(unit) => unit.size(arena),
@@ -182,6 +192,7 @@ impl TypeIndex {
     pub fn align(&self, arena: &(impl crate::ast::types::TypeLookup + ?Sized)) -> usize {
         let ty = arena.get_type(*self).unqualified();
         match ty {
+            CompileType::Function(_) => 8,
             Base(base) => base.align(),
             Ref(ref_type) => ref_type.align(),
             Unit(unit) => unit.align(arena),
@@ -199,6 +210,7 @@ impl TypeIndex {
             return ty.dump(arena);
         }
         match ty {
+            CompileType::Function(function) => function.format(arena),
             Base(base) => base.dump(),
             Ref(ref_type) => ref_type.dump(arena),
             Unit(unit) => unit.dump(arena),
@@ -215,6 +227,7 @@ impl TypeIndex {
             return ty.format(arena);
         }
         match ty {
+            CompileType::Function(function) => function.format(arena),
             Base(base_type) => base_type.name(),
             Ref(ref_type) => ref_type.format(arena),
             Unit(unit) => unit.format(),
@@ -234,6 +247,7 @@ impl TypeIndex {
         let ty = arena.get_type(*self).unqualified();
         match ty {
             Base(_) | Enum(_) => false,
+            CompileType::Function(function) => function.is_generic(arena),
             Ref(ref_type) => ref_type.base.has_generic(arena),
             Unit(unit) => unit.has_generic(),
             List(list) => list.is_generic(arena),
@@ -248,6 +262,24 @@ impl TypeIndex {
 
     pub fn is_ref(&self, arena: &(impl crate::ast::types::TypeLookup + ?Sized)) -> bool {
         matches!(arena.get_type(*self).unqualified(), Ref(_))
+    }
+
+    pub fn is_resource(&self, arena: &(impl TypeLookup + ?Sized)) -> bool {
+        !self.is_empty()
+            && matches!(arena.get_type(*self).unqualified(), Ref(reference) if reference.ownership)
+    }
+
+    /// 普通引用不会传播所有权，聚合类型由内部析构体标记。
+    pub fn has_res(&self, arena: &(impl TypeLookup + ?Sized)) -> bool {
+        if self.is_empty() {
+            return false;
+        }
+        match arena.get_type(*self).unqualified() {
+            Ref(reference) => reference.ownership,
+            Unit(unit) => unit.deconstruct.is_some(),
+            List(list) => list.element_type.has_res(arena),
+            _ => false,
+        }
     }
 
     pub fn is_unit(&self, arena: &(impl crate::ast::types::TypeLookup + ?Sized)) -> bool {
@@ -298,6 +330,7 @@ impl TypeIndex {
                 Ref(ref_type) => ref_type.generic_instance_name(arena, params),
                 Unit(unit) => unit.generic_instance_name(arena, params),
                 List(list) => list.generic_instance_name(arena, params),
+                CompileType::Function(function) => function.generic_instance_name(arena, params),
                 _ => ice(
                     "TypeIndex is not a Generic type. Cannot get generic instance name of a non-generic type.",
                 ),
@@ -320,7 +353,7 @@ impl TypeIndex {
 
     pub fn deref(
         &self,
-        arena: &mut (impl crate::ast::types::TypeStorage + ?Sized),
+        arena: &mut (impl TypeStorage + ?Sized),
     ) -> Option<TypeIndex> {
         let ty = arena.get_type(*self).unqualified();
         match ty {
@@ -347,7 +380,7 @@ impl TypeIndex {
         let base = self.into_value_type(ValueType::Flex, arena);
         let ty = arena.get_type(base).unqualified();
         match ty {
-            Ref(ref_type) => {
+            Ref(ref_type) if !ref_type.ownership => {
                 let new_ref = RefType::new(ref_type.base, ref_type.level + 1, mut_base);
                 let type_str = new_ref.format(arena);
                 let ident = get_ident(&type_str);
@@ -375,6 +408,9 @@ impl TypeIndex {
         let target = arena.get_type(*self).unqualified();
         let other = arena.get_type(*other).unqualified();
         match (target, other) {
+            (CompileType::Function(a), CompileType::Function(b)) => {
+                a.format(arena) == b.format(arena)
+            }
             (Base(base), Base(other)) => base.type_check(tolerance, other),
             (Ref(ref_t), Ref(ref2)) => ref_t.type_check(ref2, arena),
             (List(list), List(list2)) => list.type_check(list2, arena),

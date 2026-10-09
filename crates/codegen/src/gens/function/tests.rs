@@ -1,5 +1,9 @@
 use mlc_syntax::manifest::SOURCE_SUFFIX;
 mod constant_control;
+mod numeric_initialization;
+mod resources;
+mod function_pointer;
+mod union;
 
 use super::*;
 use crate::ast::{
@@ -145,7 +149,8 @@ fn recursive_aggregate_and_context_typed_initializers() {
         "nested-init",
     );
     assert!(ir.contains("llvm.memset.p0.i64"));
-    assert!(ir.contains("trunc i32"));
+    assert!(ir.contains("store i8 1"));
+    assert!(!ir.contains("trunc i32"));
 }
 
 #[test]

@@ -1,6 +1,12 @@
 //! Source-to-AST integration coverage for this binary crate.
 //! Tests never fabricate Temp nodes or pre-populate symbol arenas.
 mod cross_file;
+mod generic_diagnostics;
+mod generic_inference;
+mod numeric_initialization;
+mod resources;
+mod function_pointer;
+mod union;
 mod usage;
 
 use std::panic::{AssertUnwindSafe, catch_unwind};

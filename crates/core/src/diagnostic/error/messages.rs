@@ -58,12 +58,26 @@ impl fmt::Display for IllegalUseError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         use IllegalUseError::*;
         f.write_str(match self {
+            InvalidUnion { reason } => return f.write_str(reason),
+            InvalidFunctionPointerOperation => "Function pointers support calling, copying and borrowing, not arithmetic or value matching",
+            FunctionPointerRequiresInitializer => "Every function pointer array element must be initialized; null function pointers are not supported",
+            ReservedDeconstruct => "Unit deconstruct is generated automatically and cannot be defined by the user",
             NonConstantMatchCase => "Match case values must be compile-time constants",
+            MissingDefaultBranch => "Match requires a default branch: _ => { ... }",
+            ResourceRequiresOwner => "A temporary resource requires an explicit res owner",
+            ResourceInferenceRequiresInitializer => "Bare res is only allowed in a variable declaration with a resource initializer",
+            ResourceUseAfterMove { name } => return write!(f, "Resource '{name}' has been moved or destroyed"),
+            ResourceMoveWhileBorrowed { name } => return write!(f, "Cannot move or destroy resource '{name}' while it is borrowed"),
+            ResourceEscapesScope => "A borrowed resource cannot outlive its owner",
+            ResourceLoopMove => "Moving an outer resource inside a repeating loop is not supported",
+            UnsupportedResourceOperation => "This operation is not supported for an owned resource",
+            ResourceAggregateUnsupported => "Allocating resource-containing elements is not supported yet",
             EnumValueRequiresPrefix => "Enum values require an explicit prefix; use Enum::Variant or module::Enum::Variant",
             TypeMismatched { expected, found } => {
                 return write!(f, "Type mismatch: expected {expected}, found {found}");
             }
             IntegerConstantOutOfRange { value, target } => return write!(f, "Integer constant {value} is out of range for {target}; truncation is not allowed"),
+            NumericConstantLoss { target } => return write!(f, "Numeric constant cannot be represented by {target} without overflow or precision loss; use an explicit cast"),
             InvalidBuiltinArgument { name } => return write!(f, "Invalid argument or target type for builtin `{name}`"),
             DuplicateSymbol { name } => return write!(f, "Symbol `{name}` is already defined"),
             DuplicateVariable { name } => return write!(f, "Variable `{name}` is already defined; shadowing is not allowed"),
@@ -79,11 +93,13 @@ impl fmt::Display for IllegalUseError {
             UnsupportedSymbolValue => "Using this symbol as a value is not supported",
             SymbolNotCallable => "This symbol is not callable",
             GenericCountMismatch => "Generic argument count mismatch",
+            GenericInferenceMissing { name } => return write!(f, "Cannot infer generic parameter `{name}` from the arguments; specify generic arguments explicitly"),
+            GenericInferenceConflict { name, expected, found } => return write!(f, "Conflicting inferred types for generic parameter `{name}`: `{expected}` and `{found}`"),
             NonGenericInstantiation => "Cannot instantiate a non-generic symbol",
             PrivateInstantiation => "Cannot instantiate a non-exported symbol from another translation unit",
-            RequirementUnmet => "The type does not satisfy its generic requirements",
+            RequirementUnmet { ty, requirement, reason } => return write!(f, "Type `{ty}` does not satisfy generic requirement `{requirement}`: {reason}"),
             MemberAccessViolation => "Invalid member access: check pub visibility and use -> for self",
-            InvalidIndexAccess => "Indexing requires an array and an integer index",
+            InvalidIndexAccess => "Indexing requires an array or reference and an integer index",
             InvalidDereference => "Only reference types can be dereferenced",
             UnsupportedGenericCall => "Unsupported generic call",
             IllegalVisibility => "This visibility modifier is not allowed on this declaration",

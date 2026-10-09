@@ -31,6 +31,9 @@ impl Expression {
                 fold_composite(c, symbols).to_expression()
             }
             Self::FuncCallE(mut call) => {
+                call.callee = call
+                    .callee
+                    .map(|callee| Box::new(callee.const_fold(config, symbols)));
                 call.args = call
                     .args
                     .into_iter()
@@ -89,6 +92,7 @@ impl Expression {
                 })
             }
             Self::UnaryExprE(unary) => Self::UnaryExprE(match unary {
+                function @ UnaryExpr::Function { .. } => function,
                 UnaryExpr::Operator { op, value } => UnaryExpr::Operator {
                     op,
                     value: Box::new(fold_atom(*value, config, symbols)),

@@ -151,9 +151,47 @@ where
                 length,
             });
 
-        choice((reference, array, named))
-            .map_with(|ty, extra| (ty, extra.span()))
-            .labelled("type")
+        let resource = keyword(Token::Resource)
+            .ignore_then(reference.clone().map_with(|ty, extra| (ty, extra.span())))
+            .map(|inner| TypeExpr::Resource {
+                inner: Box::new(inner),
+            });
+
+        let inferred_resource = keyword(Token::Resource).to(TypeExpr::InferredResource);
+        let function = keyword(Token::Function)
+            .ignore_then(
+                choice((ty.clone().map(Some), keyword(Token::VarList).to(None)))
+                    .separated_by(operator(Token::Comma))
+                    .allow_trailing()
+                    .collect::<Vec<_>>()
+                    .delimited_by(keyword(Token::LParen), keyword(Token::RParen)),
+            )
+            .then(operator(Token::Arrow).ignore_then(ty).or_not())
+            .try_map(|(params, returns), span| {
+                if params
+                    .iter()
+                    .take(params.len().saturating_sub(1))
+                    .any(Option::is_none)
+                {
+                    return Err(Rich::custom(span, "... must be the last parameter"));
+                }
+                let variadic = params.last().is_some_and(Option::is_none);
+                Ok(TypeExpr::Function {
+                    params: params.into_iter().flatten().collect(),
+                    returns: returns.map(Box::new),
+                    variadic,
+                })
+            });
+        choice((
+            function,
+            resource,
+            inferred_resource,
+            reference,
+            array,
+            named,
+        ))
+        .map_with(|ty, extra| (ty, extra.span()))
+        .labelled("type")
     })
     .boxed()
 }
