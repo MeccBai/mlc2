@@ -16,6 +16,19 @@ pub const X86_64_PC_WINDOWS_MSVC: &str = "x86_64-pc-windows-msvc";
 pub const X86_64_PC_WINDOWS_GNU: &str = "x86_64-pc-windows-gnu";
 pub const DEFAULT_WINDOWS_LINKER: &str = "x86_64-w64-mingw32-clang";
 
+/// The compiler executable's platform, not the machine running Cargo.
+/// Preserve architecture and Linux libc; Windows defaults to the GNU ABI.
+pub fn system_triplet(target: &str) -> String {
+    if target.contains("-windows-") {
+        format!(
+            "{}-pc-windows-gnu",
+            target.split('-').next().unwrap_or("x86_64")
+        )
+    } else {
+        target.to_owned()
+    }
+}
+
 /// Resolve a linker in the compiler distribution, never through PATH.
 pub fn lld_path(executable: &std::path::Path, coff: bool) -> Option<std::path::PathBuf> {
     Some(executable.parent()?.join(format!(
@@ -32,6 +45,21 @@ pub const LLVM_C_LIBRARY: &str = "LLVM-C";
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn system_defaults_preserve_architecture_and_platform() {
+        for (input, expected) in [
+            ("x86_64-pc-windows-msvc", "x86_64-pc-windows-gnu"),
+            ("aarch64-pc-windows-msvc", "aarch64-pc-windows-gnu"),
+            ("x86_64-pc-windows-gnu", "x86_64-pc-windows-gnu"),
+            ("x86_64-unknown-linux-gnu", "x86_64-unknown-linux-gnu"),
+            ("aarch64-unknown-linux-musl", "aarch64-unknown-linux-musl"),
+            ("x86_64-apple-darwin", "x86_64-apple-darwin"),
+            ("aarch64-apple-darwin", "aarch64-apple-darwin"),
+        ] {
+            assert_eq!(system_triplet(input), expected);
+        }
+    }
 
     #[test]
     fn linker_paths_are_executable_siblings() {

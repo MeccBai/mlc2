@@ -31,10 +31,32 @@ fn preset_targets_initialize_repeatedly() {
     for triplet in [
         X86_64_PC_WINDOWS_MSVC,
         crate::manifest::X86_64_PC_WINDOWS_GNU,
+        "x86_64-unknown-linux-gnu",
+        "aarch64-unknown-linux-gnu",
+        "x86_64-apple-darwin",
+        "aarch64-apple-darwin",
     ] {
         for _ in 0..2 {
             IrCompiler::init(triplet).unwrap();
         }
+    }
+}
+
+#[test]
+fn linux_and_macos_targets_emit_objects() {
+    for triplet in [
+        "x86_64-unknown-linux-gnu",
+        "aarch64-unknown-linux-gnu",
+        "x86_64-apple-darwin",
+        "aarch64-apple-darwin",
+    ] {
+        let root = tempfile::tempdir().unwrap();
+        let output = root.path().join("sample.o");
+        IrCompiler::init(triplet)
+            .unwrap()
+            .emit("define i32 @sample() { ret i32 42 }".into(), &output)
+            .unwrap();
+        assert!(std::fs::metadata(output).unwrap().len() > 0);
     }
 }
 

@@ -4,6 +4,7 @@ use std::path::{Component, Path, PathBuf};
 #[cfg(test)]
 mod tests;
 
+/// Default target follows the platform this compiler executable was built for.
 pub const HOST_TRIPLET: &str = env!("MLC_HOST_TRIPLET");
 
 #[derive(Debug, Clone)]
