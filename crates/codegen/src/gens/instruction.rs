@@ -112,6 +112,17 @@ pub enum Cast {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Instruction {
+    Switch { value: TypedValue, default: String, cases: Vec<(IrValue, String)> },
+    FunctionAddress {
+        func: Box<super::func::LlvmFunc>,
+        target: usize,
+    },
+    IndirectCall {
+        func: Box<super::func::LlvmFunc>,
+        callee: IrValue,
+        target: Option<usize>,
+        args: Vec<TypedValue>,
+    },
     /// Module resource carried alongside expression code; extracted before rendering a body.
     StringConstant {
         name: String,

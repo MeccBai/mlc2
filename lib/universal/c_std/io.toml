@@ -35,3 +35,60 @@ ty = [
 name = "..."
 name_span = { start = 0, end = 0, context = { "$none" = true } }
 ty = { "$none" = true }
+
+# int scanf(const char *format, ...);
+[[Symbols.Functions]]
+visibility = "Export"
+name = "scanf"
+name_span = { start = 0, end = 0, context = { "$none" = true } }
+generics = []
+attributes = ["c_abi"]
+return_type = [{ kind = "Path", data = { segments = ["i32"] } }, { start = 0, end = 0, context = { "$none" = true } }]
+
+[[Symbols.Functions.params]]
+name = "format"
+name_span = { start = 0, end = 0, context = { "$none" = true } }
+ty = [{ kind = "Reference", data = { mutable = false, inner = [{ kind = "Path", data = { segments = ["i8"] } }, { start = 0, end = 0, context = { "$none" = true } }] } }, { start = 0, end = 0, context = { "$none" = true } }]
+
+[[Symbols.Functions.params]]
+name = "..."
+name_span = { start = 0, end = 0, context = { "$none" = true } }
+ty = { "$none" = true }
+
+# int puts(const char *text);
+[[Symbols.Functions]]
+visibility = "Export"
+name = "puts"
+name_span = { start = 0, end = 0, context = { "$none" = true } }
+generics = []
+attributes = ["c_abi"]
+return_type = [{ kind = "Path", data = { segments = ["i32"] } }, { start = 0, end = 0, context = { "$none" = true } }]
+
+[[Symbols.Functions.params]]
+name = "text"
+name_span = { start = 0, end = 0, context = { "$none" = true } }
+ty = [{ kind = "Reference", data = { mutable = false, inner = [{ kind = "Path", data = { segments = ["i8"] } }, { start = 0, end = 0, context = { "$none" = true } }] } }, { start = 0, end = 0, context = { "$none" = true } }]
+
+# int putchar(int character);
+[[Symbols.Functions]]
+visibility = "Export"
+name = "putchar"
+name_span = { start = 0, end = 0, context = { "$none" = true } }
+generics = []
+attributes = ["c_abi"]
+return_type = [{ kind = "Path", data = { segments = ["i32"] } }, { start = 0, end = 0, context = { "$none" = true } }]
+
+[[Symbols.Functions.params]]
+name = "character"
+name_span = { start = 0, end = 0, context = { "$none" = true } }
+ty = [{ kind = "Path", data = { segments = ["i32"] } }, { start = 0, end = 0, context = { "$none" = true } }]
+
+# int getchar(void);
+[[Symbols.Functions]]
+visibility = "Export"
+name = "getchar"
+name_span = { start = 0, end = 0, context = { "$none" = true } }
+generics = []
+attributes = ["c_abi"]
+return_type = [{ kind = "Path", data = { segments = ["i32"] } }, { start = 0, end = 0, context = { "$none" = true } }]
+params = []

@@ -62,6 +62,7 @@ fn text_to_ast_to_ir_to_object_and_incremental_cache() {
         target: "x86_64-pc-windows-msvc".into(),
         compiler_id: "integration-test".into(),
         compiler_options: vec![],
+        module_fingerprints: Default::default(),
         workers: 2,
     };
     let report = schedule::build(
@@ -94,6 +95,7 @@ fn semantic_error_is_a_node_result_and_publishes_no_manifest() {
         target: "x86_64-pc-windows-msvc".into(),
         compiler_id: "integration-test".into(),
         compiler_options: vec![],
+        module_fingerprints: Default::default(),
         workers: 1,
     };
     let report = schedule::build(plan, options, compile).unwrap();

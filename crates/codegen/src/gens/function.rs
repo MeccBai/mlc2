@@ -17,6 +17,8 @@ use std::fmt::Write;
 mod constant;
 mod control;
 mod globals;
+mod resources;
+mod variant;
 mod statements;
 #[cfg(test)]
 mod tests;
@@ -167,7 +169,16 @@ impl<'a> FunctionGenerator<'a> {
             to,
             target: target.clone(),
         });
-        // Future RAII redirects this branch into a cleanup chain keyed by this snapshot.
+        let resources: Vec<_> = self
+            .variables
+            .between(from, to)
+            .iter()
+            .filter(|variable| variable.ty.has_res(self.package))
+            .map(|variable| (variable.ty, variable.storage.clone()))
+            .collect();
+        for (ty, storage) in resources {
+            self.drop_owned(ty, &storage);
+        }
         self.branch(target);
     }
 
@@ -398,7 +409,8 @@ impl<'a> FunctionGenerator<'a> {
             .code
             .iter()
             .filter_map(|instruction| match instruction {
-                Instruction::MappedCall { func, .. } => Some((**func).clone()),
+                Instruction::MappedCall { func, .. }
+                | Instruction::FunctionAddress { func, .. } => Some((**func).clone()),
                 _ => None,
             })
             .collect();

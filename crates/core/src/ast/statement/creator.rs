@@ -34,11 +34,42 @@ impl Statement {
         context: &mut StatementContext,
     ) -> Vec<Self> {
         let mut statements = Vec::new();
+        let mut spans = Vec::new();
         for statement in scope.statements {
             if config.is_poisoned() {
                 break;
             }
+            spans.push(statement.1);
             statements.push(Self::new(config, statement, symbols, Some(context)));
+        }
+        if context.frames().len() == 1 && !config.is_poisoned() {
+            let params = match context.belong() {
+                EnumBool::False(index) if !index.is_empty() => {
+                    symbols.get_function_regular(*index).params.clone()
+                }
+                EnumBool::True(index) if !index.is_empty() => {
+                    symbols.get_interface_regular(*index).params.clone()
+                }
+                _ => Vec::new(),
+            };
+            context.resources.parameters(&params, symbols);
+            let result = match context.belong() {
+                EnumBool::False(index) if !index.is_empty() => {
+                    symbols.get_function_regular(*index).ret_type
+                }
+                EnumBool::True(index) if !index.is_empty() => {
+                    symbols.get_interface_regular(*index).ret_type
+                }
+                _ => None,
+            };
+            for (statement, span) in statements.iter().zip(spans) {
+                context
+                    .resources
+                    .statement(statement, result, config, symbols, span);
+                if config.is_poisoned() {
+                    break;
+                }
+            }
         }
         statements
     }
@@ -52,6 +83,7 @@ impl Statement {
         let (stmt, span) = prototype;
 
         match stmt {
+            TempStmt::VariantMatch { binding, value, branches } => Self::create_variant_match(config, binding, value, branches, symbols, context.as_deref()),
             TempStmt::Variable(temp_var) => {
                 let span = temp_var.name_span;
                 let variable = Variable::new(config, temp_var, symbols, context.as_deref_mut());
@@ -83,6 +115,24 @@ impl Statement {
                     return Self::Poison;
                 }
                 let target_type = left_expr.type_inference(config, symbols);
+                let source_type = right_expr.type_inference(config, symbols);
+                let function_pointer = [target_type, source_type].iter().any(|ty| {
+                    !ty.is_empty()
+                        && matches!(
+                            symbols.get_type(*ty).unqualified(),
+                            crate::ast::types::CompileType::Function(_)
+                        )
+                });
+                if function_pointer && !right_expr.type_check(&target_type, config, symbols) {
+                    config.submit_error(
+                        CompileError::IllegalUse(IllegalUseError::TypeMismatched {
+                            expected: target_type.format(symbols),
+                            found: source_type.format(symbols),
+                        }),
+                        span,
+                    );
+                    return Self::Poison;
+                }
                 right_expr.check_constant_range(target_type, config, symbols, span);
                 Self::Assignment(super::Assignment {
                     variable: Box::new(left_expr),

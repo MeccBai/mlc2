@@ -98,6 +98,32 @@ pub fn resolve_type_with_bindings(
     }
     let (temp, span) = temp;
     match temp {
+        TempType::Function {
+            params,
+            returns,
+            variadic,
+        } => {
+            let params = params
+                .into_iter()
+                .map(|ty| resolve_type_with_bindings(config, ty, symbols, bindings))
+                .collect::<Option<Vec<_>>>()?;
+            let returns = match returns {
+                Some(ty) => Some(resolve_type_with_bindings(config, *ty, symbols, bindings)?),
+                None => None,
+            };
+            Some(super::FunctionType::declare(
+                params, returns, variadic, symbols,
+            ))
+        }
+        TempType::InferredResource => {
+            config.submit_error(
+                CompileError::IllegalUse(
+                    crate::diagnostic::error::IllegalUseError::ResourceInferenceRequiresInitializer,
+                ),
+                span,
+            );
+            None
+        }
         TempType::Array { element, length } => {
             let element = resolve_type_with_bindings(config, *element, symbols, bindings)?;
             let array = super::ListType::new(element, length);
@@ -207,10 +233,33 @@ pub fn resolve_type_with_bindings(
             }
             unit.instantiation(config, &params, symbols, None, span)
         }
+        TempType::Resource { inner } => {
+            let index = resolve_type_with_bindings(config, *inner, symbols, bindings)?;
+            let CompileType::Ref(reference) = symbols.get_type(index).unqualified() else {
+                config.submit_error(
+                    CompileError::IllegalUse(
+                        crate::diagnostic::error::IllegalUseError::TypeMismatched {
+                            expected: "reference after res".into(),
+                            found: index.format(symbols),
+                        },
+                    ),
+                    span,
+                );
+                return None;
+            };
+            let reference = reference.clone().owned();
+            let name = reference.format(symbols);
+            Some(
+                symbols
+                    .local_mut()
+                    .types
+                    .insert(get_ident(&name), CompileType::Ref(reference)),
+            )
+        }
         TempType::Reference { inner, mutable } => {
             let base = resolve_type_with_bindings(config, *inner, symbols, bindings)?;
             let new_ref = match symbols.get_type(base).unqualified() {
-                CompileType::Ref(reference) => {
+                CompileType::Ref(reference) if !reference.ownership => {
                     RefType::new(reference.base, reference.level + 1, mutable)
                 }
                 _ => RefType::new(base, 1, mutable),

@@ -66,6 +66,7 @@ fn plain_function_call_resolves_symbol_arguments_and_return_type() {
     assert!(matches!(
         &expression,
         Expression::FuncCallE(FuncCall {
+            callee: None,
             func: EnumBool::False(actual),
             args,
         }) if *actual == index && args.len() == 1
@@ -75,6 +76,52 @@ fn plain_function_call_resolves_symbol_arguments_and_return_type() {
         i32_type
     );
     assert!(config.error_handle().errors.is_empty());
+}
+
+#[test]
+fn regular_function_wins_over_generic_candidate_without_argument_fallback() {
+    // The language still rejects duplicate declarations. Fabricate both tables
+    // here to lock down lookup priority independently of declaration validation.
+    for valid_argument in [true, false] {
+        let (mut config, mut symbols) = setup();
+        let span = (0..8).into();
+        let i32_type = symbols.get_base(DataType::Integer, 32, true);
+        let symbol = FuncSymbol {
+            name: "choose".into(),
+            params: vec![(i32_type, "x".into())],
+            ret_type: Some(i32_type),
+            generics: vec![],
+            generic_map: HashMap::new(),
+            attributes: Default::default(),
+            exported: false,
+        };
+        let normal = symbols.functions.insert("choose".into(), symbol.clone());
+        let mut generic = symbol;
+        generic.generics.push("T".into());
+        symbols.generics.functions.insert("choose".into(), generic);
+        let argument = if valid_argument {
+            integer("1")
+        } else {
+            TempExpr::Literal {
+                kind: TempLiteralKind::Boolean,
+                text: "true".into(),
+            }
+        };
+        let call = TempExpr::Call {
+            callee: TempCallee::Expr(Box::new((path("choose"), span))),
+            args: vec![(argument, span)],
+        };
+        let expression = Expression::new(&mut config, (call, span), &mut symbols, None);
+        if valid_argument {
+            assert!(matches!(expression, Expression::FuncCallE(FuncCall {
+                func: EnumBool::False(index), ..
+            }) if index == normal));
+            assert!(!config.is_poisoned());
+        } else {
+            assert!(config.is_poisoned());
+        }
+        assert!(symbols.function_instances.is_empty());
+    }
 }
 
 #[test]
@@ -131,6 +178,7 @@ fn member_call_resolves_interface_and_prepends_owner() {
     assert!(matches!(
         &expression,
         Expression::FuncCallE(FuncCall {
+            callee: None,
             func: EnumBool::True(actual),
             args,
         }) if *actual == index && args.len() == 2

@@ -114,21 +114,28 @@ impl BaseType {
     }
 
     pub fn type_check(&self, tolerance: bool, other: &BaseType) -> bool {
+        if tolerance {
+            // self is the destination: every possible source value must fit exactly.
+            return match (self.data_type(), other.data_type()) {
+                (DataType::Integer, DataType::Integer) => match (self.signed, other.signed) {
+                    (false, true) => false,
+                    (true, false) => self.bits > other.bits,
+                    _ => self.bits >= other.bits,
+                },
+                (DataType::Float, DataType::Float) => self.bits >= other.bits,
+                (DataType::Float, DataType::Integer) => {
+                    let precision = if self.bits == 32 { 24 } else { 53 };
+                    other.bits - usize::from(other.signed) <= precision
+                }
+                (DataType::Boolean, DataType::Boolean) => true,
+                _ => false,
+            };
+        }
         match (self.data_type.clone(), other.data_type.clone()) {
             (DataType::Integer, DataType::Integer) => {
-                if tolerance {
-                    self.bits <= other.bits
-                } else {
-                    self.bits == other.bits && self.signed == other.signed
-                }
+                self.bits == other.bits && self.signed == other.signed
             }
-            (DataType::Float, DataType::Float) => {
-                if tolerance {
-                    self.bits <= other.bits
-                } else {
-                    self.bits == other.bits
-                }
-            }
+            (DataType::Float, DataType::Float) => self.bits == other.bits,
             (DataType::Boolean, DataType::Boolean) => true,
             _ => false,
         }

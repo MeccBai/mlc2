@@ -38,6 +38,7 @@ impl Project {
             target: "x86_64-pc-windows-msvc".into(),
             compiler_id: "test-compiler-1".into(),
             compiler_options: vec![],
+            module_fingerprints: Default::default(),
             workers: 2,
         }
     }
@@ -94,6 +95,56 @@ fn ordinary_body_change_does_not_rebuild_parent() {
             .unwrap()],
         NodeResult::Cached(_)
     ));
+}
+
+#[test]
+fn per_module_fingerprints_do_not_invalidate_unrelated_nodes() {
+    let project = Project::new();
+    project.write("main.m2", "import leaf; import other; func main() {}");
+    project.write("leaf.m2", "export func f() {}");
+    project.write("other.m2", "export func g() {}");
+    let mut options = project.options();
+    for name in ["main", "leaf", "other"] {
+        options
+            .module_fingerprints
+            .insert(name.into(), "old-ir".into());
+    }
+    let compile = |_: CompileRequest<'_>| {
+        Ok(CompileOutput {
+            ir: None,
+            global_init: None,
+        })
+    };
+    assert_eq!(
+        built(&build(project.plan(), options.clone(), compile).unwrap()),
+        3
+    );
+    options
+        .module_fingerprints
+        .insert("leaf".into(), "changed-ir".into());
+    let report = build(project.plan(), options, compile).unwrap();
+    assert_eq!(built(&report), 1);
+    assert!(
+        report
+            .results
+            .iter()
+            .filter(|result| matches!(result, NodeResult::Built(_)))
+            .all(|result| result.artifact().unwrap().manifest.config.module_name == "leaf")
+    );
+}
+
+#[test]
+fn implementation_change_stops_at_a_stable_dependency_hash_in_a_chain() {
+    let project = Project::new();
+    project.write("main.m2", "import middle; import other; func main() {}");
+    project.write("middle.m2", "import leaf; export func middle() {}");
+    project.write("leaf.m2", "export func f() -> i32 { return 1; }");
+    project.write("other.m2", "export func other() {}");
+    project.build(count());
+    project.write("leaf.m2", "export func f() -> i32 { return 2; }");
+    let report = project.build(count());
+    assert!(report.succeeded());
+    assert_eq!(built(&report), 1);
 }
 
 #[test]

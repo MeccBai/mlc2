@@ -17,6 +17,7 @@ fn unconstrained_generic_is_kept_and_can_be_instantiated() {
     let span = (0..1).into();
     let name = config.symbol_name("Box");
     let prototype = TempUnit {
+        is_union: false,
         visibility: TempVisibility::Private,
         name: name.clone(),
         name_span: span,

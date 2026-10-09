@@ -68,6 +68,7 @@ impl Expression {
         }
 
         Self::FuncCallE(FuncCall {
+            callee: None,
             func: EnumBool::True(interface),
             args: params,
         })
@@ -81,6 +82,28 @@ impl Expression {
         symbols: &mut dyn Resolution,
         context: Option<&StatementContext>,
     ) -> Self {
+        if let TempExpr::Path(path) = &callee.0 {
+            if Self::is_function_builtin(path) {
+                return Self::new_function_pointer(
+                    config,
+                    Vec::new(),
+                    args,
+                    span,
+                    symbols,
+                    context,
+                );
+            }
+            if matches!(
+                symbols.resolve_path(config, path, context),
+                Some(crate::ast::symbols::PathSymbol::Variable(_))
+            ) {
+                let callee = Self::new(config, callee, symbols, context);
+                return Self::new_indirect_call(config, callee, args, span, symbols, context);
+            }
+        } else {
+            let callee = Self::new(config, callee, symbols, context);
+            return Self::new_indirect_call(config, callee, args, span, symbols, context);
+        }
         if let TempExpr::Path(path) = &callee.0 {
             if path.segments.len() == 1 {
                 if let Some(definition) = crate::ast::builtins::lookup(&path.segments[0]) {
@@ -103,6 +126,15 @@ impl Expression {
                 }
             }
         }
+        if let TempExpr::Path(path) = &callee.0 {
+            if let Some(crate::ast::symbols::PathSymbol::Function {
+                index,
+                generic: true,
+            }) = symbols.resolve_path(config, path, context)
+            {
+                return Self::new_inferred_call(config, index, args, span, symbols, context);
+            }
+        }
         let function = match Self::search_function(config, callee, symbols, context) {
             Some(f) => f,
             None => {
@@ -120,6 +152,7 @@ impl Expression {
             }
         }
         Self::FuncCallE(FuncCall {
+            callee: None,
             func: function,
             args,
         })

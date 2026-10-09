@@ -48,6 +48,7 @@ impl Variable {
 
         let ctxt = context.map(|ctxt| &*ctxt);
         let declared = match temp_var.ty.clone() {
+            Some((crate::parser::out::TempType::InferredResource, _)) => None,
             Some(ty) => resolve_type(
                 config,
                 ty,
@@ -87,6 +88,20 @@ impl Variable {
                     return Self::poison();
                 }
                 if values.len() < length {
+                    let element =
+                        declared.and_then(|ty| match symbols.get_type(ty).unqualified() {
+                            crate::ast::types::CompileType::List(list) => Some(list.element_type),
+                            _ => None,
+                        });
+                    if element.is_some_and(|ty| ty.contains_function_pointer(symbols)) {
+                        config.submit_error(
+                            crate::diagnostic::error::CompileError::IllegalUse(
+                                IllegalUseError::FunctionPointerRequiresInitializer,
+                            ),
+                            var_span,
+                        );
+                        return Self::poison();
+                    }
                     config.submit_warning(
                         crate::diagnostic::warning::Warning::ArrayInitializerZeroFilled {
                             supplied: values.len(),
@@ -116,8 +131,38 @@ impl Variable {
             }
         }
         let inferred = init_val.type_inference(config, symbols);
+        if ctxt.is_none()
+            && (inferred.has_res(symbols) || declared.is_some_and(|ty| ty.has_res(symbols)))
+        {
+            config.submit_error(
+                crate::diagnostic::error::CompileError::IllegalUse(
+                    IllegalUseError::UnsupportedResourceOperation,
+                ),
+                var_span,
+            );
+            return Self::poison();
+        }
 
         let ty = match temp_var.ty {
+            Some((crate::parser::out::TempType::InferredResource, _)) => {
+                if !inferred.has_res(symbols) {
+                    config.submit_error(
+                        crate::diagnostic::error::CompileError::IllegalUse(
+                            IllegalUseError::TypeMismatched {
+                                expected: "resource initializer for res".into(),
+                                found: if inferred.is_empty() {
+                                    "void".into()
+                                } else {
+                                    inferred.format(symbols)
+                                },
+                            },
+                        ),
+                        var_span,
+                    );
+                    return Self::poison();
+                }
+                inferred
+            }
             Some(_) => match declared {
                 Some(ty) => {
                     if init_val.type_check(&ty, config, symbols) == false {
@@ -148,7 +193,30 @@ impl Variable {
                         var_span,
                     );
                 }
-                inferred
+                if inferred.is_resource(symbols) {
+                    if !matches!(&init_val, Expression::VarValueE(_)) {
+                        config.submit_error(
+                            crate::diagnostic::error::CompileError::IllegalUse(
+                                IllegalUseError::ResourceRequiresOwner,
+                            ),
+                            var_span,
+                        );
+                        return Self::poison();
+                    }
+                    let crate::ast::types::CompileType::Ref(reference) =
+                        symbols.get_type(inferred).unqualified()
+                    else {
+                        unreachable!()
+                    };
+                    let reference = reference.clone().borrowed(false);
+                    let name = reference.format(symbols);
+                    symbols
+                        .local_mut()
+                        .types
+                        .insert(name, crate::ast::types::CompileType::Ref(reference))
+                } else {
+                    inferred
+                }
             }
         }
         .into_value_type(temp_var.value_type, symbols);
@@ -174,7 +242,7 @@ impl Variable {
             declaration_span: temp_var.name_span,
             name: temp_var.name,
             var_type: ty,
-            init_val: Box::new(init_val),
+            init_val: Box::new(init_val.normalize_initializer(ty, symbols)),
         })
     }
 

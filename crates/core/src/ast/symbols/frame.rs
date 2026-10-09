@@ -47,6 +47,7 @@ impl ScopeFrame {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StatementContext {
+    pub(crate) resources: crate::ast::statement::resources::ResourceState,
     /// Current lexical frame index and scope kind; parent scopes retain loop targets.
     pub supper_scope: (usize, SupperScopeType),
     enclosing_scopes: Vec<(usize, SupperScopeType)>,
@@ -78,6 +79,7 @@ pub enum ContextBinding<'a> {
 impl StatementContext {
     pub fn new(belong: EnumBool<InterfaceIndex, FuncIndex>) -> Self {
         Self {
+            resources: Default::default(),
             supper_scope: (0, SupperScopeType::Function),
             enclosing_scopes: Vec::new(),
             belong,

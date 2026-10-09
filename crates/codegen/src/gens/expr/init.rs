@@ -27,6 +27,9 @@ impl Expander<'_> {
         if owner.is_empty() {
             fail("Initializer has an empty destination type");
         }
+        if matches!(self.symbols.get_type(owner).unqualified(), CompileType::Unit(unit) if unit.variant.is_some()) {
+            return self.variant_initializer(owner, values);
+        }
         let (fields, structure) = match self.symbols.get_type(owner).unqualified() {
             CompileType::List(list) => (vec![list.element_type; list.length], false),
             CompileType::Unit(unit) => (unit.members.iter().map(|m| m.member_type).collect(), true),
@@ -112,6 +115,8 @@ impl Expander<'_> {
             (LlvmType::Int(_), LlvmType::Int(_)) => Cast::ZExt,
             (LlvmType::Float, LlvmType::Double) => Cast::FPExt,
             (LlvmType::Double, LlvmType::Float) => Cast::FPTrunc,
+            (LlvmType::Int(_), LlvmType::Float | LlvmType::Double) if signed => Cast::SIToFP,
+            (LlvmType::Int(_), LlvmType::Float | LlvmType::Double) => Cast::UIToFP,
             _ => fail("Checked initializer field type mismatch"),
         };
         let target = self.allocate();

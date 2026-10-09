@@ -39,26 +39,67 @@ pub enum ResolveError {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum IllegalUseError {
     NonConstantMatchCase,
+    MissingDefaultBranch,
+    ResourceRequiresOwner,
+    ResourceInferenceRequiresInitializer,
+    ResourceUseAfterMove {
+        name: String,
+    },
+    ResourceMoveWhileBorrowed {
+        name: String,
+    },
+    ResourceEscapesScope,
+    ResourceLoopMove,
+    UnsupportedResourceOperation,
+    ResourceAggregateUnsupported,
     EnumValueRequiresPrefix,
     InvalidStringLiteral,
-    InvalidBuiltinArgument { name: String },
-    IntegerConstantOutOfRange { value: String, target: String },
+    InvalidBuiltinArgument {
+        name: String,
+    },
+    IntegerConstantOutOfRange {
+        value: String,
+        target: String,
+    },
+    NumericConstantLoss {
+        target: String,
+    },
     ArrayInitializerRequiresBrackets,
     CAbi(CAbiError),
     InvalidExportTable,
     DuplicateFileId,
-    DuplicateSymbol { name: String },
+    DuplicateSymbol {
+        name: String,
+    },
     CyclicUsing,
     UnsupportedUsingTarget,
-    DuplicateVariable { name: String },
+    ReservedDeconstruct,
+    InvalidUnion { reason: String },
+    InvalidFunctionPointerOperation,
+    FunctionPointerRequiresInitializer,
+    DuplicateVariable {
+        name: String,
+    },
     InvalidSelfBinding,
     TypeUsedAsValue,
     UnsupportedSymbolValue,
     SymbolNotCallable,
     GenericCountMismatch,
+    GenericInferenceMissing {
+        name: String,
+    },
+    GenericInferenceConflict {
+        name: String,
+        expected: String,
+        found: String,
+    },
     NonGenericInstantiation,
     PrivateInstantiation,
-    RequirementUnmet,
+    RequirementUnmet {
+        ty: String,
+        requirement: String,
+        reason: String,
+    },
     MemberAccessViolation,
     InvalidIndexAccess,
     InvalidDereference,
@@ -77,7 +118,10 @@ pub enum IllegalUseError {
     ForBoundMustBeInteger,
     DuplicateDefaultBranch,
     ArgumentCountMismatch,
-    TypeMismatched { expected: String, found: String },
+    TypeMismatched {
+        expected: String,
+        found: String,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

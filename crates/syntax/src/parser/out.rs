@@ -78,6 +78,8 @@ impl TempUnitMember {
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct TempUnit {
+    #[serde(default)]
+    pub is_union: bool,
     pub visibility: TempVisibility,
     pub name: String,
     pub name_span: Span,
@@ -101,7 +103,8 @@ impl TempUnit {
 
     fn dump_impl(&self, with_span: bool) -> String {
         let mut output = format!(
-            "Unit: {}\n    Visibility: {:?}\n    Attributes: {:?}\n    Generics: [{}]",
+            "{}: {}\n    Visibility: {:?}\n    Attributes: {:?}\n    Generics: [{}]",
+            if self.is_union { "Union" } else { "Unit" },
             self.name,
             self.visibility,
             self.attributes,

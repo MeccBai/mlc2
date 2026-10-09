@@ -20,7 +20,21 @@ fn converts_handwritten_c_declarations_without_building() {
         String::from_utf8_lossy(&output.stderr)
     );
     let artifact = mlc_builder::artifacts::load(&root.path().join("io.sym")).unwrap();
-    assert_eq!(artifact.manifest.symbols.functions[0].name, "printf");
+    let functions = &artifact.manifest.symbols.functions;
+    assert_eq!(
+        functions
+            .iter()
+            .map(|function| function.name.as_str())
+            .collect::<Vec<_>>(),
+        ["printf", "scanf", "puts", "putchar", "getchar"]
+    );
+    assert_eq!(functions[0].params.len(), 2);
+    assert_eq!(functions[1].params.len(), 2);
+    assert_eq!(functions[1].params[1].name, "...");
+    assert!(functions[1].params[1].ty.is_none());
+    assert_eq!(functions[2].params.len(), 1);
+    assert_eq!(functions[3].params.len(), 1);
+    assert!(functions[4].params.is_empty());
     assert!(!root.path().join("build").exists());
     let output = run(&["-o", "nested/custom.sym"]);
     assert!(output.status.success());

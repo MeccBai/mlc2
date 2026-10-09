@@ -43,7 +43,7 @@ valid_case!(
 );
 valid_case!(
     match_boolean_patterns,
-    "func main() { match (true) { true => {}, false => {} } }"
+    "func main() { match (true) { true => {}, false => {}, _ => {} } }"
 );
 valid_case!(
     match_float_patterns,

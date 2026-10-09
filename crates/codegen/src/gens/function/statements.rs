@@ -17,6 +17,7 @@ impl FunctionGenerator<'_> {
 
     fn statement(&mut self, statement: &Statement) {
         match statement {
+            Statement::VariantMatch(statement) => self.variant_match(statement),
             Statement::Poison => fail("Poison statement reached function generation"),
             Statement::VariableDecl(variable) => {
                 let signed = self.source_signed(&variable.init_val);
@@ -37,6 +38,11 @@ impl FunctionGenerator<'_> {
                     value,
                     IrGenerator::expression_type(variable, self.package),
                 );
+                if let Some(ty) = IrGenerator::expression_type(variable, self.package)
+                    .filter(|ty| ty.has_res(self.package))
+                {
+                    self.drop_owned(ty, &target);
+                }
                 self.store(&target, value, signed);
             }
             Statement::Expression(expression) => {
@@ -114,6 +120,8 @@ impl FunctionGenerator<'_> {
                 (LlvmType::Int(_), LlvmType::Int(_)) => Cast::ZExt,
                 (LlvmType::Float, LlvmType::Double) => Cast::FPExt,
                 (LlvmType::Double, LlvmType::Float) => Cast::FPTrunc,
+                (LlvmType::Int(_), LlvmType::Float | LlvmType::Double) if signed => Cast::SIToFP,
+                (LlvmType::Int(_), LlvmType::Float | LlvmType::Double) => Cast::UIToFP,
                 _ => fail("Unsupported checked storage conversion"),
             };
             let target = self.allocate();

@@ -1,6 +1,7 @@
 use crate::ast::symbols::Resolution;
 pub mod cosnt_fold;
 pub mod creator;
+mod numeric_initialization;
 pub mod operators;
 mod range_check;
 
@@ -59,6 +60,7 @@ pub enum InitialList {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FuncCall {
+    pub callee: Option<Box<Expression>>,
     pub func: EnumBool<InterfaceIndex, FuncIndex>,
     pub args: Vec<Expression>,
 }
@@ -128,6 +130,7 @@ impl InitialList {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum UnaryExpr {
+    Function { function: FuncIndex, ty: TypeIndex },
     Operator { op: Operator, value: Box<CompAtom> },
     Access(Access),
 }
@@ -265,6 +268,9 @@ impl Expression {
         if config.is_poisoned() || self.is_poisoned() {
             return false;
         }
+        if let Some(accepted) = self.numeric_initialization(*target, config, symbols) {
+            return accepted;
+        }
         match self {
             Expression::Poison => false,
             Expression::VarValueE(var) => target.type_check(true, &var.var_type, symbols),
@@ -281,6 +287,14 @@ impl Expression {
                         let check_list_types = match symbols.get_type(target.clone()).unqualified()
                         {
                             CompileType::Unit(unit) => {
+                                if let Some(variant) = &unit.variant {
+                                    let candidates = variant.candidates.clone();
+                                    if values.len() != 1 { return false; }
+                                    let actual = values[0].type_inference(config, symbols);
+                                    return candidates.iter().any(|candidate| {
+                                        !actual.is_empty() && symbols.get_type(*candidate).unqualified().format(symbols) == symbols.get_type(actual).unqualified().format(symbols)
+                                    });
+                                }
                                 let members: Vec<_> = unit
                                     .members
                                     .iter()
@@ -295,13 +309,10 @@ impl Expression {
                                 if list_types.len() != values.len() {
                                     return false;
                                 }
-                                values.iter().zip(list_types.iter()).all(|(value, ty)| {
-                                    ty.type_check(
-                                        true,
-                                        &value.type_inference(config, symbols),
-                                        symbols,
-                                    )
-                                })
+                                values
+                                    .iter()
+                                    .zip(list_types.iter())
+                                    .all(|(value, ty)| value.type_check(ty, config, symbols))
                             }
                             None => false,
                         }
@@ -320,13 +331,9 @@ impl Expression {
                         }
                         _ => return false,
                     };
-                    values.iter().all(|value| {
-                        element_type.type_check(
-                            true,
-                            &value.type_inference(config, symbols),
-                            symbols,
-                        )
-                    })
+                    values
+                        .iter()
+                        .all(|value| value.type_check(&element_type, config, symbols))
                 }
                 InitialList::String { value } => {
                     let string_type = symbols.get_base(DataType::Integer, 8, true);
@@ -422,6 +429,7 @@ impl FuncCall {
 impl UnaryExpr {
     fn type_inference(&self, config: &mut Config, symbols: &mut dyn Resolution) -> TypeIndex {
         match self {
+            Self::Function { ty, .. } => *ty,
             Self::Operator { op, value } => {
                 let value_type = value.type_inference(config, symbols);
                 match op {
@@ -451,6 +459,7 @@ impl UnaryExpr {
 
     fn is_const(&self, symbols: &dyn Resolution) -> bool {
         match self {
+            Self::Function { .. } => true,
             Self::Operator { value, .. } => value.is_const(symbols),
             Self::Access(access) => access.is_const(symbols),
         }
@@ -483,6 +492,15 @@ impl Access {
                 let value = base_type.value_type(symbols);
                 let element = match symbols.get_type(base_type).unqualified() {
                     CompileType::List(list) => list.element_type(),
+                    CompileType::Ref(reference) => {
+                        let value = if reference.mut_base {
+                            ValueType::Flex
+                        } else {
+                            ValueType::Final
+                        };
+                        let element = base_type.deref(symbols).unwrap_or(TypeIndex::empty());
+                        return element.into(value, symbols);
+                    }
                     _ => TypeIndex::empty(),
                 };
                 element.into(value, symbols)
@@ -503,7 +521,13 @@ impl Access {
                     base.is_left_value(config, symbols)
                 }
             }
-            Self::Index { base, .. } => base.assignable(config, symbols),
+            Self::Index { base, .. } => {
+                let ty = base.type_inference(config, symbols);
+                match symbols.get_type(ty).unqualified() {
+                    CompileType::Ref(reference) => reference.mut_base,
+                    _ => base.assignable(config, symbols),
+                }
+            }
         }
     }
 

@@ -112,6 +112,26 @@ impl fmt::Display for Instruction {
             Self::MappedCall { func, target, args } => {
                 func.write_call(f, *target, args).map_err(|_| fmt::Error)
             }
+            Self::Switch { value, default, cases } => {
+                write!(f, "switch {value}, label %{default} [")?;
+                for (case, label) in cases { write!(f, "\n    {} {case}, label %{label}", value.ty)?; }
+                write!(f, "\n  ]")
+            }
+            Self::IndirectCall {
+                func,
+                callee,
+                target,
+                args,
+            } => func
+                .write_call_to(f, *target, args, callee)
+                .map_err(|_| fmt::Error),
+            Self::FunctionAddress { func, target } => {
+                write!(
+                    f,
+                    "%r{target} = bitcast ptr {} to ptr",
+                    IrValue::Global(func.name().into())
+                )
+            }
             Self::Alloca {
                 target,
                 ty,

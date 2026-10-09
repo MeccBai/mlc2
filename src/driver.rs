@@ -1,4 +1,6 @@
+mod cache;
 mod frontend;
+mod ir_dump;
 mod link;
 use crate::cli::{Cli, Commands};
 use mlc_builder::{
@@ -13,6 +15,12 @@ use std::{collections::HashMap, path::Path};
 pub fn run(cli: Cli) -> Result<(), String> {
     let root = std::env::current_dir().map_err(|e| e.to_string())?;
     let targets = match &cli.command {
+        Some(Commands::Ll { input }) => {
+            if cli.entry.is_some() {
+                return Err("Do not combine ll with an entry file".into());
+            }
+            vec![(input.clone(), None, TargetKind::Bin)]
+        }
         Some(Commands::Symbols { input }) => {
             if cli.entry.is_some() {
                 return Err("Do not combine symbols with an entry file".into());
@@ -135,15 +143,32 @@ fn build(
     }
     let plan = BuildPlan::discover_with_paths(entry, &paths)?;
     let generated = frontend::generate(&plan, &paths.triplet, kind)?;
-    let fingerprint = mlc_builder::artifacts::semantic_hash(&generated.modules)?;
+    if matches!(cli.command, Some(Commands::Ll { .. })) {
+        let directory = if cli.output.is_some() {
+            output
+        } else {
+            output.join("ll")
+        };
+        return ir_dump::write(&plan, generated, &directory);
+    }
+    let module_fingerprints = generated
+        .modules
+        .iter()
+        .map(|(id, ir)| {
+            (
+                plan.targets[*id].module_name.clone(),
+                mlc_builder::artifacts::content_hash(ir.as_bytes()),
+            )
+        })
+        .collect();
     let modules: HashMap<_, _> = generated.modules.into_iter().collect();
     let global_inits: HashMap<_, _> = generated.global_inits.into_iter().collect();
     let options = BuildOptions {
         output: paths.output.clone(),
         target: paths.triplet.clone(),
-        compiler_id: format!("mlc-{}-cli-v1", env!("CARGO_PKG_VERSION")),
-        // Conservative: full IR fixes file IDs and imported instance ownership.
-        compiler_options: vec![fingerprint],
+        compiler_id: format!("mlc-{}-cli-v2", env!("CARGO_PKG_VERSION")),
+        compiler_options: vec![format!("kind={kind:?}")],
+        module_fingerprints,
         workers: cli.jobs.unwrap_or_else(|| {
             std::thread::available_parallelism()
                 .map(usize::from)
@@ -174,10 +199,18 @@ fn build(
     let mut objects = report.objects;
     if let Some(ir) = generated.supplement {
         let object = paths.output.join("__mlc_instances.obj");
-        mlc_builder::llvm::IrCompiler::init(&paths.triplet)
-            .map_err(|e| e.to_string())?
-            .emit(ir, &object)
-            .map_err(|e| e.to_string())?;
+        let key = mlc_builder::artifacts::semantic_hash(&(
+            &paths.triplet,
+            env!("CARGO_PKG_VERSION"),
+            &ir,
+        ))?;
+        if !cache::matches(&object, &key) {
+            mlc_builder::llvm::IrCompiler::init(&paths.triplet)
+                .map_err(|e| e.to_string())?
+                .emit(ir, &object)
+                .map_err(|e| e.to_string())?;
+            cache::record(&object, &key)?;
+        }
         objects.push(object);
     }
     let stem = name
@@ -188,7 +221,60 @@ fn build(
     if stem.is_empty() || stem == "." || stem == ".." || stem.contains(['/', '\\', ':']) {
         return Err("Target name must be a filename, not a path".into());
     }
-    link::link(cli, &objects, &artifact, kind, &paths.triplet)?;
+    let object_hashes = objects
+        .iter()
+        .map(|path| {
+            std::fs::read(path)
+                .map(|bytes| (path.clone(), mlc_builder::artifacts::content_hash(&bytes)))
+                .map_err(|error| error.to_string())
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let tool = cache::tool_identity(if kind == TargetKind::Static {
+        &cli.archiver
+    } else {
+        &cli.linker
+    });
+    let lld = if kind == TargetKind::Static {
+        None
+    } else {
+        mlc_builder::manifest::lld_path(
+            &std::env::current_exe().map_err(|error| error.to_string())?,
+            paths.triplet.contains("windows-msvc"),
+        )
+        .and_then(|path| cache::tool_identity(&path))
+    };
+    let environment = [
+        "PATH",
+        "LIB",
+        "LIBPATH",
+        "INCLUDE",
+        "WindowsSdkDir",
+        "VCToolsInstallDir",
+    ]
+    .map(|name| {
+        (
+            name,
+            std::env::var_os(name).map(|value| value.to_string_lossy().into_owned()),
+        )
+    });
+    let link_key = mlc_builder::artifacts::semantic_hash(&(
+        &report.link_key,
+        &paths.triplet,
+        format!("{kind:?}"),
+        &cli.linker,
+        &cli.archiver,
+        &cli.link_args,
+        object_hashes,
+        &tool,
+        &lld,
+        environment,
+    ))?;
+    // Extra linker arguments may reference external libraries/scripts that are
+    // not represented in our dependency graph. Relink conservatively in that case.
+    if tool.is_none() || !cli.link_args.is_empty() || !cache::matches(&artifact, &link_key) {
+        link::link(cli, &objects, &artifact, kind, &paths.triplet)?;
+        cache::record(&artifact, &link_key)?;
+    }
     println!("Built {}", artifact.display());
     Ok(())
 }

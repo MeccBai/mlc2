@@ -52,11 +52,7 @@ fn arguments(
             );
             return None;
         };
-        if !index.check(ty, symbols) {
-            config.submit_error(
-                CompileError::IllegalUse(IllegalUseError::RequirementUnmet),
-                span,
-            );
+        if !index.check_and_submit(ty, symbols, config, span) {
             return None;
         }
         arguments.push(ty.format(symbols));

@@ -20,6 +20,9 @@ pub struct BuildOptions {
     pub target: String,
     pub compiler_id: String,
     pub compiler_options: Vec<String>,
+    /// Per-file lowering fingerprints, never included in other files' cache keys.
+    #[serde(default)]
+    pub module_fingerprints: std::collections::HashMap<String, String>,
     pub workers: usize,
 }
 

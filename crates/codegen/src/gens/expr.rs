@@ -16,6 +16,7 @@ mod builtins;
 mod calls;
 mod composite;
 mod init;
+mod variant;
 
 #[cfg(test)]
 mod tests;
@@ -75,8 +76,36 @@ impl IrGenerator {
 
 impl Expander<'_> {
     fn expression_expected(&mut self, expr: &Expression, expected: Option<TypeIndex>) -> Lowered {
+        if expected.is_some_and(|ty| ty.has_res(self.symbols)) {
+            if let Expression::VarValueE(variable) = expr {
+                let mut value = self.expression(expr);
+                let pointer = self.load(&mut value.value);
+                let slot = self
+                    .bindings
+                    .get(&variable.name)
+                    .unwrap_or_else(|| fail("Missing resource storage"))
+                    .reg
+                    .unwrap();
+                value.value.code.push(Instruction::Store {
+                    pointer: IrValue::Reg(slot),
+                    value: TypedValue {
+                        ty: value.value.ty.clone(),
+                        value: IrValue::ZeroInitializer,
+                    },
+                    align: None,
+                });
+                value.value.reg = match pointer {
+                    IrValue::Reg(reg) => Some(reg),
+                    _ => fail("Resource load must produce a register"),
+                };
+                value.value.in_reg = true;
+                return value;
+            }
+        }
         if let Expression::InitListE(list) = expr {
             self.initializer_expected(list, expected)
+        } else if let Some(target) = expected {
+            self.expression(&expr.clone().normalize_initializer(target, self.symbols))
         } else {
             self.expression(expr)
         }
@@ -144,6 +173,27 @@ impl Expander<'_> {
             Expression::FuncCallE(call) => self.call(call),
             Expression::UnaryExprE(UnaryExpr::Operator { op, value }) => self.unary(op, value),
             Expression::UnaryExprE(UnaryExpr::Access(access)) => self.access(access),
+            Expression::UnaryExprE(UnaryExpr::Function { function, .. }) => {
+                use super::func::SymbolIr;
+                let func = self
+                    .symbols
+                    .get_function(*function, false)
+                    .llvm_func(self.symbols)
+                    .unwrap_or_else(|error| error.abort_generation());
+                let reg = self.allocate();
+                Lowered {
+                    signed: false,
+                    value: LlvmValue {
+                        code: vec![Instruction::FunctionAddress {
+                            func: Box::new(func),
+                            target: reg,
+                        }],
+                        ty: LlvmType::Ptr,
+                        reg: Some(reg),
+                        in_reg: true,
+                    },
+                }
+            }
             Expression::InitListE(list) => self.initializer(list),
         }
     }
@@ -157,6 +207,9 @@ impl Expander<'_> {
             CompAtom::VarValueA(v) => self.expression(&Expression::VarValueE(v.clone())),
             CompAtom::UnaryExprA(UnaryExpr::Operator { op, value }) => self.unary(op, value),
             CompAtom::UnaryExprA(UnaryExpr::Access(access)) => self.access(access),
+            CompAtom::UnaryExprA(function @ UnaryExpr::Function { .. }) => {
+                self.expression(&Expression::UnaryExprE(function.clone()))
+            }
         }
     }
 

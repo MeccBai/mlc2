@@ -55,6 +55,16 @@ impl LlvmFunc {
         target: Option<usize>,
         args: &[TypedValue],
     ) -> Result<(), CallError> {
+        self.write_call_to(output, target, args, &IrValue::Global(self.name.clone()))
+    }
+
+    pub fn write_call_to(
+        &self,
+        output: &mut impl Write,
+        target: Option<usize>,
+        args: &[TypedValue],
+        callee: &IrValue,
+    ) -> Result<(), CallError> {
         self.validate_call(target, args)?;
         let fixed = self.parameters().count();
         if let Some(target) = target {
@@ -74,7 +84,7 @@ impl LlvmFunc {
             }
             output.write_str("...) ")?;
         }
-        write!(output, "{}(", IrValue::Global(self.name.clone()))?;
+        write!(output, "{callee}(")?;
         for (i, (param, arg)) in self.parameters().zip(args).enumerate() {
             if i != 0 {
                 output.write_str(", ")?;

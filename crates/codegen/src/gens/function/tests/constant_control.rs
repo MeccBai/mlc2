@@ -79,7 +79,7 @@ fn constant_match_selects_enum_and_default_without_runtime_comparisons() {
     );
     assert!(!fallback.contains("match.arm"), "{fallback}");
     let unmatched = emit(
-        "func main() -> i32 { for i in [0,1] { match (8) { 1 => { return 1; } } } return 0; }",
+        "func main() -> i32 { for i in [0,1] { match (8) { 1 => { return 1; }, _ => {} } } return 0; }",
         "match-unmatched",
     );
     assert!(!unmatched.contains("match.arm"), "{unmatched}");

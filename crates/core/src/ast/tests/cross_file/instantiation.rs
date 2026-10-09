@@ -1,6 +1,28 @@
 use super::*;
 
 #[test]
+fn imported_generic_calls_infer_arguments_and_share_explicit_instances() {
+    let mut package = PackageSymbolTable::new();
+    let mut owner = ast(1, "owner", "export func<T> id(x:T) -> T { return x; }");
+    publish(&mut package, &mut owner);
+    package.set_imports(FileId::new(2), [FileId::new(1)]);
+    let mut caller = ast(
+        2,
+        "caller",
+        "func main() { var x = owner::id(1); var y = owner::id<i32>(2); }",
+    );
+    analyze(&mut package, &mut caller);
+    assert_eq!(
+        package
+            .file(FileId::new(1))
+            .unwrap()
+            .function_instances
+            .len(),
+        1
+    );
+}
+
+#[test]
 fn generic_interface_requirement_can_use_a_callers_type_without_importing_its_module() {
     for (visibility, accepted) in [("pub", true), ("", false)] {
         let mut package = PackageSymbolTable::new();

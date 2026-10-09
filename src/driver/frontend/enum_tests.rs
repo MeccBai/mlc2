@@ -55,6 +55,65 @@ fn verify_and_run(root: &std::path::Path, generated: Generated) {
 }
 
 #[test]
+fn inferred_generic_swap_and_nested_calls_compile_and_run() {
+    let (root, result) = generate_source(
+        r#"
+        generic Base { std::generic::is_integer; }
+        func<T:Base> swap(a:$mut T,b:$mut T) {
+            var temporary = $a; $a = $b; $b = temporary;
+        }
+        unit Box<T> { pub value:T; }
+        func<T> read(boxed:Box<T>) -> T { return boxed.value; }
+        func<T> identity(value:T) -> T { return value; }
+        func<T> outer(value:T) -> T { return identity(value); }
+        func main() -> i32 {
+            var a = 10; var b = 20;
+            swap(@mut a,@mut b);
+            if (a != 20 || b != 10) { return 1; }
+            swap<i32>(@mut a,@mut b);
+            if (a != 10 || b != 20) { return 2; }
+            var value = read(Box<i32>{outer(42)});
+            if (value != 42) { return 3; }
+            return 0;
+        }
+    "#,
+        None,
+    );
+    verify_and_run(root.path(), result.unwrap());
+}
+
+#[test]
+fn numeric_initialization_preserves_large_constants_and_runtime_widening() {
+    let (root, result) = generate_source(
+        r#"
+        global var large:u64 = 4294967296;
+        func widen(a:i8,b:u8,c:i32) -> i32 {
+            var x:i64 = a;
+            var y:i64 = b;
+            var f:f64 = c;
+            if (x != cast<i64>(-128)) { return 1; }
+            if (y != cast<i64>(255)) { return 2; }
+            if (f != 42.0) { return 3; }
+            return 0;
+        }
+        func wide() -> u64 { return 4294967296; }
+        func main() -> i32 {
+            var number:u64 = 4294967296;
+            var array:[u64:2] = [4294967296,1];
+            var floating:f32 = 1.5;
+            var integer:u32 = 42.0;
+            if (number != large || array[0] != wide()) { return 4; }
+            if (floating != cast<f32>(1.5)) { return 5; }
+            if (integer != cast<u32>(42)) { return 6; }
+            return widen(cast<i8>(-128),cast<u8>(255),42);
+        }
+        "#,
+        None,
+    );
+    verify_and_run(root.path(), result.unwrap());
+}
+
+#[test]
 fn enum_ordinals_parameters_returns_comparisons_and_match_lower_to_i32() {
     let (root, result) = generate_source(
         r#"

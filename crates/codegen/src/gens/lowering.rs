@@ -57,6 +57,7 @@ impl IrGenerator {
             Base(base) => Self::base_lowering(base),
             Enum(enumeration) => Self::enum_lowering(enumeration),
             Ref(ref_ty) => LlvmType::Ptr,
+            crate::ast::types::CompileType::Function(_) => LlvmType::Ptr,
             List(list) => Self::list_lowering(list, symbols),
             Unit(unit) => Self::unit_lowering(unit, symbols),
             _ => fail("Generic type cannot be lowered."),

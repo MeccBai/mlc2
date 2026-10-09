@@ -64,15 +64,27 @@ where
             .clone()
             .delimited_by(keyword(Token::LParen), keyword(Token::RParen));
 
-        let if_ = keyword(Token::If)
-            .ignore_then(condition.clone())
-            .then(scope.clone())
-            .then(keyword(Token::Else).ignore_then(scope.clone()).or_not())
-            .map(|((condition, then_scope), else_scope)| Statement::If {
-                condition,
-                then_scope,
-                else_scope,
-            });
+        let if_ = recursive(|if_statement| {
+            let else_scope = scope.clone().or(if_statement.map(|statement| Scope {
+                statements: vec![statement],
+            }));
+
+            keyword(Token::If)
+                .ignore_then(condition.clone())
+                .then(scope.clone())
+                .then(keyword(Token::Else).ignore_then(else_scope).or_not())
+                .map_with(|((condition, then_scope), else_scope), extra| {
+                    (
+                        Statement::If {
+                            condition,
+                            then_scope,
+                            else_scope,
+                        },
+                        extra.span(),
+                    )
+                })
+        })
+        .map(|(statement, _)| statement);
 
         let while_ = keyword(Token::While)
             .ignore_then(condition.clone())
@@ -94,6 +106,14 @@ where
             .ignore_then(condition)
             .then(match_branches)
             .map(|(value, branches)| Statement::Match { value, branches });
+
+        let variant_match = keyword(Token::Match)
+            .ignore_then(spanned_ident().then_ignore(operator(Token::Assign)).then(expression.clone())
+                .delimited_by(keyword(Token::LParen), keyword(Token::RParen)))
+            .then(type_parser().then_ignore(keyword(Token::FatArrow)).then(scope.clone())
+                .separated_by(operator(Token::Comma)).allow_trailing().collect::<Vec<_>>()
+                .delimited_by(keyword(Token::LBrace), keyword(Token::RBrace)))
+            .map(|((binding, value), branches)| Statement::VariantMatch { binding, value, branches });
 
         let for_bounds = expression
             .clone()
@@ -132,6 +152,7 @@ where
             if_,
             while_,
             for_,
+            variant_match,
             match_,
             assignment,
             expression_statement,

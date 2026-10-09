@@ -1,5 +1,23 @@
 use std::rc::Rc;
 
+#[test]
+fn match_requires_default_even_for_complete_boolean_cases() {
+    for source in [
+        "func main() { match (true) { true => {}, false => {} } }",
+        "func main() { match (1) {} }",
+        "func main() { match (1) { 1 => {} } }",
+    ] {
+        let ast = compile(source);
+        let start = source.find("match (").unwrap() + 7;
+        let end = source[start..].find(')').unwrap() + start;
+        assert_eq!(ast.config.error_handle().errors.len(), 1);
+        assert!(ast.config.error_handle().errors.contains(&ErrorInfo::new(
+            CompileError::IllegalUse(IllegalUseError::MissingDefaultBranch),
+            (start..end).into(),
+        )));
+    }
+}
+
 use crate::diagnostic::error::{
     CompileError, ErrorHandle, ErrorInfo, IllegalUseError, ResolveError,
 };
@@ -185,7 +203,7 @@ fn branch_values_ignore_value_qualifiers_but_not_integer_width() {
     assert_ok(&compile(
         "func main() { val x = 1; match (x) { 1 => {}, _ => {} } }",
     ));
-    let ast = compile("func main() { var x:u8 = 1; match (x) { 1 => {} } }");
+    let ast = compile("func main() { var x:u8 = 1; match (x) { 1 => {}, _ => {} } }");
     assert!(ast.config.is_poisoned());
 }
 
