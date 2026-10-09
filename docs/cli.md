@@ -52,7 +52,13 @@ MSVC 使用 `lld-link.exe`，GNU 使用 `ld.lld.exe`，不再从 PATH 搜索 LLD
 通过 --linker 指定驱动、--link-arg 添加参数。静态库使用 llvm-ar，可用
 --archiver 指定。两者均通过进程参数数组调用，不经过 shell。
 
-Windows 默认 target 为 `x86_64-pc-windows-gnu`，默认链接驱动为
+未指定 triplet 时，根据 mlc 可执行文件自身的平台与架构自动选择：Windows 使用
+`<arch>-pc-windows-gnu`；Linux 保留对应 GNU / musl triplet；macOS 使用
+`<arch>-apple-darwin`（支持 x86_64 与 aarch64 目标初始化）。
+优先级保持为 CLI `--triplet` > 项目选中 target 的 Triplet > 项目 Triplet > 系统默认。
+交叉编译 mlc 时采用 Cargo TARGET 而不是构建机器 HOST，因此默认值跟随部署平台。
+
+x86_64 Windows 默认 target 为 `x86_64-pc-windows-gnu`，默认链接驱动为
 `x86_64-w64-mingw32-clang`（LLVM-MinGW/UCRT，需要在 PATH 中），
 并在 mlc 同目录提供 `ld.lld.exe`。目标库及对象目录也按 GNU triplet 分开。
 MSVC target 仍可显式指定；同时用 `--linker clang` 选择 MSVC 驱动，
