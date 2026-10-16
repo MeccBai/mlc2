@@ -297,7 +297,8 @@ fn c_abi_uses_original_name_and_does_not_use_internal_aggregate_abi() {
 
 #[test]
 fn large_return_then_receiver_then_explicit_parameters() {
-    let (package, small, large, _) = setup();
+    let (mut package, small, large, _) = setup();
+    let receiver_type = large.make_ref(package.file_mut(large.file_id()).unwrap(), true);
     let func = InterfaceSymbol {
         name: "Owner::method".into(),
         public: true,
@@ -305,6 +306,7 @@ fn large_return_then_receiver_then_explicit_parameters() {
         mutable: true,
         exported: false,
         owner: large,
+        receiver_type: Some(receiver_type),
         attributes: HashSet::new(),
         generics: vec![],
         generic_map: HashMap::new(),
@@ -316,7 +318,7 @@ fn large_return_then_receiver_then_explicit_parameters() {
         abi.parameters().map(|p| p.mode).collect::<Vec<_>>(),
         [
             ParameterMode::ReturnPointer,
-            ParameterMode::Receiver,
+            ParameterMode::Direct,
             ParameterMode::Direct
         ]
     );

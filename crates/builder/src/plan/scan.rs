@@ -101,7 +101,7 @@ impl Scanner<'_> {
                     _ => None,
                 })
                 .collect();
-            (TargetInput::Source { text, module }, imports, None)
+            (TargetInput::Source { text, module, lines: tokens.lines }, imports, None)
         };
         let module_name = declared_name.unwrap_or_else(|| self.module_name(&file));
         if self

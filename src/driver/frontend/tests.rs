@@ -149,11 +149,14 @@ fn builtin_casts_and_generic_allocations_pass_llvm_verification() {
             .emit(ir, &root.path().join(format!("module{id}.obj")))
             .unwrap();
     }
+    let instances = generated.supplement.unwrap();
+    assert!(instances.contains("declare void @abort() noreturn nounwind"));
+    assert!(instances.contains("icmp ne ptr"));
+    assert!(instances.contains("call void @\"abort\"()"));
+    assert!(instances.contains("unreachable"));
+    assert!(!instances.contains("phi ptr"));
     compiler
-        .emit(
-            generated.supplement.unwrap(),
-            &root.path().join("instances.obj"),
-        )
+        .emit(instances, &root.path().join("instances.obj"))
         .unwrap();
 }
 

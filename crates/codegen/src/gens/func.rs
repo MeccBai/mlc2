@@ -20,7 +20,6 @@ pub enum ParameterMode {
     ReadOnlyPointer,
     CopyPointer,
     ReturnPointer,
-    Receiver,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -105,7 +104,7 @@ impl LlvmFunc {
             &func.attributes,
             &func.params,
             func.ret_type,
-            func.has_self.then_some(func.owner),
+            func.receiver_type,
             symbols,
         )
     }
@@ -157,7 +156,7 @@ impl LlvmFunc {
                 source: owner,
                 lowered: vec![AbiParameter {
                     ty: IrGenerator::type_lowering(owner, symbols),
-                    mode: ParameterMode::Receiver,
+                    mode: ParameterMode::Direct,
                     align: owner.align(symbols.arenas()),
                 }],
             });
@@ -214,7 +213,6 @@ impl fmt::Display for AbiParameter {
             ParameterMode::ReadOnlyPointer => write!(f, "ptr readonly align {}", self.align),
             ParameterMode::CopyPointer => write!(f, "ptr byval({}) align {}", self.ty, self.align),
             ParameterMode::ReturnPointer => write!(f, "ptr sret({}) align {}", self.ty, self.align),
-            ParameterMode::Receiver => write!(f, "ptr align {}", self.align),
         }
     }
 }

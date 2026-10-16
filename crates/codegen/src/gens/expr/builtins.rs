@@ -168,11 +168,11 @@ impl Expander<'_> {
                     });
                     count = IrValue::Reg(target);
                 }
-                // Invalid counts and multiplication overflow return null without allocating.
+                // Invalid sizes and allocation failures terminate without unwinding.
                 let checked = self.allocate();
-                let allocated = self.allocate();
                 let bytes = self.allocate();
                 let result = self.allocate();
+                let nonnull = self.allocate();
                 let success = format!("alloc.{result}.success");
                 let failure = format!("alloc.{result}.failure");
                 let end = format!("alloc.{result}.end");
@@ -223,7 +223,7 @@ impl Expander<'_> {
                         rhs: IrValue::Integer(size as i128),
                     },
                     Instruction::Call {
-                        target: Some(allocated),
+                        target: Some(result),
                         func: IrValue::Global("malloc".into()),
                         return_type: LlvmType::Ptr,
                         args: vec![TypedValue {
@@ -232,20 +232,30 @@ impl Expander<'_> {
                         }],
                         variadic_params: None,
                     },
-                    Instruction::Branch { label: end.clone() },
+                    Instruction::Compare {
+                        target: nonnull,
+                        condition: Condition::Ne,
+                        ty: LlvmType::Ptr,
+                        lhs: IrValue::Reg(result),
+                        rhs: IrValue::Null,
+                    },
+                    Instruction::ConditionalBranch {
+                        condition: IrValue::Reg(nonnull),
+                        then_label: end.clone(),
+                        else_label: failure.clone(),
+                    },
                     Instruction::BasicBlock {
                         label: failure.clone(),
                     },
-                    Instruction::Branch { label: end.clone() },
-                    Instruction::BasicBlock { label: end },
-                    Instruction::Phi {
-                        target: result,
-                        ty: LlvmType::Ptr,
-                        incoming: vec![
-                            (IrValue::Reg(allocated), success),
-                            (IrValue::Null, failure),
-                        ],
+                    Instruction::Call {
+                        target: None,
+                        func: IrValue::Global("abort".into()),
+                        return_type: LlvmType::Void,
+                        args: vec![],
+                        variadic_params: None,
                     },
+                    Instruction::Unreachable,
+                    Instruction::BasicBlock { label: end },
                 ]);
                 Lowered {
                     value: LlvmValue {

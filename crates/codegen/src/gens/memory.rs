@@ -61,12 +61,14 @@ impl IrGenerator {
             }
         }
         for name in intrinsics {
-            if name == "malloc" || name == "free" {
+            if name == "malloc" || name == "free" || name == "abort" {
                 if self.remember_symbol(name.clone()) {
                     let declaration = if name == "malloc" {
                         "declare ptr @malloc(i64)"
-                    } else {
+                    } else if name == "free" {
                         "declare void @free(ptr)"
+                    } else {
+                        "declare void @abort() noreturn nounwind"
                     };
                     let start = self.defines.len();
                     writeln!(self.defines, "{declaration}").expect("String write");

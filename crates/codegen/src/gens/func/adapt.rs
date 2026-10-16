@@ -214,12 +214,10 @@ impl LlvmFunc {
                     .lowered
                     .first()
                     .unwrap_or_else(|| fail("Empty parameter mapping"));
-                let receiver_ref =
-                    part.mode == ParameterMode::Receiver && value.ty == LlvmType::Ptr;
-                if !receiver_ref && value.ty != logical {
+                if value.ty != logical {
                     fail("Checked argument source type mismatch");
                 }
-                let operand = if receiver_ref || part.mode == ParameterMode::Direct {
+                let operand = if part.mode == ParameterMode::Direct {
                     adapter.load(value)
                 } else {
                     adapter.address(value)

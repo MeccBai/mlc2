@@ -18,10 +18,10 @@ mod constant;
 mod control;
 mod globals;
 mod resources;
-mod variant;
 mod statements;
 #[cfg(test)]
 mod tests;
+mod variant;
 
 pub struct GeneratedFunction {
     pub name: String,
@@ -303,9 +303,18 @@ impl<'a> FunctionGenerator<'a> {
                 code: vec![],
                 ty: receiver.lowered[0].ty.clone(),
                 reg: Some(parameter),
-                in_reg: false,
+                in_reg: true,
             };
-            self.bind("self".into(), ty, value);
+            let storage = self.storage(value.ty.clone());
+            self.entry.push(Instruction::Store {
+                pointer: IrValue::Reg(storage.reg.unwrap()),
+                value: TypedValue {
+                    ty: value.ty,
+                    value: IrValue::Reg(parameter),
+                },
+                align: None,
+            });
+            self.bind("self".into(), ty, storage);
             parameter += 1;
         }
         let mappings = self.abi.params().to_vec();
@@ -424,7 +433,8 @@ impl<'a> FunctionGenerator<'a> {
                 } if name == super::memory::MEMSET
                     || name == super::memory::MEMCPY
                     || name == "malloc"
-                    || name == "free" =>
+                    || name == "free"
+                    || name == "abort" =>
                 {
                     Some(name.clone())
                 }

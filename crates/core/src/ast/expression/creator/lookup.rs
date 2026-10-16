@@ -43,15 +43,8 @@ impl Expression {
                     return None;
                 }
                 let receiver = owner.is_receiver(context);
-                if receiver && !indirect {
-                    config.submit_error(
-                        CompileError::IllegalUse(IllegalUseError::MemberAccessViolation),
-                        span,
-                    );
-                    return None;
-                }
                 let owner_type = owner.type_inference(config, symbols);
-                let owner_type = if indirect && !receiver && !owner_type.is_empty() {
+                let owner_type = if indirect && !owner_type.is_empty() {
                     if !owner_type.is_ref(symbols) {
                         config.submit_error(
                             CompileError::IllegalUse(IllegalUseError::MemberAccessViolation),

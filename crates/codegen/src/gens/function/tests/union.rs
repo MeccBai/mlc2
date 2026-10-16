@@ -17,7 +17,7 @@ fn generic_union_and_interface_lower_to_valid_llvm() {
         "generic-union",
     );
     emit(
-        "union V[i32,f64];pub V::func read(self)->i32{match(y=@self){i32=>{return $y;},f64=>{return 0;}}}func f()->i32{var x=V{1};return x.read();}",
+        "union V[i32,f64];pub V::func read(self)->i32{match(y=self){i32=>{return $y;},f64=>{return 0;}}}func f()->i32{var x=V{1};return x.read();}",
         "union-interface",
     );
 }

@@ -115,6 +115,15 @@ impl Expression {
                 if expr.is_poisoned() {
                     return Self::Poison;
                 }
+                // Initializer lists are not expression atoms. Borrow an initialized
+                // value instead of trying to take the address of an initializer.
+                if matches!(expr, Self::InitListE(_)) {
+                    config.submit_error(
+                        CompileError::IllegalUse(IllegalUseError::InvalidAssignment),
+                        span,
+                    );
+                    return Self::Poison;
+                }
                 let unary_type = expr.type_inference(config, symbols);
                 if !unary_type.is_empty()
                     && matches!(
@@ -243,15 +252,8 @@ impl Expression {
                     return Self::Poison;
                 }
                 let receiver = owner.is_receiver(context);
-                if receiver && !indirect {
-                    config.submit_error(
-                        CompileError::IllegalUse(IllegalUseError::MemberAccessViolation),
-                        name_span,
-                    );
-                    return Self::Poison;
-                }
                 let mut owner_type = owner.type_inference(config, symbols);
-                if !owner_type.is_empty() && indirect && !receiver {
+                if !owner_type.is_empty() && indirect {
                     if !owner_type.is_ref(symbols) {
                         config.submit_error(
                             CompileError::IllegalUse(IllegalUseError::MemberAccessViolation),
@@ -307,7 +309,12 @@ impl Expression {
                                 return Self::Poison;
                             }
                             let source = values[0].type_inference(config, symbols);
-                            if source.is_empty() || !candidates.iter().any(|candidate| symbols.get_type(*candidate).unqualified().format(symbols) == symbols.get_type(source).unqualified().format(symbols)) {
+                            if source.is_empty()
+                                || !candidates.iter().any(|candidate| {
+                                    symbols.get_type(*candidate).unqualified().format(symbols)
+                                        == symbols.get_type(source).unqualified().format(symbols)
+                                })
+                            {
                                 config.submit_error(CompileError::IllegalUse(IllegalUseError::InvalidUnion { reason: "Initializer type is not a union candidate; use an explicit cast if necessary".into() }), span);
                                 return Self::Poison;
                             }

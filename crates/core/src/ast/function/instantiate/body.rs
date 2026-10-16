@@ -9,7 +9,6 @@ use crate::ast::{
     function::{FuncBody, Interface, bindings},
     statement::Statement,
     symbols::{EnumBool, SymbolTable},
-    types::ValueType,
 };
 use crate::parser::{Scope, out::Span};
 
@@ -91,14 +90,7 @@ impl Interface {
         let concrete = symbols.get_interface_regular(symbol).clone();
         let generic_map = symbols.get_interface(template, true).generic_map.clone();
         let scope = symbols.interface_template(template);
-        let receiver = concrete.has_self.then(|| {
-            let value = if concrete.mutable {
-                ValueType::Flex
-            } else {
-                ValueType::Final
-            };
-            concrete.owner.into_value_type(value, symbols)
-        });
+        let receiver = concrete.receiver_type;
         let body = build_body(
             config,
             scope,

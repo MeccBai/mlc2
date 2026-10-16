@@ -145,6 +145,46 @@ fn interface_body_uses_new_symbol_and_concrete_parameter_variables() {
 }
 
 #[test]
+fn generic_interface_instantiates_self_as_a_nonowning_mutable_reference() {
+    let mut ast = compile(
+        "unit Owner { value:i32; }; Owner::func<T> set(mut self, value:T) { \
+         self->value=cast<i32>(value); } func main() {}",
+    );
+    let template = ast
+        .symbols
+        .generics
+        .interfaces
+        .get_by_name(&ast.config.symbol_name("Owner::set"))
+        .unwrap();
+    let generic = ast.symbols.generics.interfaces.get(template).generic_map["T"];
+    let concrete = ast.symbols.get_base(DataType::Integer, 32, true);
+    let instance = template.instantiation(
+        &mut ast.config,
+        &HashMap::from([(generic, concrete)]),
+        &mut ast.symbols,
+        None,
+        (0..1).into(),
+    );
+    assert!(
+        !instance.is_empty(),
+        "{:?}",
+        ast.config.error_handle().errors
+    );
+    assert!(ast.config.error_handle().errors.is_empty());
+    let symbol = ast.symbols.interfaces.get(instance);
+    let receiver = symbol.receiver_type.unwrap();
+    let crate::ast::types::CompileType::Ref(reference) =
+        ast.symbols.types.get(receiver).unqualified()
+    else {
+        panic!("self must be a reference");
+    };
+    assert_eq!(reference.base, symbol.owner);
+    assert!(reference.mut_base);
+    assert!(!reference.ownership);
+    assert_eq!(ast.symbols.interface_instances[&instance].body.len(), 1);
+}
+
+#[test]
 fn function_body_parameters_belong_to_the_new_symbol_not_the_template() {
     let ast = compile(
         "func<T> identity(value:T) -> T { return value; } func main() { var number = identity<i32>(1); var boolean = identity<bool>(true); }",

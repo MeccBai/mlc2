@@ -50,6 +50,8 @@ pub struct InterfaceSymbol {
     pub mutable: bool,
     pub exported: bool,
     pub owner: TypeIndex,
+    /// Implicit, non-owning first parameter. The owner remains the lookup key.
+    pub receiver_type: Option<TypeIndex>,
     pub attributes: HashSet<FuncAttibute>,
     pub generics: Vec<String>,
     pub generic_map: HashMap<String, GenericIndex>,
@@ -219,6 +221,8 @@ impl InterfaceSymbol {
             symbols,
             name_span,
         );
+        let receiver_type = (prototype.has_self && !owner.is_empty())
+            .then(|| owner.make_ref(symbols, prototype.mutable));
         (
             Self {
                 name,
@@ -232,6 +236,7 @@ impl InterfaceSymbol {
                 mutable: prototype.mutable,
                 has_self: prototype.has_self,
                 owner: owner,
+                receiver_type,
             },
             name_span,
         )
@@ -247,16 +252,7 @@ impl Interface {
     ) -> Self {
         let body = if let Some(prototype) = prototype {
             let symbol = symbols.get_interface_regular(index).clone();
-            let receiver = if symbol.has_self {
-                let value = if symbol.mutable {
-                    crate::ast::types::ValueType::Flex
-                } else {
-                    crate::ast::types::ValueType::Final
-                };
-                Some(symbol.owner.into_value_type(value, symbols))
-            } else {
-                None
-            };
+            let receiver = symbol.receiver_type;
             let mut context = bindings::context(
                 config,
                 EnumBool::True(index),

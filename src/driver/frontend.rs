@@ -54,7 +54,7 @@ pub fn generate(plan: &BuildPlan, triplet: &str, kind: TargetKind) -> Result<Gen
             }
         };
         let file = target.file.to_string_lossy().into_owned();
-        let config = Config::new(
+        let mut config = Config::new(
             FileId::new(id.0),
             vec![],
             target.module_name.clone(),
@@ -62,6 +62,9 @@ pub fn generate(plan: &BuildPlan, triplet: &str, kind: TargetKind) -> Result<Gen
             ErrorHandle::new(file.clone()),
             WarningHandle::new(file),
         );
+        if let TargetInput::Source { lines, .. } = &target.input {
+            config.set_source_lines(lines.clone());
+        }
         package.set_imports(
             FileId::new(id.0),
             target.requires.iter().map(|id| FileId::new(id.0)),

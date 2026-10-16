@@ -31,6 +31,7 @@ fn fields_and_interfaces_enforce_receiver_and_public_rules() {
                     let owner = symbols
                         .types
                         .insert("Owner".into(), CompileType::Unit(unit));
+                    let receiver_type = owner.make_ref(&mut symbols, false);
                     let method = symbols.interfaces.insert(
                         "Owner::method".into(),
                         InterfaceSymbol {
@@ -39,6 +40,7 @@ fn fields_and_interfaces_enforce_receiver_and_public_rules() {
                             mutable: false,
                             exported: false,
                             owner,
+                            receiver_type: Some(receiver_type),
                             attributes: Default::default(),
                             generics: vec![],
                             generic_map: HashMap::new(),
@@ -53,7 +55,11 @@ fn fields_and_interfaces_enforce_receiver_and_public_rules() {
                         read_count: Default::default(),
                         declaration_span: (0..0).into(),
                         name: name.into(),
-                        var_type: owner,
+                        var_type: if receiver {
+                            owner.make_ref(&mut symbols, false)
+                        } else {
+                            owner
+                        },
                         init_val: Box::new(Expression::null()),
                     });
                     let span = (0..1).into();

@@ -147,6 +147,7 @@ fn member_call_resolves_interface_and_prepends_owner() {
             }),
         ),
     );
+    let receiver_type = point_type.make_ref(&mut symbols, false);
     let index = symbols.interfaces.insert(
         "Point::get".into(),
         InterfaceSymbol {
@@ -155,6 +156,7 @@ fn member_call_resolves_interface_and_prepends_owner() {
             mutable: false,
             exported: false,
             owner: point_type,
+            receiver_type: Some(receiver_type),
             attributes: Default::default(),
             generics: Vec::new(),
             generic_map: HashMap::new(),
@@ -182,7 +184,7 @@ fn member_call_resolves_interface_and_prepends_owner() {
             func: EnumBool::True(actual),
             args,
         }) if *actual == index && args.len() == 2
-            && matches!(&args[0], Expression::VarValueE(owner) if owner.name == "point")
+            && matches!(&args[0], Expression::UnaryExprE(crate::ast::expression::UnaryExpr::Operator { op: crate::ast::expression::Operator::AddressOf, .. }))
     ));
     assert_eq!(
         expression.type_inference(&mut config, &mut symbols),

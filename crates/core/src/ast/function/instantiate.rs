@@ -248,6 +248,9 @@ impl InterfaceIndex {
             return InterfaceIndex::empty();
         };
         symbol.owner = owner;
+        symbol.receiver_type = symbol
+            .has_self
+            .then(|| owner.make_ref(symbols, symbol.mutable));
 
         symbol.generics.clear();
         symbol.generic_map.clear();

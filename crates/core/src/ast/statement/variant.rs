@@ -1,5 +1,4 @@
 use super::*;
-use crate::ast::expression::operators::Operator;
 use crate::ast::{
     config::Config,
     symbols::{Resolution, StatementContext, SupperScopeType},
@@ -18,56 +17,31 @@ impl Statement {
         context: Option<&StatementContext>,
     ) -> Self {
         let span = value.1;
-        if !matches!(
-            &value.0,
-            TempExpr::Unary {
-                op: Operator::AddressOf | Operator::MutOf,
-                ..
-            }
-        ) {
-            config.submit_error(
-                CompileError::IllegalUse(IllegalUseError::InvalidUnion {
-                    reason: "Union match requires a borrowed value: y = @x or y = @mut x".into(),
-                }),
-                span,
-            );
-            return Self::Poison;
-        }
-        if matches!(&value.0, TempExpr::Unary { value, .. } if !stable_temp_place(&value.0)) {
-            config.submit_error(
-                CompileError::IllegalUse(IllegalUseError::InvalidUnion {
-                    reason: "Union match requires an existing value, not a temporary".into(),
-                }),
-                span,
-            );
-            return Self::Poison;
-        }
         let value = Expression::new(config, value, symbols, context);
         if config.is_poisoned() {
             return Self::Poison;
         }
-        let Expression::UnaryExprE(crate::ast::expression::UnaryExpr::Operator {
-            value: borrowed,
-            ..
-        }) = &value
-        else {
+        let ty = value.type_inference(config, symbols);
+        if ty.is_empty() {
             return Self::Poison;
-        };
-        if !stable_place(&borrowed.clone().to_expression()) {
+        }
+        let CompileType::Ref(reference) = symbols.get_type(ty).unqualified() else {
             config.submit_error(
                 CompileError::IllegalUse(IllegalUseError::InvalidUnion {
-                    reason: "Union match requires an existing value, not a temporary".into(),
+                    reason: "Union match requires a reference to a union".into(),
                 }),
                 span,
             );
             return Self::Poison;
-        }
-        let ty = value.type_inference(config, symbols);
-        let CompileType::Ref(reference) = symbols.get_type(ty).unqualified() else {
-            unreachable!()
         };
-        if reference.level != 1 {
-            config.submit_error(CompileError::IllegalUse(IllegalUseError::InvalidUnion { reason: "Union match requires a reference to the union itself; dereference existing references before borrowing".into() }), span);
+        if reference.level != 1 || reference.ownership {
+            config.submit_error(
+                CompileError::IllegalUse(IllegalUseError::InvalidUnion {
+                    reason: "Union match requires a non-owning, single-level reference to a union"
+                        .into(),
+                }),
+                span,
+            );
             return Self::Poison;
         }
         let owner = reference.base;
@@ -166,40 +140,5 @@ impl Statement {
             owner,
             branches: parsed,
         })
-    }
-}
-
-fn stable_place(value: &Expression) -> bool {
-    use crate::ast::expression::{Access, UnaryExpr};
-    match value {
-        Expression::VarValueE(_) => true,
-        Expression::UnaryExprE(UnaryExpr::Access(Access::Member { base, indirect, .. })) => {
-            *indirect || stable_place(&base.clone().to_expression())
-        }
-        Expression::UnaryExprE(UnaryExpr::Access(Access::Index { base, .. })) => stable_place(base),
-        Expression::UnaryExprE(UnaryExpr::Operator {
-            op: Operator::Dereference,
-            ..
-        }) => true,
-        _ => false,
-    }
-}
-
-fn stable_temp_place(value: &TempExpr) -> bool {
-    match value {
-        TempExpr::Path(_) => true,
-        TempExpr::Group(value) => stable_temp_place(&value.0),
-        TempExpr::Member { base, indirect, .. } => *indirect || stable_temp_place(&base.0),
-        TempExpr::Unary {
-            op: Operator::Dereference,
-            ..
-        } => true,
-        TempExpr::Binary {
-            operands,
-            operators,
-        } if operators == &[Operator::Index] => operands
-            .first()
-            .is_some_and(|base| stable_temp_place(&base.0)),
-        _ => false,
     }
 }

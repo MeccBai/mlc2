@@ -265,7 +265,7 @@ C 外部声明来自符号描述文件，不通过无 body 源码函数导入。
 
 ## 10. Interface 与 self
 
-Interface 是绑定在 Unit / Union 上的可调用接口，不是 Rust trait。
+Interface 是绑定在类型上的可调用接口，不是 Rust trait；目前 owner 语法使用类型路径，支持基本类型、Unit 和 Union。
 有 self 时调用传入实例；无 self 时为类型关联调用。泛型列表位于 func 后、名称前。
 
 ```rust
@@ -287,8 +287,8 @@ func main() -> i32 {
 
 self / mut self 只能位于第一个参数位置。
 只读 self 不允许修改本体，mut self 要求调用对象允许可变访问。
-当前实现缺口：mut self 的字段写入（self->field = value）仍被左值检查误拒绝；
-语法与可变调用规则已接入，但本节不把成员写入列为已经验证可用的能力。
+self 是 owner 的非拥有型引用；mut self 是可变引用。
+成员访问使用 self->field，基本类型本体使用 $self；可变接口允许写入两者。
 Interface 可以带普通参数、泛型和返回类型；没有继承或虚方法分派。
 成员调用不允许作为管道目标，std::function 也不支持取得 Interface 的地址。
 
@@ -429,9 +429,9 @@ func main() -> i32 {
 
 构造必须恰好给出一个值，精确匹配候选类型，不隐式转换来选择 tag。
 候选类型不允许重复；泛型实例化后重新检查重复。
-match (name = @object) 创建只读分支 Ref，@mut 创建可变分支 Ref。
+match (name = reference) 的右侧必须是 Union 的单层、非拥有型 Ref；分支 Ref 继承右侧引用的可变性。
 必须穷举所有候选，不允许 _、重复类型、非候选类型或按值绑定。
-对象必须已有存储；已有 Ref 先解引用再借用，例如 match (y = @mut $reference)。
+可以直接传已有 Ref，例如 match (y = reference) 或接口中的 match (y = self)；也可用 @object / @mut object 借用已有对象。
 分支绑定仅在本分支可用，不获得资源所有权；不能移出资源、逃逸引用或在借用期间替换整个 Union。
 Union 支持 Interface，但不支持 C ABI。LLVM 布局为 i32 tag + 最大候选大小的对齐内联 payload。
 任一候选含资源时，Union 成为 move-only，析构只处理活跃 tag。
@@ -567,7 +567,8 @@ Unit 和固定数组递归析构资源成员；Union 只析构活跃候选。
 | std::mem::dealloc<T>(owner) | 消耗并释放 Res | import std::mem; |
 
 alloc 是低层内存分配，不初始化元素；调用方须先写入再读取。
-可能分配失败，不把它当作有容量检查的安全动态数组。
+分配失败、负数数量或分配字节数溢出时直接终止程序，不展开栈，也不运行 RAII 清理。
+这不是有容量检查的安全动态数组，也不提供可恢复的 try_alloc 接口。
 通常依靠自动析构即可；显式 dealloc 后不能再使用所有者，不会重复自动释放。
 
 ```rust
@@ -668,7 +669,7 @@ C ABI 函数不允许泛型，参数中不能出现非 C ABI Unit（包含经 Re
 不提供 lambda / 捕获闭包、继承、any、async / await、异常语法、用户手写析构、
 宏预处理、函数重载、可变长度数组对象或独立字符串类。
 不提供一般意义的编译期用户函数执行；当前常量展开主要覆盖受支持的常量运算。
-RAII 不是 GC，Ref 不是完整安全指针；指针索引、C 可变参数和分配失败仍需调用者处理。
+RAII 不是 GC，Ref 不是完整安全指针；指针索引和 C 可变参数仍需调用者处理，分配失败会直接终止程序。
 标准库目前只有少量声明与内建入口，不承诺完整 C 标准库或平台 SDK 覆盖。
 
 故意错误的写法：
@@ -684,5 +685,5 @@ pub func ordinary() {}              // pub 只用于 Interface 或 Unit 字段
 self.value                          // self 访问必须 ->
 value |> value.method()             // 不允许成员管道
 var pointer = ordinary;             // 使用 std::function(ordinary)
-match (payload = object) {}         // Union 必须通过 @ / @mut 借用
+match (payload = object) {}         // Union 本体不能按值匹配，右侧必须是 Ref
 ```

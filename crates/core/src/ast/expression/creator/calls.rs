@@ -17,6 +17,7 @@ impl Expression {
         symbols: &mut dyn Resolution,
         context: Option<&StatementContext>,
     ) -> Self {
+        let indirect = matches!(&callee.0, TempExpr::Member { indirect: true, .. });
         let (owner, interface) = match Self::search_interface(config, callee, symbols, context) {
             Some((owner, interface)) => (owner, interface),
             None => {
@@ -24,7 +25,41 @@ impl Expression {
                 return Self::null();
             }
         };
-        let mut params = vec![owner];
+        let symbol = symbols.get_interface_regular(interface).clone();
+        let mut params = Vec::new();
+        if let Some(receiver_type) = symbol.receiver_type {
+            if symbol.mutable && !owner.assignable(config, symbols) && !indirect {
+                config.submit_error(
+                    CompileError::IllegalUse(IllegalUseError::InvalidAssignment),
+                    span,
+                );
+                return Self::Poison;
+            }
+            let receiver = if indirect {
+                owner
+            } else {
+                Self::UnaryExprE(crate::ast::expression::UnaryExpr::Operator {
+                    op: if symbol.mutable {
+                        crate::ast::expression::Operator::MutOf
+                    } else {
+                        crate::ast::expression::Operator::AddressOf
+                    },
+                    value: Box::new(crate::ast::expression::CompAtom::from_expr(owner)),
+                })
+            };
+            let actual = receiver.type_inference(config, symbols);
+            if !receiver_type.type_check(false, &actual, symbols) {
+                config.submit_error(
+                    CompileError::IllegalUse(IllegalUseError::TypeMismatched {
+                        expected: receiver_type.format(symbols),
+                        found: actual.format(symbols),
+                    }),
+                    span,
+                );
+                return Self::Poison;
+            }
+            params.push(receiver);
+        }
         let mut params_types = Vec::<TypeIndex>::new();
         params.reserve(args.len() + 1);
         args.into_iter().for_each(|arg| {

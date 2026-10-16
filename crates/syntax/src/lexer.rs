@@ -1,4 +1,6 @@
 pub mod token;
+mod lines;
+pub use lines::{LineTable, SourcePosition};
 
 use chumsky::span::SimpleSpan;
 use std::{fmt, ops::Range};
@@ -17,6 +19,7 @@ pub struct Comment {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Lexed {
+    pub lines: LineTable,
     pub tokens: Vec<SpannedToken>,
     pub comments: Vec<Comment>,
 }
@@ -82,7 +85,7 @@ pub fn tokenize(source: &str) -> Result<Lexed, TokenError> {
         tokens.push((packed, range.into()));
     }
 
-    Ok(Lexed { tokens, comments })
+    Ok(Lexed { tokens, comments, lines: LineTable::new(source) })
 }
 
 #[cfg(test)]
@@ -99,6 +102,7 @@ mod tests {
             .find(|(token, _)| matches!(token, TokenPack::KeyWord(Token::Variable)))
             .unwrap();
         assert_eq!(variable.1.start, source.find("var").unwrap());
+        assert_eq!(lexed.lines.span_start(variable.1), Some(SourcePosition { line: 3, column: 5 }));
         assert_eq!(&source[variable.1.into_range()], "var");
         let (module, errors) = crate::parser::parse(&lexed.tokens, source.len());
         assert!(errors.is_empty(), "{errors:?}");

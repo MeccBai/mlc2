@@ -33,3 +33,13 @@ fn file_identity_is_explicit_and_survives_cloning() {
     assert_eq!(config.clone().file_id(), config.file_id());
     assert_ne!(config.file_id(), FileId::new(8));
 }
+
+#[test]
+fn source_line_table_is_shared_by_config_clones() {
+    let mut config = Config::new(FileId::new(1), vec![], "sample".into(), "sample.m2".into(), ErrorHandle::new("sample.m2".into()), WarningHandle::new("sample.m2".into()));
+    assert!(config.source_position((0..0).into()).is_none());
+    config.set_source_lines(mlc_syntax::lexer::LineTable::new("first\r\n  second\n"));
+    let clone = config.clone();
+    assert!(std::ptr::eq(config.source_lines().unwrap(), clone.source_lines().unwrap()));
+    assert_eq!(clone.source_position((9..15).into()), Some(mlc_syntax::lexer::SourcePosition { line: 2, column: 3 }));
+}

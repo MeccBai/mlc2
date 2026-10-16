@@ -11,7 +11,7 @@ pub struct TargetIndex(pub usize);
 
 #[derive(Debug, Clone)]
 pub enum TargetInput {
-    Source { text: String, module: TempModule },
+    Source { text: String, module: TempModule, lines: mlc_syntax::lexer::LineTable },
     Declaration(Manifest),
 }
 

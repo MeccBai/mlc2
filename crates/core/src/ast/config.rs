@@ -63,6 +63,7 @@ pub struct Config {
     err_h: ErrorHandle,
     warning_h: WarningHandle,
     poisoned: bool,
+    source_lines: Option<std::rc::Rc<mlc_syntax::lexer::LineTable>>,
 }
 
 impl Config {
@@ -83,6 +84,7 @@ impl Config {
             err_h,
             warning_h,
             poisoned,
+            source_lines: None,
         }
     }
 
@@ -92,6 +94,18 @@ impl Config {
 
     pub fn file_id(&self) -> FileId {
         self.file_id
+    }
+
+    pub fn set_source_lines(&mut self, lines: mlc_syntax::lexer::LineTable) {
+        self.source_lines = Some(std::rc::Rc::new(lines));
+    }
+
+    pub fn source_lines(&self) -> Option<&mlc_syntax::lexer::LineTable> {
+        self.source_lines.as_deref()
+    }
+
+    pub fn source_position(&self, span: Span) -> Option<mlc_syntax::lexer::SourcePosition> {
+        self.source_lines()?.span_start(span)
     }
 
     pub fn symbol_name(&self, name: &str) -> String {

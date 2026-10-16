@@ -22,7 +22,7 @@ func make()->Value {
     return Value{Inner{p}};
 }
 func read(x:$mut Value)->i32 {
-    match(y=@mut $x) {
+    match(y=x) {
         i32=>{return $y;},
         Inner=>{return y->p[0];}
     }

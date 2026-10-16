@@ -38,7 +38,7 @@ pub(super) fn run(
         }
         return Ok(NodeResult::Declaration(artifact));
     }
-    let TargetInput::Source { text, module } = &target.input else {
+    let TargetInput::Source { text, module, .. } = &target.input else {
         unreachable!()
     };
     let file_hash = artifacts::content_hash(text.as_bytes());

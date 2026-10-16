@@ -89,7 +89,6 @@ impl Expander<'_> {
                     {
                         owner = reference.base;
                     }
-                    // self uses -> even though its frontend type is the owner unit.
                 }
                 let CompileType::Unit(unit) = self.symbols.get_type(owner).unqualified() else {
                     return None;
