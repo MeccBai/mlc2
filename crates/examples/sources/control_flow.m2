@@ -1,3 +1,6 @@
+// control_flow: for includes its start and excludes its end; _ is the default match branch.
+// Run: mlc run control_flow.m2
+// Expected output (/ separates lines): sum=10 / matched ten
 import c_std::io;
 
 func main() -> i32 {

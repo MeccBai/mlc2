@@ -20,7 +20,7 @@ func main() -> i32 {
 ```
 
 这里的 c_std::io 是已提供的 C 声明模块，不是完整的 MLC 标准库。
-可以用 `mlc main.m2` 构建，或 `mlc ll main.m2` 只生成 LLVM IR。
+可以用 `mlc build main.m2` 构建、`mlc run main.m2` 构建并运行，或 `mlc ll main.m2` 只生成 LLVM IR。
 
 AST 优化由独立的 `mlc_optimizer` pass 管线控制：常量折叠、死代码消除、未使用局部变量存储消除、零引用函数消除。
 默认开启前两项；`--optimize` 全开，`--no-optimize` 全关。
@@ -390,7 +390,8 @@ func main() -> i32 { return read_value(Item{42}); }
 支持泛型参数、引用、数组、泛型 Unit 应用及函数指针签名的递归推断。
 同一泛型参数的推断必须一致，不自动做数值合并；不从返回目标推断。
 信息不足时必须手动提供泛型实参；Unit / Union 构造仍显式给出实参。
-推断后仍检查约束；显式与推断调用复用同一具体实例。不增加重载或 Interface 自动推断。
+推断后仍检查约束；显式与推断调用复用同一具体实例。
+关联函数也支持参数推断，如 `Base::swap(@mut a,@mut b)`；这不增加函数重载。
 泛型参数名称用作运行期值表达式暂不支持，不能把 T 当值或函数使用。
 
 ## 14. Enum

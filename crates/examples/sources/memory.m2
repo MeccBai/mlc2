@@ -1,3 +1,6 @@
+// memory: alloc returns uninitialized storage; write before reading; dealloc consumes ownership.
+// Run: mlc run memory.m2
+// Expected output (/ separates lines): allocated value=42
 import std::mem;
 import c_std::io;
 

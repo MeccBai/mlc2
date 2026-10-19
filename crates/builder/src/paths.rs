@@ -38,6 +38,25 @@ impl PathResolver {
         global: &GlobalConfig,
     ) -> Result<Self, String> {
         let project = ProjectFile::load(project_root)?;
+        Self::with_project(executable, project_root, target, global, project)
+    }
+
+    /// Resolve a standalone source without reading any project configuration.
+    pub fn standalone(
+        executable: &Path,
+        root: &Path,
+        global: &GlobalConfig,
+    ) -> Result<Self, String> {
+        Self::with_project(executable, root, None, global, None)
+    }
+
+    fn with_project(
+        executable: &Path,
+        project_root: &Path,
+        target: Option<&str>,
+        global: &GlobalConfig,
+        project: Option<ProjectFile>,
+    ) -> Result<Self, String> {
         let selected = match (project.as_ref(), target) {
             (Some(project), Some(name)) => Some(
                 project

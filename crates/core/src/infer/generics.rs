@@ -17,13 +17,30 @@ impl TypeInfer<'_> {
         args: &[Expression],
         span: Span,
     ) -> Option<HashMap<GenericIndex, TypeIndex>> {
+        self.generic_signature_arguments(
+            &symbol.params,
+            &symbol.generics,
+            &symbol.generic_map,
+            args,
+            span,
+        )
+    }
+
+    pub fn generic_signature_arguments(
+        &mut self,
+        params: &[(TypeIndex, String)],
+        generics: &[String],
+        generic_map: &HashMap<String, GenericIndex>,
+        args: &[Expression],
+        span: Span,
+    ) -> Option<HashMap<GenericIndex, TypeIndex>> {
         let config = &mut *self.config;
         let symbols = &mut *self.symbols;
         if config.is_poisoned() || args.iter().any(Expression::is_poisoned) {
             return None;
         }
-        let variadic = symbol.params.last().is_some_and(|(_, name)| name == "...");
-        let fixed = symbol.params.len() - usize::from(variadic);
+        let variadic = params.last().is_some_and(|(_, name)| name == "...");
+        let fixed = params.len() - usize::from(variadic);
         if args.len() < fixed || (!variadic && args.len() != fixed) {
             config.submit_error(
                 CompileError::IllegalUse(IllegalUseError::ArgumentCountMismatch),
@@ -32,7 +49,7 @@ impl TypeInfer<'_> {
             return None;
         }
         let mut bindings = HashMap::new();
-        for ((expected, _), argument) in symbol.params.iter().take(fixed).zip(args) {
+        for ((expected, _), argument) in params.iter().take(fixed).zip(args) {
             let found = argument.type_inference(config, symbols);
             if config.is_poisoned() {
                 return None;
@@ -44,19 +61,13 @@ impl TypeInfer<'_> {
                 );
                 return None;
             }
-            if let Err(error) = infer(
-                *expected,
-                found,
-                &mut bindings,
-                &symbol.generic_map,
-                symbols,
-            ) {
+            if let Err(error) = infer(*expected, found, &mut bindings, generic_map, symbols) {
                 config.submit_error(CompileError::IllegalUse(error), span);
                 return None;
             }
         }
-        for name in &symbol.generics {
-            if !bindings.contains_key(&symbol.generic_map[name]) {
+        for name in generics {
+            if !bindings.contains_key(&generic_map[name]) {
                 config.submit_error(
                     CompileError::IllegalUse(IllegalUseError::GenericInferenceMissing {
                         name: name.clone(),

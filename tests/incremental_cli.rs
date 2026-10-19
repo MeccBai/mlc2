@@ -5,6 +5,7 @@ fn run(root: &Path) {
     let output = Command::new(env!("CARGO_BIN_EXE_mlc"))
         .current_dir(root)
         .args([
+            "build",
             "main.m2",
             "--type",
             "static",

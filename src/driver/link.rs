@@ -5,6 +5,43 @@ use std::{
     process::Command,
 };
 
+mod targets;
+
+pub fn linker_path(cli: &Cli, triplet: &str) -> Result<PathBuf, String> {
+    let root = std::env::current_exe().map_err(|e| e.to_string())?;
+    Ok(cli
+        .linker
+        .clone()
+        .unwrap_or(root.parent().ok_or("Compiler has no parent")?.join(format!(
+            "{}{}",
+            targets::profile(triplet)?.linker,
+            std::env::consts::EXE_SUFFIX
+        ))))
+}
+
+pub fn runtime_identity(triplet: &str) -> Result<Vec<(PathBuf, String)>, String> {
+    let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+    let root = exe
+        .parent()
+        .ok_or("Compiler has no parent")?
+        .join("runtime")
+        .join(triplet);
+    let mut files = std::fs::read_dir(&root)
+        .map_err(|e| format!("{}: {e}", root.display()))?
+        .map(|entry| entry.map(|entry| entry.path()))
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+    files.sort();
+    files
+        .into_iter()
+        .filter(|path| path.is_file())
+        .map(|path| {
+            let bytes = std::fs::read(&path).map_err(|e| e.to_string())?;
+            Ok((path, mlc_builder::artifacts::content_hash(&bytes)))
+        })
+        .collect()
+}
+
 pub fn output_path(root: &Path, stem: &str, kind: TargetKind, triplet: &str) -> PathBuf {
     let windows = triplet.contains("windows");
     root.join(match kind {
@@ -44,32 +81,19 @@ pub fn link(
         command.arg("rcs").arg(&staged).args(objects);
         command
     } else {
-        let mut command = Command::new(&cli.linker);
+        let lld = linker_path(cli, triplet)?;
+        let mut command = Command::new(&lld);
         let executable = std::env::current_exe().map_err(|e| e.to_string())?;
-        let coff = triplet.contains("windows-msvc");
-        let lld = mlc_builder::manifest::lld_path(&executable, coff)
-            .ok_or("Compiler executable has no parent")?;
         if !lld.is_file() {
             return Err(format!("Distribution linker not found: {}", lld.display()));
         }
-        command.arg("-fuse-ld=lld");
-        if coff {
-            // Clang's MSVC toolchain ignores --ld-path; -B controls FindProgramPath.
-            command
-                .arg("-B")
-                .arg(lld.parent().ok_or("Linker has no parent")?);
-        } else {
-            command.arg(format!("--ld-path={}", lld.display()));
-        }
-        command.arg(format!("--target={triplet}"));
-        if kind == TargetKind::Shared {
-            command.arg("-shared");
-        }
-        command
-            .args(objects)
-            .arg("-o")
-            .arg(&staged)
-            .args(&cli.link_args);
+        let runtime = executable
+            .parent()
+            .ok_or("Compiler has no parent")?
+            .join("runtime")
+            .join(triplet);
+        command.args(targets::profile(triplet)?.arguments(&runtime, objects, &staged, kind)?);
+        command.args(&cli.link_args);
         command
     };
     let result = command

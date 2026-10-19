@@ -1,6 +1,55 @@
 use super::*;
 
 #[test]
+fn infers_associated_swap_and_reuses_explicit_instances() {
+    let ast = valid(
+        "unit Base {}; pub Base::func<T> swap(a:$mut T,b:$mut T) { val temp=$a; $a=$b; $b=temp; } func main() { var a=10; var b=100; var fa=20.0; var fb=80.0; Base::swap(@mut a,@mut b); Base::swap(@mut fa,@mut fb); Base::swap<i32>(@mut a,@mut b); Base::swap<f64>(@mut fa,@mut fb); }",
+    );
+    assert_eq!(ast.symbols.interface_instances.len(), 2);
+}
+
+#[test]
+fn associated_inference_preserves_diagnostics() {
+    for (declaration, call, message) in [
+        (
+            "pub Base::func<T> same(a:T,b:T) {}",
+            "Base::same(1,true);",
+            "Conflicting inferred types",
+        ),
+        (
+            "pub Base::func<T> missing() {}",
+            "Base::missing();",
+            "Cannot infer generic parameter `T`",
+        ),
+        (
+            "pub Base::func<T> f(a:T,b:T) {}",
+            "Base::f(1);",
+            "Argument count does not match",
+        ),
+        (
+            "pub Base::func<T> f(a:$mut T) {}",
+            "var a=1; Base::f(@a);",
+            "Type mismatch",
+        ),
+        (
+            "Base::func<T> f(a:T) {}",
+            "Base::f(1);",
+            "Invalid member access",
+        ),
+        (
+            "generic Integer { std::generic::is_integer; }; pub Base::func<T:Integer> f(a:T) {}",
+            "Base::f(1.0);",
+            "std::generic::is_integer",
+        ),
+    ] {
+        let source = format!("unit Base {{}}; {declaration} func main() {{ {call} }}");
+        let ast = invalid_semantics(&source);
+        let diagnostic = ast.config.error_handle().render(&source);
+        assert!(diagnostic.contains(message), "{diagnostic}");
+    }
+}
+
+#[test]
 fn infers_swap_references_and_reuses_the_explicit_instance() {
     let ast = valid(
         "generic Base { std::generic::is_integer; }; func<T:Base> swap(a:$mut T,b:$mut T) { var temporary = $a; $a = $b; $b = temporary; } func main() { var a = 1; var b = 2; swap(@mut a,@mut b); swap<i32>(@mut a,@mut b); }",

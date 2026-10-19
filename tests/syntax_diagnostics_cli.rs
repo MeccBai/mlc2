@@ -14,6 +14,7 @@ fn cli_syntax_errors_use_source_tokens_and_keep_snippets_and_count() {
         std::fs::write(&entry, source).unwrap();
         let output = Command::new(env!("CARGO_BIN_EXE_mlc"))
             .current_dir(root.path())
+            .arg("build")
             .arg(&entry)
             .arg("--config")
             .arg(&config)

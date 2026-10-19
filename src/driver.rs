@@ -12,48 +12,50 @@ use mlc_builder::{
 };
 use std::{collections::HashMap, path::Path};
 
-pub fn run(cli: Cli) -> Result<(), String> {
+pub fn run(cli: Cli) -> Result<i32, String> {
     let root = std::env::current_dir().map_err(|e| e.to_string())?;
     let targets = match &cli.command {
-        Some(Commands::Ll { input }) => {
-            if cli.entry.is_some() {
-                return Err("Do not combine ll with an entry file".into());
-            }
+        Commands::Ll { input } => {
             vec![(input.clone(), None, TargetKind::Bin)]
         }
-        Some(Commands::Symbols { input }) => {
-            if cli.entry.is_some() {
-                return Err("Do not combine symbols with an entry file".into());
-            }
+        Commands::Symbols { input } => {
             let output = cli
                 .output
                 .clone()
                 .unwrap_or_else(|| input.with_extension("sym"));
             mlc_builder::artifacts::convert_toml(input, &output)?;
             println!("Written {}", output.display());
-            return Ok(());
+            return Ok(0);
         }
-        Some(Commands::Example { name }) => {
-            if cli.entry.is_some() {
-                return Err("Do not combine example with an entry file".into());
-            }
+        Commands::Example { name } => {
             let output = mlc_examples::render(name)?;
             use std::io::Write;
             return std::io::stdout()
                 .lock()
                 .write_all(output.as_bytes())
+                .map(|()| 0)
                 .map_err(|error| error.to_string());
         }
-        Some(Commands::Build { target }) => {
-            if cli.entry.is_some() {
-                return Err("Do not combine build with an entry file".into());
-            }
+        Commands::Build {
+            target: Some(target),
+        }
+        | Commands::Run { target }
+            if Path::new(target).extension().is_some_and(|ext| ext == "m2") =>
+        {
+            vec![(root.join(target), None, TargetKind::Bin)]
+        }
+        Commands::Build { .. } | Commands::Run { .. } => {
+            let target = match &cli.command {
+                Commands::Build { target } => target.as_deref(),
+                Commands::Run { target } => Some(target.as_str()),
+                _ => unreachable!(),
+            };
             let project = ProjectFile::load(&root)?.ok_or("Project.toml not found")?;
             let selected: Vec<_> = project
                 .project
                 .targets
                 .into_iter()
-                .filter(|t| target.as_ref().is_none_or(|name| name == &t.name))
+                .filter(|t| target.is_none_or(|name| name == t.name))
                 .collect();
             if selected.is_empty() {
                 return Err("No matching project target".into());
@@ -63,29 +65,30 @@ pub fn run(cli: Cli) -> Result<(), String> {
                 .map(|t| (root.join(t.entry), Some(t.name), t.kind))
                 .collect::<Vec<_>>()
         }
-        None => vec![(
-            cli.entry
-                .clone()
-                .ok_or("Specify an entry file or use 'mlc build'; see --help")?,
-            None,
-            TargetKind::Bin,
-        )],
     };
     let global = match &cli.config {
         Some(path) => GlobalConfig::load(path)?,
         None => GlobalConfig::load_default()?,
     };
     for (entry, name, kind) in targets {
-        build(
-            &cli,
-            &global,
-            &root,
-            &entry,
-            name.as_deref(),
-            cli.kind.map(Into::into).unwrap_or(kind),
-        )?;
+        let kind = cli.kind.map(Into::into).unwrap_or(kind);
+        if matches!(cli.command, Commands::Run { .. }) && kind != TargetKind::Bin {
+            return Err(
+                "mlc run requires a bin target; static and shared libraries cannot be run".into(),
+            );
+        }
+        let artifact = build(&cli, &global, &root, &entry, name.as_deref(), kind)?;
+        if matches!(cli.command, Commands::Run { .. }) {
+            let artifact = artifact.ok_or("Build did not produce an executable")?;
+            let status = std::process::Command::new(&artifact)
+                .status()
+                .map_err(|e| format!("Cannot run {}: {e}", artifact.display()))?;
+            return status
+                .code()
+                .ok_or_else(|| "Program terminated without an exit code".into());
+        }
     }
-    Ok(())
+    Ok(0)
 }
 
 fn build(
@@ -95,9 +98,13 @@ fn build(
     entry: &Path,
     name: Option<&str>,
     kind: TargetKind,
-) -> Result<(), String> {
+) -> Result<Option<std::path::PathBuf>, String> {
     let executable = std::env::current_exe().map_err(|e| e.to_string())?;
-    let mut paths = PathResolver::new(&executable, root, name, global)?;
+    let mut paths = if name.is_none() {
+        PathResolver::standalone(&executable, root, global)?
+    } else {
+        PathResolver::new(&executable, root, name, global)?
+    };
     if let Some(triplet) = &cli.triplet {
         mlc_builder::paths::validate_triplet(triplet)?;
         paths.triplet = triplet.clone();
@@ -150,13 +157,14 @@ fn build(
         mlc_optimizer::OptimizeConfig::default()
     };
     let generated = frontend::generate_with_options(&plan, &paths.triplet, kind, optimize)?;
-    if matches!(cli.command, Some(Commands::Ll { .. })) {
+    if matches!(cli.command, Commands::Ll { .. }) {
         let directory = if cli.output.is_some() {
             output
         } else {
             output.join("ll")
         };
-        return ir_dump::write(&plan, generated, &directory);
+        ir_dump::write(&plan, generated, &directory)?;
+        return Ok(None);
     }
     let module_fingerprints = generated
         .modules
@@ -236,19 +244,16 @@ fn build(
                 .map_err(|error| error.to_string())
         })
         .collect::<Result<Vec<_>, _>>()?;
-    let tool = cache::tool_identity(if kind == TargetKind::Static {
-        &cli.archiver
+    let linker = if kind == TargetKind::Static {
+        cli.archiver.clone()
     } else {
-        &cli.linker
-    });
+        link::linker_path(cli, &paths.triplet)?
+    };
+    let tool = cache::tool_identity(&linker);
     let lld = if kind == TargetKind::Static {
         None
     } else {
-        mlc_builder::manifest::lld_path(
-            &std::env::current_exe().map_err(|error| error.to_string())?,
-            paths.triplet.contains("windows-msvc"),
-        )
-        .and_then(|path| cache::tool_identity(&path))
+        Some(link::runtime_identity(&paths.triplet)?)
     };
     let environment = [
         "PATH",
@@ -266,6 +271,7 @@ fn build(
     });
     let link_key = mlc_builder::artifacts::semantic_hash(&(
         &report.link_key,
+        "native-lld-table-v1",
         &paths.triplet,
         format!("{kind:?}"),
         &cli.linker,
@@ -283,5 +289,5 @@ fn build(
         cache::record(&artifact, &link_key)?;
     }
     println!("Built {}", artifact.display());
-    Ok(())
+    Ok(Some(artifact))
 }

@@ -1,3 +1,6 @@
+// units: Initialize fields in declaration order; pub allows access outside methods.
+// Run: mlc run units.m2
+// Expected output (/ separates lines): point=(30,20)
 import c_std::io;
 
 unit Point {

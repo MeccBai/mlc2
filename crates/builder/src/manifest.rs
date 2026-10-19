@@ -38,8 +38,6 @@ pub fn lld_path(executable: &std::path::Path, coff: bool) -> Option<std::path::P
     )))
 }
 
-/// Current development installation, used by the Cargo build script.
-pub const LLVM_INSTALL_DIR: &str = r"F:\Develop\scoop\apps\llvm-dev\current";
 pub const LLVM_C_LIBRARY: &str = "LLVM-C";
 
 #[cfg(test)]

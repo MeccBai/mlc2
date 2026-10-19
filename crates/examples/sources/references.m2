@@ -1,3 +1,6 @@
+// references: @ borrows read-only, @mut borrows mutably, and $ accesses the referenced value.
+// Run: mlc run references.m2
+// Expected output (/ separates lines): value=42
 import c_std::io;
 
 func increment(value:$mut i32) {

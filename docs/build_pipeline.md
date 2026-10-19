@@ -9,7 +9,9 @@
 installation/
   mlc.exe
   lld-link.exe / ld.lld.exe
-  LLVM-C.dll 和其他运行时 DLL
+  runtime/                  # 此目录加入 PATH
+    LLVM-C.dll
+    <triplet>/              # CRT .o、运行库 .a、系统导入库
   lib/
     <triplet>/
       std/

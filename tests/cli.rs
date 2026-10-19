@@ -29,6 +29,7 @@ fn cli_hello_world_builds_runs_and_reuses_objects() {
     let output = tempfile::tempdir().unwrap();
     let destination = output.path().to_str().unwrap();
     let args = [
+        "build",
         "tests/fixtures/hello_world.m2",
         "--lib-dir",
         "lib",
@@ -84,21 +85,21 @@ fn cli_library_kinds_and_bad_arguments() {
     )
     .unwrap();
     for kind in ["static", "shared"] {
-        success(&mlc(root.path(), &["library.m2", "--type", kind]));
+        success(&mlc(root.path(), &["build", "library.m2", "--type", kind]));
     }
     assert!(root.path().join("build/library.lib").is_file());
     assert!(root.path().join("build/library.dll").is_file());
     assert!(
-        !mlc(root.path(), &["library.m2", "--type", "lib"])
+        !mlc(root.path(), &["build", "library.m2", "--type", "lib"])
             .status
             .success()
     );
     assert!(
-        !mlc(root.path(), &["library.m2", "-j", "0"])
+        !mlc(root.path(), &["build", "library.m2", "-j", "0"])
             .status
             .success()
     );
-    assert!(!mlc(root.path(), &["missing.m2"]).status.success());
+    assert!(!mlc(root.path(), &["build", "missing.m2"]).status.success());
     success(&mlc(root.path(), &["--help"]));
 }
 
@@ -121,7 +122,7 @@ fn native_linkage_names_are_distinct_between_modules() {
         "import a; import b; func main() -> i32 { return a::value()+b::value(); }",
     )
     .unwrap();
-    success(&mlc(root.path(), &["main.m2"]));
+    success(&mlc(root.path(), &["build", "main.m2"]));
     let run = Command::new(root.path().join("build/main.exe"))
         .output()
         .unwrap();
@@ -133,7 +134,7 @@ fn cli_help_and_invalid_output_kind_need_no_linker() {
     let root = tempfile::tempdir().unwrap();
     success(&mlc(root.path(), &["--help"]));
     assert!(
-        !mlc(root.path(), &["main.m2", "--type", "lib"])
+        !mlc(root.path(), &["build", "main.m2", "--type", "lib"])
             .status
             .success()
     );
@@ -147,7 +148,7 @@ fn semantic_error_prints_source_context_instead_of_debug_enum() {
         "func main() {\r\n    var a = 1;\r\n    return 1;\r\n}\r\n",
     )
     .unwrap();
-    let result = mlc(root.path(), &["main.m2"]);
+    let result = mlc(root.path(), &["build", "main.m2"]);
     assert!(!result.status.success());
     let stderr = String::from_utf8(result.stderr).unwrap();
     assert!(stderr.contains("Cannot return a value"), "{stderr}");

@@ -2,13 +2,13 @@ mod cli;
 mod driver;
 pub mod manifest;
 
-fn main() -> std::process::ExitCode {
+fn main() {
     use clap::Parser;
     match driver::run(cli::Cli::parse()) {
-        Ok(()) => std::process::ExitCode::SUCCESS,
+        Ok(code) => std::process::exit(code),
         Err(error) => {
             eprintln!("{error}");
-            std::process::ExitCode::FAILURE
+            std::process::exit(1)
         }
     }
 }

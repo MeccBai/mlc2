@@ -130,6 +130,19 @@ impl Expression {
             }
         }
         if let TempExpr::Path(path) = &callee.0 {
+            if let Some(crate::ast::symbols::PathSymbol::Interface { generic: true, .. }) =
+                symbols.resolve_path(config, path, context)
+            {
+                // Reuse lookup's visibility checks before instantiating the template.
+                let Some(EnumBool::True(index)) =
+                    Self::search_generic_function(config, callee, symbols, context)
+                else {
+                    return Self::Poison;
+                };
+                return Self::new_inferred_interface_call(
+                    config, index, args, span, symbols, context,
+                );
+            }
             if let Some(crate::ast::symbols::PathSymbol::Function {
                 index,
                 generic: true,

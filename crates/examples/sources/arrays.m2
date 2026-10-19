@@ -1,3 +1,6 @@
+// arrays: [Type:length] declares an array; reserve an extra byte for the C string terminator.
+// Run: mlc run arrays.m2
+// Expected output (/ separates lines): Hello World! / numbers[1]=25
 import c_std::io;
 
 func main() -> i32 {

@@ -11,6 +11,23 @@ fn project(root: &Path) {
 }
 
 #[test]
+fn standalone_ignores_even_malformed_project_configuration() {
+    let root = tempfile::tempdir().unwrap();
+    fs::write(root.path().join("Project.toml"), "invalid toml [").unwrap();
+    let exe = root.path().join("install/mlc.exe");
+    let paths = PathResolver::standalone(&exe, root.path(), &GlobalConfig::default()).unwrap();
+    assert_eq!(paths.triplet, HOST_TRIPLET);
+    assert_eq!(
+        paths.output,
+        root.path().join("build/objects").join(HOST_TRIPLET)
+    );
+    assert_eq!(
+        paths.imports.lib_dirs,
+        vec![root.path().join("install/lib").join(HOST_TRIPLET)]
+    );
+}
+
+#[test]
 fn target_overrides_project_and_global_paths() {
     let root = tempfile::tempdir().unwrap();
     project(root.path());
