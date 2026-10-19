@@ -2,12 +2,12 @@ use crate::ast::TypeIndex;
 use crate::ast::expression::{Expression, FuncCall};
 use std::rc::Rc;
 mod control;
-mod variant;
 pub mod creator;
 mod exits;
 pub(crate) mod resources;
 mod usage;
 pub mod variable;
+mod variant;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Variable {
@@ -71,7 +71,6 @@ pub struct AnonymousBlock {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Statement {
     VariantMatch(VariantMatch),
-    Poison,
     VariableDecl(Rc<Variable>),
     Assignment(Assignment),
     FuncCall(FuncCall),
@@ -84,6 +83,7 @@ pub enum Statement {
     Expression(Expression),
     Continue,
     Break,
+    Poison,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

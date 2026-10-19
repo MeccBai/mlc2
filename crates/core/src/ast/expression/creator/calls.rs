@@ -47,58 +47,26 @@ impl Expression {
                     value: Box::new(crate::ast::expression::CompAtom::from_expr(owner)),
                 })
             };
-            let actual = receiver.type_inference(config, symbols);
-            if !receiver_type.type_check(false, &actual, symbols) {
-                config.submit_error(
-                    CompileError::IllegalUse(IllegalUseError::TypeMismatched {
-                        expected: receiver_type.format(symbols),
-                        found: actual.format(symbols),
-                    }),
-                    span,
-                );
+            if !crate::TypeInfer::new(config, symbols).check(
+                &receiver,
+                receiver_type,
+                crate::infer::CheckMode::Argument,
+                span,
+            ) {
                 return Self::Poison;
             }
             params.push(receiver);
         }
-        let mut params_types = Vec::<TypeIndex>::new();
-        params.reserve(args.len() + 1);
-        args.into_iter().for_each(|arg| {
-            let expr = Expression::new(config, arg, symbols, context);
-            params_types.push(expr.type_inference(config, symbols));
-            params.push(expr);
-        });
-
-        if params.iter().any(|param| param.is_poisoned()) {
-            return Self::Poison;
+        params.reserve(args.len());
+        for arg in args {
+            params.push(Expression::new(config, arg, symbols, context));
         }
-
-        let interface_params = &symbols.get_interface_regular(interface).params;
-
-        if params_types.len() != interface_params.len() {
-            config.submit_error(
-                CompileError::IllegalUse(IllegalUseError::ArgumentCountMismatch),
-                span,
-            );
-            return Self::Poison;
-        }
-
-        let check_result = params_types.iter().zip(interface_params.iter()).all(
-            |(param_type, interface_param)| {
-                let check_result = interface_param.0.type_check(false, param_type, symbols);
-                if !check_result {
-                    config.submit_error(
-                        CompileError::IllegalUse(IllegalUseError::TypeMismatched {
-                            expected: interface_param.0.format(symbols),
-                            found: param_type.format(symbols),
-                        }),
-                        span,
-                    );
-                }
-                check_result
-            },
-        );
-
-        if !check_result {
+        let offset = usize::from(symbol.receiver_type.is_some());
+        if !crate::TypeInfer::new(config, symbols).check_arguments(
+            &symbol.params,
+            &params[offset..],
+            span,
+        ) {
             return Self::Poison;
         }
 

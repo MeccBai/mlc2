@@ -2,6 +2,65 @@ use super::*;
 use mlc_builder::plan::ImportResolver;
 
 #[test]
+fn optimizer_switches_control_ir_without_changing_required_calls() {
+    let root = tempfile::tempdir().unwrap();
+    let entry = root.path().join("main.m2");
+    std::fs::write(&entry, "global var hits=0+0;func touch()->i32{hits=hits+1;return hits;}func unused(){}func main()->i32{var discarded=touch();var arithmetic=1+2;if(true){hits=hits+1;}else{hits=hits+10;}return hits-2;}").unwrap();
+    let plan = BuildPlan::discover(&entry, &ImportResolver { lib_dirs: vec![] }).unwrap();
+    let compiler = mlc_builder::llvm::IrCompiler::init("x86_64-pc-windows-msvc").unwrap();
+    for (label, options) in [
+        ("off", mlc_optimizer::OptimizeConfig::disabled()),
+        ("on", mlc_optimizer::OptimizeConfig::enabled()),
+    ] {
+        let generated =
+            generate_with_options(&plan, "x86_64-pc-windows-msvc", TargetKind::Bin, options)
+                .unwrap();
+        let mut objects = vec![];
+        for (id, ir) in generated
+            .modules
+            .into_iter()
+            .chain(generated.supplement.into_iter().map(|ir| (usize::MAX, ir)))
+        {
+            if id != usize::MAX {
+                assert!(ir.contains("call i32 @\"main::touch\""), "{ir}");
+                assert_eq!(
+                    ir.contains("define void @\"main::unused\""),
+                    label == "off",
+                    "{ir}"
+                );
+                assert_eq!(ir.contains("if.then"), label == "off", "{ir}");
+            }
+            let object = root.path().join(format!("{label}-{id}.obj"));
+            compiler.emit(ir, &object).unwrap();
+            objects.push(object);
+        }
+        #[cfg(windows)]
+        {
+            let executable = root.path().join(format!("{label}.exe"));
+            let linked = std::process::Command::new("clang")
+                .arg("-fuse-ld=lld")
+                .args(objects)
+                .arg("-o")
+                .arg(&executable)
+                .output()
+                .unwrap();
+            assert!(
+                linked.status.success(),
+                "{}",
+                String::from_utf8_lossy(&linked.stderr)
+            );
+            assert_eq!(
+                std::process::Command::new(executable)
+                    .status()
+                    .unwrap()
+                    .code(),
+                Some(0)
+            );
+        }
+    }
+}
+
+#[test]
 fn pruned_control_flow_preserves_side_effects_and_unmatched_match_fallthrough() {
     let root = tempfile::tempdir().unwrap();
     let entry = root.path().join("main.m2");

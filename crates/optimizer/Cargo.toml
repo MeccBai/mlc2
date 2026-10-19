@@ -1,0 +1,10 @@
+[package]
+name = "mlc_optimizer"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+mlc_core.workspace = true
+
+[dev-dependencies]
+mlc_syntax.workspace = true

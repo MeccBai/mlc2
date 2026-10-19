@@ -6,16 +6,6 @@ use crate::ast::{
 
 impl FunctionGenerator<'_> {
     pub(super) fn if_statement(&mut self, statement: &IfStatement) {
-        if let Some(condition) =
-            constant::value(&statement.condition, self.package).and_then(constant::Scalar::boolean)
-        {
-            self.anonymous_scope(if condition {
-                &statement.then_branch
-            } else {
-                statement.else_branch.as_deref().unwrap_or(&[])
-            });
-            return;
-        }
         let yes = self.label("if.then");
         let no = self.label("if.else");
         let end = self.label("if.end");
@@ -30,11 +20,6 @@ impl FunctionGenerator<'_> {
     }
 
     pub(super) fn while_statement(&mut self, statement: &WhileStatement) {
-        if constant::value(&statement.condition, self.package).and_then(constant::Scalar::boolean)
-            == Some(false)
-        {
-            return;
-        }
         let condition = self.label("while.condition");
         let body = self.label("while.body");
         let end = self.label("while.end");
@@ -55,9 +40,6 @@ impl FunctionGenerator<'_> {
     }
 
     pub(super) fn for_statement(&mut self, statement: &ForStatement) {
-        if constant::empty_for(statement, self.package) {
-            return;
-        }
         let outer = self.variables.position();
         if let Some(init) = &statement.init {
             self.statements(std::slice::from_ref(&**init));
@@ -106,14 +88,6 @@ impl FunctionGenerator<'_> {
     }
 
     pub(super) fn match_statement(&mut self, statement: &MatchStatement) {
-        match constant::select_match(statement, self.package) {
-            constant::MatchSelection::Scope(body) => {
-                self.anonymous_scope(body);
-                return;
-            }
-            constant::MatchSelection::Skip => return,
-            constant::MatchSelection::Dynamic => {}
-        }
         // Evaluate the scrutinee once. Pattern expressions are evaluated only along
         // the unmatched path; default is the fallback regardless of source position.
         let matched = self.expression(&statement.value);

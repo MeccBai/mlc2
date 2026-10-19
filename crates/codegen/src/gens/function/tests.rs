@@ -28,6 +28,7 @@ fn parse(source: &str) -> (AbstractSyntaxTree, PackageSymbolTable) {
     let mut package = PackageSymbolTable::new();
     ast.analysis(&mut package);
     assert!(!ast.config.is_poisoned(), "{:?}", ast.config.error_handle());
+    let ast = mlc_optimizer::Optimizer::new(Default::default()).optimize(ast, &mut package);
     (ast, package)
 }
 

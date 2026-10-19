@@ -22,6 +22,10 @@ func main() -> i32 {
 这里的 c_std::io 是已提供的 C 声明模块，不是完整的 MLC 标准库。
 可以用 `mlc main.m2` 构建，或 `mlc ll main.m2` 只生成 LLVM IR。
 
+AST 优化由独立的 `mlc_optimizer` pass 管线控制：常量折叠、死代码消除、未使用局部变量存储消除、零引用函数消除。
+默认开启前两项；`--optimize` 全开，`--no-optimize` 全关。
+开关不影响 `const` 求值、数值范围检查和字面量类型规范化，也不控制 LLVM 后端优化或调试信息生成。
+
 ## 2. 词法与标点
 
 标识符匹配 `[a-zA-Z_][a-zA-Z0-9_]*`，区分大小写。

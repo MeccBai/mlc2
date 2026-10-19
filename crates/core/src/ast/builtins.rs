@@ -63,9 +63,6 @@ impl crate::ast::function::FuncSymbol {
 
 impl crate::ast::expression::FuncCall {
     pub(crate) fn is_const(&self, symbols: &dyn crate::ast::symbols::Resolution) -> bool {
-        self.callee.is_none()
-            && matches!(self.func, crate::ast::symbols::EnumBool::False(index)
-            if matches!(symbols.get_function_regular(index).builtin(), Some(Builtin::Cast | Builtin::ConstCStr))
-                && self.args.iter().all(|argument| argument.is_const(symbols)))
+        crate::TypeInfer::call_is_constant(self, symbols)
     }
 }

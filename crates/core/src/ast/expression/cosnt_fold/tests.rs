@@ -141,7 +141,7 @@ fn float_arithmetic_retains_type() {
 }
 
 #[test]
-fn variable_construction_folds_initializer_once() {
+fn variable_construction_preserves_runtime_initializer_for_optimizer() {
     use crate::parser::out::{TempExpr, TempLiteralKind, TempVar};
     let mut symbols = SymbolTable::new();
     let mut config = config();
@@ -175,8 +175,12 @@ fn variable_construction_folds_initializer_once() {
         None,
     );
     assert!(config.error_handle().errors.is_empty());
-    let Expression::ConstValueE(value) = &*variable.init_val else {
-        panic!("initializer not folded")
+    assert!(matches!(&*variable.init_val, Expression::CompositeE(_)));
+    let folded = (*variable.init_val)
+        .clone()
+        .const_fold(&mut config, &symbols);
+    let Expression::ConstValueE(value) = &folded else {
+        panic!("initializer must remain foldable")
     };
     assert_eq!(value.value, "5");
     assert_eq!(

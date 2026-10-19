@@ -120,7 +120,10 @@ fn evaluate(
         },
         Expression::VarValueE(variable) => {
             if let Some((target, initial)) = binding {
-                if std::ptr::eq(&**variable, target) {
+                if variable.name == target.name
+                    && variable.var_type == target.var_type
+                    && variable.declaration_span == target.declaration_span
+                {
                     return Some(initial);
                 }
             }

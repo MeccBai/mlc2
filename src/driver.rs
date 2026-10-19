@@ -142,7 +142,14 @@ fn build(
         paths.lib_fallback = output.join("objects/lib").join(&paths.triplet);
     }
     let plan = BuildPlan::discover_with_paths(entry, &paths)?;
-    let generated = frontend::generate(&plan, &paths.triplet, kind)?;
+    let optimize = if cli.no_optimize {
+        mlc_optimizer::OptimizeConfig::disabled()
+    } else if cli.optimize {
+        mlc_optimizer::OptimizeConfig::enabled()
+    } else {
+        mlc_optimizer::OptimizeConfig::default()
+    };
+    let generated = frontend::generate_with_options(&plan, &paths.triplet, kind, optimize)?;
     if matches!(cli.command, Some(Commands::Ll { .. })) {
         let directory = if cli.output.is_some() {
             output
@@ -167,7 +174,7 @@ fn build(
         output: paths.output.clone(),
         target: paths.triplet.clone(),
         compiler_id: format!("mlc-{}-cli-v2", env!("CARGO_PKG_VERSION")),
-        compiler_options: vec![format!("kind={kind:?}")],
+        compiler_options: vec![format!("kind={kind:?}"), format!("optimizer={optimize:?}")],
         module_fingerprints,
         workers: cli.jobs.unwrap_or_else(|| {
             std::thread::available_parallelism()

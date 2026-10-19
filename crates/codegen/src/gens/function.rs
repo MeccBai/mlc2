@@ -14,7 +14,6 @@ use crate::ast::{
 use crate::gens::func::SymbolIr;
 use std::fmt::Write;
 
-mod constant;
 mod control;
 mod globals;
 mod resources;

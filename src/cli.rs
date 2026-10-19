@@ -4,6 +4,12 @@ use std::path::PathBuf;
 #[derive(Debug, Parser)]
 #[command(version, about = "MLC compiler and project builder")]
 pub struct Cli {
+    /// Enable all AST optimization passes.
+    #[arg(long, global = true, conflicts_with = "no_optimize")]
+    pub optimize: bool,
+    /// Disable optional AST optimizations (semantic const checks remain enabled).
+    #[arg(long, global = true)]
+    pub no_optimize: bool,
     #[command(subcommand)]
     pub command: Option<Commands>,
     /// Source entry file (without a subcommand).

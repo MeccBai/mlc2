@@ -38,7 +38,22 @@ pub struct Generated {
     pub global_inits: Vec<(usize, String)>,
 }
 
+#[cfg(test)]
 pub fn generate(plan: &BuildPlan, triplet: &str, kind: TargetKind) -> Result<Generated, String> {
+    generate_with_options(
+        plan,
+        triplet,
+        kind,
+        mlc_optimizer::OptimizeConfig::default(),
+    )
+}
+
+pub fn generate_with_options(
+    plan: &BuildPlan,
+    triplet: &str,
+    kind: TargetKind,
+    optimize: mlc_optimizer::OptimizeConfig,
+) -> Result<Generated, String> {
     let mut package = PackageSymbolTable::new();
     let mut asts = vec![];
     for id in &plan.order {
@@ -80,6 +95,12 @@ pub fn generate(plan: &BuildPlan, triplet: &str, kind: TargetKind) -> Result<Gen
             checked(ast)?;
         }
     }
+    let (source_ids, source_asts): (Vec<_>, Vec<_>) = asts
+        .into_iter()
+        .filter(|(id, _)| matches!(plan.targets[id.0].input, TargetInput::Source { .. }))
+        .unzip();
+    let optimized = mlc_optimizer::Optimizer::new(optimize).optimize_all(source_asts, &mut package);
+    let asts = source_ids.into_iter().zip(optimized);
     names::qualify(&mut package, plan);
     let mut modules = vec![];
     let mut initializers = vec![];

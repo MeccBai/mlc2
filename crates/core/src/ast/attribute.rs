@@ -1,3 +1,4 @@
+use crate::ast::builtins::Builtin;
 use crate::lexer::Span;
 pub(crate) mod validate;
 use crate::{ast::config::Config, diagnostic::warning::Warning};
@@ -22,7 +23,7 @@ static UNIT_ATTRIBUTE_MAP: LazyLock<HashMap<&'static str, UnitAttribute>> = Lazy
 pub enum FuncAttibute {
     Empty,
     Cabi,
-    Builtin(crate::ast::builtins::Builtin),
+    Builtin(Builtin),
 }
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub enum UnitAttribute {

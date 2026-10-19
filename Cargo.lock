@@ -456,6 +456,7 @@ dependencies = [
  "mlc_codegen",
  "mlc_core",
  "mlc_examples",
+ "mlc_optimizer",
  "mlc_syntax",
  "tempfile",
 ]
@@ -482,6 +483,7 @@ version = "0.1.0"
 dependencies = [
  "mlc_builder",
  "mlc_core",
+ "mlc_optimizer",
  "mlc_syntax",
 ]
 
@@ -497,6 +499,14 @@ dependencies = [
 name = "mlc_examples"
 version = "0.1.0"
 dependencies = [
+ "mlc_syntax",
+]
+
+[[package]]
+name = "mlc_optimizer"
+version = "0.1.0"
+dependencies = [
+ "mlc_core",
  "mlc_syntax",
 ]
 

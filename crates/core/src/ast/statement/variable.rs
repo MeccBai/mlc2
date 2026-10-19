@@ -123,6 +123,8 @@ impl Variable {
         if init_val.is_poisoned() {
             return Self::poison();
         }
+        // Semantic constant evaluation remains mandatory for diagnostics and const.
+        let original_init = (temp_var.value_type != ValueType::Constant).then(|| init_val.clone());
         let init_val = init_val.const_fold(config, symbols);
         if let Some(ty) = declared {
             init_val.check_constant_range(ty, config, symbols, var_span);
@@ -242,7 +244,11 @@ impl Variable {
             declaration_span: temp_var.name_span,
             name: temp_var.name,
             var_type: ty,
-            init_val: Box::new(init_val.normalize_initializer(ty, symbols)),
+            init_val: Box::new(
+                original_init
+                    .unwrap_or(init_val)
+                    .normalize_initializer(ty, symbols),
+            ),
         })
     }
 
