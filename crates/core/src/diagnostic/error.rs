@@ -111,7 +111,7 @@ pub enum IllegalUseError {
     UnsupportedGenericCall,
     MacroExpansionRequired,
     IllegalVisibility,
-    CannotInferenceType,
+    CannotInferType,
     VariableMustBeInitialized,
     NonConstantInitializer,
     ExpressionMustConditional,

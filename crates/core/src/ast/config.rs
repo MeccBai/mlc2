@@ -1,3 +1,4 @@
+use std::rc::Rc;
 use crate::ast::symbol_name::SymbolName;
 use crate::diagnostic::error::ErrorHandle;
 use crate::diagnostic::warning::WarningHandle;
@@ -63,7 +64,7 @@ pub struct Config {
     err_h: ErrorHandle,
     warning_h: WarningHandle,
     poisoned: bool,
-    source_lines: Option<std::rc::Rc<mlc_syntax::lexer::LineTable>>,
+    source_lines: Option<Rc<mlc_syntax::lexer::LineTable>>,
 }
 
 impl Config {

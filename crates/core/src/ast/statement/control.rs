@@ -156,7 +156,7 @@ impl Statement {
         let ty = value.type_inference(config, symbols);
         if ty.is_empty() {
             config.submit_error(
-                CompileError::IllegalUse(IllegalUseError::CannotInferenceType),
+                CompileError::IllegalUse(IllegalUseError::CannotInferType),
                 span,
             );
             return Self::Poison;

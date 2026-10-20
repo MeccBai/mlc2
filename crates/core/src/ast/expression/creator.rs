@@ -234,7 +234,7 @@ impl Expression {
                     }
                     if !ty.is_empty() && ty.is_ref(symbols) {
                         config.submit_error(
-                            CompileError::IllegalUse(IllegalUseError::CannotInferenceType),
+                            CompileError::IllegalUse(IllegalUseError::CannotInferType),
                             span,
                         );
                     }

@@ -106,8 +106,10 @@ func main()->i32{
     );
     success(&result);
     let ir = fs::read_to_string(root.path().join("build/ll/std/fmt.ll")).unwrap();
-    assert!(ir.contains("declare i32 @\"snprintf\""), "{ir}");
-    assert!(!ir.contains("define i32 @\"snprintf\""));
+    assert!(!ir.contains("snprintf"), "{ir}");
+    assert!(ir.contains("_ecvt_s"), "{ir}");
+    assert!(ir.contains("fwrite"), "{ir}");
+    assert!(!ir.contains("putchar"), "{ir}");
 }
 #[test]
 #[ignore = "Requires bundled ld.lld and runtime beside mlc"]
@@ -281,4 +283,110 @@ func main()->i32 {
         .unwrap()
         .replace("\r\n", "\n");
     assert!(output.contains("answer=42\n"), "{output}");
+}
+
+#[test]
+#[ignore = "Requires bundled ld.lld and runtime beside mlc"]
+fn primitive_formatters_match_numeric_reference_and_handle_ieee_edges() {
+    let mut source = String::from(
+        r#"
+import std;
+import c_std::io;
+#[c_abi]# func snprintf(buffer:$mut i8,capacity:u64,pattern:$i8,...)->i32;
+#[c_abi]# func strcmp(a:$i8,b:$i8)->i32;
+func check_float(bits:u64)->i32 {
+    var value:f64=0.0;
+    val slot=cast<$mut u64>(@mut value);$slot=bits;
+    var actual=std::format!("{}",value);
+    var expected:[i8:128]="";
+    snprintf(@mut expected[0],cast<u64>(128),const_c_str("%.17g"),value);
+    if(strcmp(actual.as_ptr(),@expected[0])!=0){c_std::io::printf(const_c_str("float bits=%llu expected=%s actual=%s\n"),bits,@expected[0],actual.as_ptr());return 1;}
+    return 0;
+}
+func check_float32(bits:u32)->i32 {
+    var value:f32=cast<f32>(0.0);
+    val slot=cast<$mut u32>(@mut value);$slot=bits;
+    var actual=std::format!("{}",value);
+    var expected:[i8:128]="";
+    snprintf(@mut expected[0],cast<u64>(128),const_c_str("%.17g"),cast<f64>(value));
+    if(strcmp(actual.as_ptr(),@expected[0])!=0){c_std::io::printf(const_c_str("float32 bits=%u expected=%s actual=%s\n"),bits,@expected[0],actual.as_ptr());return 1;}
+    return 0;
+}
+func check_integer(bits:u64)->i32 {
+    var actual_unsigned=std::format!("{}",bits);
+    val signed_value=cast<i64>(bits);
+    var actual_signed=std::format!("{}",signed_value);
+    var expected:[i8:32]="";
+    snprintf(@mut expected[0],cast<u64>(32),const_c_str("%llu"),bits);
+    if(strcmp(actual_unsigned.as_ptr(),@expected[0])!=0){return 2;}
+    snprintf(@mut expected[0],cast<u64>(32),const_c_str("%lld"),signed_value);
+    if(strcmp(actual_signed.as_ptr(),@expected[0])!=0){return 3;}
+    return 0;
+}
+func special(bits:u64,expected:str)->i32 {
+    var value:f64=0.0;
+    val slot=cast<$mut u64>(@mut value);$slot=bits;
+    var actual=std::format!("{}",value);
+    if(strcmp(actual.as_ptr(),const_c_str(expected))!=0){return 4;}
+    return 0;
+}
+func main()->i32 {
+    var integers=std::format!("{} {} {} {} {} {} {} {}",cast<i8>(128),cast<u8>(255),cast<i16>(32768),cast<u16>(65535),cast<i32>(2147483648),cast<u32>(4294967295),cast<i64>(9223372036854775808),cast<u64>(18446744073709551615));
+    if(strcmp(integers.as_ptr(),const_c_str("-128 255 -32768 65535 -2147483648 4294967295 -9223372036854775808 18446744073709551615"))!=0){return 5;}
+    var escapes=std::format!("a{{b{}c}}d{{}}",42);
+    if(strcmp(escapes.as_ptr(),const_c_str("a{b42c}d{}"))!=0){return 6;}
+"#,
+    );
+    let mut edges = vec![
+        0_u64,
+        1,
+        2,
+        0x000f_ffff_ffff_ffff,
+        0x0010_0000_0000_0000,
+        0x7fef_ffff_ffff_ffff,
+    ];
+    for value in [
+        0.1_f64, 0.5, 1.0, 1.5, 1e-5, 1e-4, 1e16, 1e17, 1e100, 1e-100,
+    ] {
+        edges.extend([value.to_bits() - 1, value.to_bits(), value.to_bits() + 1]);
+    }
+    for bits in edges {
+        for bits in [bits, bits | (1_u64 << 63)] {
+            source.push_str(&format!(
+                "if(check_float(cast<u64>({bits}))!=0){{return 7;}}\n"
+            ));
+        }
+    }
+    let mut random = 0x1234_5678_9abc_def0_u64;
+    for _ in 0..256 {
+        random = random.wrapping_mul(6364136223846793005).wrapping_add(1);
+        if random & 0x7ff0_0000_0000_0000 != 0x7ff0_0000_0000_0000 {
+            source.push_str(&format!(
+                "if(check_float(cast<u64>({random}))!=0){{return 8;}}\n"
+            ));
+        }
+        source.push_str(&format!(
+            "if(check_integer(cast<u64>({random}))!=0){{return 9;}}\n"
+        ));
+        let bits = random as u32;
+        if bits & 0x7f80_0000 != 0x7f80_0000 {
+            source.push_str(&format!(
+                "if(check_float32(cast<u32>({bits}))!=0){{return 10;}}\n"
+            ));
+        }
+    }
+    for (bits, expected) in [
+        (0x7ff0_0000_0000_0000_u64, "inf"),
+        (0xfff0_0000_0000_0000, "-inf"),
+        (0x7ff8_0000_0000_0000, "nan"),
+        (0xfff8_0000_0000_0000, "-nan"),
+    ] {
+        source.push_str(&format!(
+            "if(special(cast<u64>({bits}),\"{expected}\")!=0){{return 11;}}\n"
+        ));
+    }
+    source.push_str("std::println!(\"numeric formatting verified\");return 0;}");
+    let (_, result) = compile(&source, true);
+    success(&result);
+    assert!(String::from_utf8_lossy(&result.stdout).contains("numeric formatting verified"));
 }

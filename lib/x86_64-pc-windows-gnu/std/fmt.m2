@@ -1,59 +1,139 @@
 import std::base;
-import std::mem;
 export using String=std::base::String;
 export using ConstStringView=std::base::ConstStringView;
 
 export generic Display { pub func format(self)->String; };
 
 // Private implementation detail. It never enters the module export table.
-unit FormatWriter { output:String; pattern:ConstStringView; offset:u64; };
-pub FormatWriter::func new(pattern:str)->FormatWriter { return FormatWriter{String::new(),ConstStringView{const_c_str(pattern),str::len(pattern)},0}; }
+unit FormatWriter { output:$mut String; pattern:ConstStringView; offset:u64; };
+pub FormatWriter::func new(pattern:str,output:$mut String)->FormatWriter { return FormatWriter{output,ConstStringView{const_c_str(pattern),str::len(pattern)},0}; }
 pub FormatWriter::func flush(mut self) {
-    while(self->offset<self->pattern.length){
+    var start=self->offset;
+    while(self->offset<self->pattern.length) {
         val byte=self->pattern.data[self->offset];
-        self->offset=self->offset+cast<u64>(1);
-        if(byte==cast<i8>(123)){
-            val next=self->pattern.data[self->offset];
-            self->offset=self->offset+cast<u64>(1);
-            if(next==cast<i8>(125)){return;}
-            self->output.push_byte(cast<i8>(123));
+        if(byte==cast<i8>(123)) {
+            val next=self->pattern.data[self->offset+cast<u64>(1)];
+            if(next==cast<i8>(125)) {
+                if(self->offset>start){self->output->append(ConstStringView{@self->pattern.data[start],self->offset-start});}
+                self->offset=self->offset+cast<u64>(2);
+                return;
+            }
+            self->output->append(ConstStringView{@self->pattern.data[start],self->offset-start+cast<u64>(1)});
+            self->offset=self->offset+cast<u64>(2);
+            start=self->offset;
         }else{
-            if(byte==cast<i8>(125)){self->offset=self->offset+cast<u64>(1);}
-            self->output.push_byte(byte);
+            if(byte==cast<i8>(125)) {
+                self->output->append(ConstStringView{@self->pattern.data[start],self->offset-start+cast<u64>(1)});
+                self->offset=self->offset+cast<u64>(2);
+                start=self->offset;
+            }else{self->offset=self->offset+cast<u64>(1);}
         }
     }
+    if(self->offset>start){self->output->append(ConstStringView{@self->pattern.data[start],self->offset-start});}
 }
 pub FormatWriter::func<T:Display> format(mut self,value:T) {
     self->flush();
     var fragment=value.format();
-    self->output.append(fragment.view());
+    self->output->append(fragment.view());
 }
-pub FormatWriter::func finalize(mut self)->String { self->flush();return self->output.clone(); }
+pub FormatWriter::func finalize(mut self) { self->flush(); }
 
 export macro func format!(str:str,args:std::macro::Args<std::fmt::Display>)->String {
-    var fmt_writer=FormatWriter::new(str);
-    macro for arg in args { fmt_writer.format(arg); }
-    return fmt_writer.finalize();
+    var output=String::with_capacity(str::len(str)+cast<u64>(32));
+    anonymous {
+        var writer=FormatWriter::new(str,@mut output);
+        macro for arg in args { writer.format(arg); }
+        writer.finalize();
+    }
+    return output;
 }
 
-#[c_abi]# func snprintf(buffer:$mut i8,capacity:u64,pattern:$i8,...)->i32;
+// Integer conversion uses a stack buffer and one division per decimal digit.
+// The unsigned magnitude also covers i64::MIN without signed negation overflow.
+func decimal(value:u64,negative:bool)->String {
+    var bytes:[i8:21]="";
+    var offset:u64=21;
+    var remaining=value;
+    while(remaining>=cast<u64>(10)) {
+        val quotient=remaining/cast<u64>(10);
+        offset=offset-cast<u64>(1);
+        bytes[offset]=cast<i8>(remaining-quotient*cast<u64>(10))+cast<i8>(48);
+        remaining=quotient;
+    }
+    offset=offset-cast<u64>(1);
+    bytes[offset]=cast<i8>(remaining)+cast<i8>(48);
+    if(negative){offset=offset-cast<u64>(1);bytes[offset]=45;}
+    return String::from(ConstStringView{@bytes[offset],cast<u64>(21)-offset});
+}
 func signed(value:i64)->String {
-    var bytes:res=std::mem::alloc<i8>(128);
-    val length=snprintf(@mut bytes[0],cast<u64>(128),const_c_str("%lld"),value);
-    if(length<0){return String::new();}
-    return String::from(ConstStringView{@bytes[0],cast<u64>(length)});
+    val negative=value<cast<i64>(0);
+    var magnitude=cast<u64>(value);
+    if(negative){magnitude=cast<u64>(0)-magnitude;}
+    return decimal(magnitude,negative);
 }
-func unsigned(value:u64)->String {
-    var bytes:res=std::mem::alloc<i8>(128);
-    val length=snprintf(@mut bytes[0],cast<u64>(128),const_c_str("%llu"),value);
-    if(length<0){return String::new();}
-    return String::from(ConstStringView{@bytes[0],cast<u64>(length)});
-}
+func unsigned(value:u64)->String { return decimal(value,false); }
+
+// The CRT supplies rounded significant digits only. Sign, punctuation, trailing
+// zero removal and the general-format exponent policy live in this library.
+#[c_abi]# func _ecvt_s(buffer:$mut i8,capacity:u64,value:f64,count:i32,decimal:$mut i32,sign:$mut i32)->i32;
+#[c_abi]# func abort();
 func floating(value:f64)->String {
-    var bytes:res=std::mem::alloc<i8>(128);
-    val length=snprintf(@mut bytes[0],cast<u64>(128),const_c_str("%.17g"),value);
-    if(length<0){return String::new();}
-    return String::from(ConstStringView{@bytes[0],cast<u64>(length)});
+    val representation=cast<$u64>(@value);
+    val bits=$representation;
+    val negative=(bits>>cast<u64>(63))!=cast<u64>(0);
+    val fraction=bits & cast<u64>(4503599627370495);
+    val exponent=(bits>>cast<u64>(52)) & cast<u64>(2047);
+    if(exponent==cast<u64>(2047)) {
+        if(fraction!=cast<u64>(0)){if(negative){return String::from("-nan");}return String::from("nan");}
+        if(negative){return String::from("-inf");}return String::from("inf");
+    }
+    if((bits & cast<u64>(9223372036854775807))==cast<u64>(0)) {
+        if(negative){return String::from("-0");}return String::from("0");
+    }
+    var digits:[i8:32]="";
+    var decimal_point:i32=0;
+    var sign:i32=0;
+    if(_ecvt_s(@mut digits[0],cast<u64>(32),value,17,@mut decimal_point,@mut sign)!=0){abort();}
+    var count:u64=0;
+    while(count<cast<u64>(17) && digits[count]!=cast<i8>(0)){count=count+cast<u64>(1);}
+    if(count==cast<u64>(0)){abort();}
+    while(count>cast<u64>(1) && digits[count-cast<u64>(1)]==cast<i8>(48)){count=count-cast<u64>(1);}
+    var bytes:[i8:32]="";
+    var length:u64=0;
+    if(negative){bytes[length]=45;length=length+cast<u64>(1);}
+    val power=decimal_point-1;
+    if(power < -4 || power>=17) {
+        bytes[length]=digits[0];length=length+cast<u64>(1);
+        if(count>cast<u64>(1)) {
+            bytes[length]=46;length=length+cast<u64>(1);
+            var i:u64=1;
+            while(i<count){bytes[length]=digits[i];length=length+cast<u64>(1);i=i+cast<u64>(1);}
+        }
+        bytes[length]=101;length=length+cast<u64>(1);
+        var magnitude=power;
+        if(power<0){bytes[length]=45;magnitude=0-power;}else{bytes[length]=43;}
+        length=length+cast<u64>(1);
+        if(magnitude>=100){bytes[length]=cast<i8>(magnitude/100)+cast<i8>(48);length=length+cast<u64>(1);}
+        bytes[length]=cast<i8>((magnitude/10)%10)+cast<i8>(48);length=length+cast<u64>(1);
+        bytes[length]=cast<i8>(magnitude%10)+cast<i8>(48);length=length+cast<u64>(1);
+    }else{
+        if(decimal_point<=0) {
+            bytes[length]=48;bytes[length+cast<u64>(1)]=46;length=length+cast<u64>(2);
+            var zeros=0-decimal_point;
+            while(zeros>0){bytes[length]=48;length=length+cast<u64>(1);zeros=zeros-1;}
+            var i:u64=0;
+            while(i<count){bytes[length]=digits[i];length=length+cast<u64>(1);i=i+cast<u64>(1);}
+        }else{
+            var i:u64=0;
+            val point=cast<u64>(decimal_point);
+            while(i<point || i<count) {
+                if(i==point){bytes[length]=46;length=length+cast<u64>(1);}
+                if(i<count){bytes[length]=digits[i];}else{bytes[length]=48;}
+                length=length+cast<u64>(1);i=i+cast<u64>(1);
+            }
+        }
+    }
+    return String::from(ConstStringView{@bytes[0],length});
 }
 api i8::func format(self)->String { return signed(cast<i64>($self)); }
 api i16::func format(self)->String { return signed(cast<i64>($self)); }
@@ -69,24 +149,37 @@ api bool::func format(self)->String { if($self){return String::from("true");}ret
 api String::func format(self)->String { return self->clone(); }
 api ConstStringView::func format(self)->String { return String::from($self); }
 
-// Write bytes rather than treating formatted output as a C format string.
-#[c_abi]# func putchar(value:i32)->i32;
+// Use the same buffered CRT stream as C stdio, locking once per complete output.
+// Explicit byte counts preserve embedded NULs and percent signs.
+#[c_abi]# func __acrt_iob_func(index:u32)->$mut i8;
+#[c_abi]# func fwrite(buffer:$i8,size:u64,count:u64,stream:$mut i8)->u64;
 func write(text:ConstStringView) {
-    for i in [cast<u64>(0),text.length] { putchar(cast<i32>(text.data[i]) & 255); }
+    val stream=__acrt_iob_func(cast<u32>(1));
+    var offset:u64=0;
+    while(offset<text.length) {
+        val written=fwrite(@text.data[offset],cast<u64>(1),text.length-offset,stream);
+        if(written==cast<u64>(0)){return;}
+        offset=offset+written;
+    }
 }
 export macro func print!(str:str,args:std::macro::Args<std::fmt::Display>) {
-    var writer=FormatWriter::new(str);
-    macro for arg in args { writer.format(arg); }
-    var output=writer.finalize();
+    var output=String::with_capacity(str::len(str)+cast<u64>(32));
+    anonymous {
+        var writer=FormatWriter::new(str,@mut output);
+        macro for arg in args { writer.format(arg); }
+        writer.finalize();
+    }
     write(output.view());
 }
 export macro func println!(str:str,args:std::macro::Args<std::fmt::Display>) {
-    var writer=FormatWriter::new(str);
-    macro for arg in args { writer.format(arg); }
-    var output=writer.finalize();
+    var output=String::with_capacity(str::len(str)+cast<u64>(32));
+    anonymous {
+        var writer=FormatWriter::new(str,@mut output);
+        macro for arg in args { writer.format(arg); }
+        writer.finalize();
+    }
+    output.push_byte(cast<i8>(10));
     write(output.view());
-    putchar(10);
 }
-
 
 api str::func format(self)->String { return String::from(ConstStringView{const_c_str($self),str::len($self)}); }

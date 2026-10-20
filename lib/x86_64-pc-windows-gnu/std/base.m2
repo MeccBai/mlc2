@@ -15,6 +15,14 @@ api String::func new()->String {
     data[0]=0;
     return String{data,0,1};
 }
+// Public capacity counts usable bytes, excluding the trailing NUL.
+api String::func with_capacity(capacity:u64)->String {
+    if(capacity==cast<u64>(18446744073709551615)){abort();}
+    val allocated=capacity+cast<u64>(1);
+    var data:res=std::mem::alloc<i8>(allocated);
+    data[0]=0;
+    return String{data,0,allocated};
+}
 api String::func empty()->String { return String::new(); }
 api String::func len(self)->u64 { return self->length; }
 api String::func is_empty(self)->bool { return self->length==cast<u64>(0); }
@@ -64,6 +72,12 @@ api String::func push_byte(mut self,value:i8) {
     self->data[self->length]=0;
 }
 api String::func from(value:ConstStringView)->String {
-    var result=String::new();result.append(value);return result;
+    if(value.length==cast<u64>(18446744073709551615)){abort();}
+    val capacity=value.length+cast<u64>(1);
+    var data:res=std::mem::alloc<i8>(capacity);
+    var i:u64=0;
+    while(i<value.length){data[i]=value.data[i];i=i+cast<u64>(1);}
+    data[value.length]=0;
+    return String{data,value.length,capacity};
 }
 api String::func clone(self)->String { return String::from(self->view()); }

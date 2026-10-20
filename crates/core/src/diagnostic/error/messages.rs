@@ -117,7 +117,7 @@ impl fmt::Display for IllegalUseError {
             UnsupportedGenericCall => "Unsupported generic call",
             MacroExpansionRequired => "Macro syntax must be expanded before runtime semantic analysis",
             IllegalVisibility => "This visibility modifier is not allowed on this declaration",
-            CannotInferenceType => "Cannot infer the expression type",
+            CannotInferType => "Cannot infer the expression type",
             VariableMustBeInitialized => "Variable declarations require an initializer",
             NonConstantInitializer => "A const initializer must be a compile-time constant",
             ExpressionMustConditional => "A condition expression is required here",
