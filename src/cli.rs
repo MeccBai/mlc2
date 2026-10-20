@@ -27,8 +27,9 @@ pub struct Cli {
     /// Override the triplet's bundled linker executable.
     #[arg(long, global = true)]
     pub linker: Option<PathBuf>,
-    #[arg(long, default_value = "llvm-ar", global = true)]
-    pub archiver: PathBuf,
+    /// Override tools/llvm-ar in the compiler installation.
+    #[arg(long, global = true)]
+    pub archiver: Option<PathBuf>,
     /// Extra native linker argument (use --link-arg=-lfoo for options starting with '-').
     #[arg(long = "link-arg", global = true)]
     pub link_args: Vec<String>,
@@ -38,6 +39,8 @@ pub struct Cli {
 
 #[derive(Debug, Subcommand)]
 pub enum Commands {
+    /// Format one source file, or all project sources when no input is given.
+    Fmt { input: Option<PathBuf> },
     /// Generate LLVM IR (.ll) only, without object emission or linking.
     Ll { input: PathBuf },
     /// Convert a hand-written declaration TOML to a binary .sym symbol table.

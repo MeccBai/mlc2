@@ -6,6 +6,7 @@
 /docs/improve.md
 /scripts/*
 
+
 # Generated compiler artifacts (at every directory depth).
 *.sym
 *.obj

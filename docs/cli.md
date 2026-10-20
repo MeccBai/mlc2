@@ -1,5 +1,28 @@
 # CLI
 
+`build` 和 `fmt` 在交互终端的 stderr 显示分阶段进度条，结束后输出总耗时，
+失败也输出耗时。重定向或管道中不输出动态进度控制字符，保留普通结果摘要。
+项目多目标构建的耗时和统计累计计算。
+
+Build 的缓存命中率为 Cached / (Cached + Built)，包含泛型实例对象的缓存检查，
+不把预编译声明算成命中；链接复用次数和声明加载数单独列出。没有完成对象缓存
+检查时显示 N/A。该指标不是前端分析缓存率，当前前端仍会执行分析和 IR 生成。
+Fmt 不存在缓存命中率，显示实际写回与无需修改的文件数。
+
+## 格式化
+
+```powershell
+mlc fmt main.m2     # 原地格式化单个文件
+mlc fmt             # 递归格式化整个项目的 .m2 源码
+```
+
+不提供样式配置。项目根目录为当前目录或最近的包含 Project.toml 的父目录；
+无配置时使用当前目录。跳过隐藏目录、符号链接、build、target、objects、tools、
+runtimes，以及项目配置的输出/缓存目录。不加载 import，不要求语义分析成功。
+单文件模式不读取项目配置。项目中任一文件存在词法/语法错误时，本次不写回任何文件。
+所有输出先暂存，再逐文件原子替换；文件系统写入失败不保证整个项目回滚。
+格式未改变的文件不会重写，保留时间戳。
+
 ```powershell
 cargo build
 target/debug/mlc.exe --help
@@ -26,7 +49,7 @@ mlc example generics
 mlc ll main.m2             # 仅生成 LLVM IR，默认 build/ll
 mlc ll main.m2 -o ir       # 指定 .ll 输出目录
 mlc symbols lib/universal/c_std/io.toml  # 输出同名 io.sym
-mlc symbols c_api.toml -o lib/universal/c_api.sym
+mlc symbols c_api.toml -o objects/universal/c_api.sym
 ```
 
 `run` 必须指定源码文件或 target；仅支持 bin，构建失败时不会运行旧产物。
@@ -53,20 +76,23 @@ Type 仅为 bin/static/shared。project target 的 Triplet、LibDirs、LibCacheD
 
 编译使用 MLC 前端与 llvm-sys，链接直接调用 LLD，不再调用 clang 驱动。
 `src/driver/link/targets.rs` 为每个支持的 triplet 绑定 linker 和有序参数表。
-当前提供 `x86_64-pc-windows-gnu` 的 LLVM-MinGW/UCRT 配置，使用 mlc 同目录
+当前提供 `x86_64-pc-windows-gnu` 的 LLVM-MinGW/UCRT 配置，使用 mlc 安装目录 tools 下
 的 `ld.lld.exe`；其他 triplet 在补齐参数表及运行库前会明确报错。
 `--linker` 覆盖链接器路径，`--link-arg` 直接传递原生链接参数（不使用 `-Wl,`）。
-静态库仍使用 llvm-ar，支持 `--archiver`。工具通过进程参数数组调用，不经过 shell。
+静态库使用 tools/llvm-ar，支持 `--archiver`。工具通过进程参数数组调用，不经过 shell。
 
 安装布局：
 
 ```text
 mlc.exe
-ld.lld.exe
-lld-link.exe
-llvm-ar.exe
-runtime/
-  LLVM-C.dll
+LLVM-C.dll
+tools/
+  ld.lld.exe
+  lld-link.exe
+  llvm-ar.exe
+lib/                         # universal/<triplet> 源码
+objects/                     # universal/<triplet> 符号和对象缓存
+runtimes/
   x86_64-pc-windows-gnu/
     crt2.o, dllcrt2.o, crtbegin.o, crtend.o
     libmingw32.a, libmingwex.a, libmoldname.a, libmsvcrt.a
@@ -74,10 +100,10 @@ runtime/
     libkernel32.a, libadvapi32.a, libshell32.a, libuser32.a
 ```
 
-将 runtime 根目录加入 PATH 供 Windows 加载 DLL；链接库按可执行文件位置查找，
+LLVM-C.dll 放在 mlc.exe 旁边；链接库按可执行文件位置查找，
 不依赖 PATH。当前参数表不添加 libunwind 或 C++ 运行库，暂不支持异常展开。
 EXE 使用 crt2.o，DLL 使用 dllcrt2.o 和 --shared；均保留 CRT 初始化。
-链接缓存包含目标 runtime 目录内文件内容，更新运行库会触发重新链接。
+链接缓存包含目标 runtimes 目录内文件内容，更新运行库会触发重新链接。
 
 默认 triplet 跟随编译器自身的平台与架构，Windows 使用 `<arch>-pc-windows-gnu`。
 优先级为 CLI `--triplet` > 项目选中 target 的 Triplet > 项目 Triplet > 系统默认。

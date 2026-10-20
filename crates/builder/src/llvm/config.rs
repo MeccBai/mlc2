@@ -16,8 +16,7 @@ impl BackendConfig {
         Self::from_executable(executable)
     }
 
-    /// Distribution layout: executable, linker and runtime DLLs share the root;
-    /// libraries live below its lib/ directory.
+    /// Distribution layout: sources in lib/, executable tools in tools/.
     pub fn from_executable(executable: PathBuf) -> Result<Self, BackendError> {
         let root = executable
             .parent()
@@ -27,7 +26,7 @@ impl BackendConfig {
             })?;
         Ok(Self {
             lib: root.join(LIB_DIR),
-            tools: root.to_owned(),
+            tools: root.join(crate::manifest::TOOLS_DIR),
             executable,
         })
     }

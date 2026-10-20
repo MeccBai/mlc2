@@ -7,6 +7,30 @@ pub struct ImportResolver {
 }
 
 impl ImportResolver {
+    /// Source roots in priority order, followed by shared, target-independent sources.
+    pub fn source_roots(&self) -> Vec<PathBuf> {
+        let mut roots = self.lib_dirs.clone();
+        for root in &self.lib_dirs {
+            if let Some(parent) = root.parent() {
+                let universal = parent.join(crate::manifest::UNIVERSAL_LIB_DIR);
+                if !roots.contains(&universal) {
+                    roots.push(universal);
+                }
+            }
+        }
+        roots
+    }
+
+    /// A configured lib/<triplet> has its artifacts in objects/<triplet>.
+    pub fn object_root(root: &Path) -> PathBuf {
+        let library = root.parent().unwrap_or(root);
+        library
+            .parent()
+            .unwrap_or(library)
+            .join(crate::manifest::OBJECTS_DIR)
+            .join(root.file_name().unwrap_or_default())
+    }
+
     pub fn from_executable(executable: &Path) -> Result<Self, String> {
         let root = executable
             .parent()
@@ -37,28 +61,25 @@ impl ImportResolver {
             relative.push(segment);
         }
         let local = importer.parent().ok_or("Importing file has no directory")?;
-        for root in std::iter::once(local).chain(self.lib_dirs.iter().map(PathBuf::as_path)) {
-            // The directory priority is stronger than the source/declaration preference.
-            for extension in [SOURCE_SUFFIX.trim_start_matches('.'), "sym"] {
-                let candidate = root.join(&relative).with_extension(extension);
-                if candidate.is_file() {
-                    return candidate.canonicalize().map_err(|e| e.to_string());
-                }
+        let sources = self.source_roots();
+        for root in std::iter::once(local).chain(sources.iter().map(PathBuf::as_path)) {
+            let candidate = root
+                .join(&relative)
+                .with_extension(SOURCE_SUFFIX.trim_start_matches('.'));
+            if candidate.is_file() {
+                return candidate.canonicalize().map_err(|e| e.to_string());
             }
         }
-        // Exhaust target-specific roots first. Universal declarations never provide
-        // target-specific objects, source code or generic templates.
-        for root in &self.lib_dirs {
-            let Some(parent) = root.parent() else {
-                continue;
-            };
-            let candidate = parent
-                .join(crate::manifest::UNIVERSAL_LIB_DIR)
-                .join(&relative)
-                .with_extension("sym");
+        let objects: Vec<_> = sources.iter().map(|root| Self::object_root(root)).collect();
+        for root in std::iter::once(local).chain(objects.iter().map(PathBuf::as_path)) {
+            let candidate = root.join(&relative).with_extension("sym");
             if candidate.is_file() {
-                let artifact = crate::artifacts::load(&candidate)?;
-                if artifact.manifest.config.object != crate::artifacts::ObjectMode::None {
+                if root
+                    .file_name()
+                    .is_some_and(|name| name == crate::manifest::UNIVERSAL_LIB_DIR)
+                    && crate::artifacts::load(&candidate)?.manifest.config.object
+                        != crate::artifacts::ObjectMode::None
+                {
                     return Err(format!(
                         "Universal library must use Object = None: {}",
                         candidate.display()

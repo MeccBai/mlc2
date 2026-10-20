@@ -7,16 +7,30 @@ use std::{
 
 mod targets;
 
+pub fn archiver_path(cli: &Cli) -> Result<PathBuf, String> {
+    if let Some(path) = &cli.archiver {
+        return Ok(path.clone());
+    }
+    let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+    Ok(exe
+        .parent()
+        .ok_or("Compiler has no parent")?
+        .join(mlc_builder::manifest::TOOLS_DIR)
+        .join(format!("llvm-ar{}", std::env::consts::EXE_SUFFIX)))
+}
+
 pub fn linker_path(cli: &Cli, triplet: &str) -> Result<PathBuf, String> {
     let root = std::env::current_exe().map_err(|e| e.to_string())?;
-    Ok(cli
-        .linker
-        .clone()
-        .unwrap_or(root.parent().ok_or("Compiler has no parent")?.join(format!(
-            "{}{}",
-            targets::profile(triplet)?.linker,
-            std::env::consts::EXE_SUFFIX
-        ))))
+    Ok(cli.linker.clone().unwrap_or(
+        root.parent()
+            .ok_or("Compiler has no parent")?
+            .join(mlc_builder::manifest::TOOLS_DIR)
+            .join(format!(
+                "{}{}",
+                targets::profile(triplet)?.linker,
+                std::env::consts::EXE_SUFFIX
+            )),
+    ))
 }
 
 pub fn runtime_identity(triplet: &str) -> Result<Vec<(PathBuf, String)>, String> {
@@ -24,7 +38,7 @@ pub fn runtime_identity(triplet: &str) -> Result<Vec<(PathBuf, String)>, String>
     let root = exe
         .parent()
         .ok_or("Compiler has no parent")?
-        .join("runtime")
+        .join(mlc_builder::manifest::RUNTIMES_DIR)
         .join(triplet);
     let mut files = std::fs::read_dir(&root)
         .map_err(|e| format!("{}: {e}", root.display()))?
@@ -77,7 +91,7 @@ pub fn link(
         .path()
         .join(output.file_name().ok_or("Output has no filename")?);
     let mut command = if kind == TargetKind::Static {
-        let mut command = Command::new(&cli.archiver);
+        let mut command = Command::new(archiver_path(cli)?);
         command.arg("rcs").arg(&staged).args(objects);
         command
     } else {
@@ -90,7 +104,7 @@ pub fn link(
         let runtime = executable
             .parent()
             .ok_or("Compiler has no parent")?
-            .join("runtime")
+            .join(mlc_builder::manifest::RUNTIMES_DIR)
             .join(triplet);
         command.args(targets::profile(triplet)?.arguments(&runtime, objects, &staged, kind)?);
         command.args(&cli.link_args);

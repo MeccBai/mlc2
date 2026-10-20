@@ -1,0 +1,7 @@
+[package]
+name = "mlc_formatter"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+mlc_syntax.workspace = true

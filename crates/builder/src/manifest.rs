@@ -4,9 +4,11 @@ pub const EXECUTABLE_NAME: &str = "mlc";
 /// Host executable suffix; independent of the compilation target.
 pub const EXE_SUFFIX: &str = std::env::consts::EXE_SUFFIX;
 pub const LIB_DIR: &str = "lib";
+pub const OBJECTS_DIR: &str = "objects";
+pub const RUNTIMES_DIR: &str = "runtimes";
 pub const UNIVERSAL_LIB_DIR: &str = "universal";
-/// Linkers live beside the compiler executable in the distribution root.
-pub const TOOLS_DIR: &str = ".";
+/// Executable tools are isolated from compiler and library files.
+pub const TOOLS_DIR: &str = "tools";
 
 pub const LLD_COFF: &str = "lld-link";
 pub const LLD_ELF: &str = "ld.lld";
@@ -31,7 +33,7 @@ pub fn system_triplet(target: &str) -> String {
 
 /// Resolve a linker in the compiler distribution, never through PATH.
 pub fn lld_path(executable: &std::path::Path, coff: bool) -> Option<std::path::PathBuf> {
-    Some(executable.parent()?.join(format!(
+    Some(executable.parent()?.join(TOOLS_DIR).join(format!(
         "{}{}",
         if coff { LLD_COFF } else { LLD_ELF },
         EXE_SUFFIX
@@ -60,16 +62,16 @@ mod tests {
     }
 
     #[test]
-    fn linker_paths_are_executable_siblings() {
+    fn linker_paths_use_distribution_tools() {
         let root = std::env::temp_dir().join("mlc-distribution");
         let executable = root.join(format!("{EXECUTABLE_NAME}{EXE_SUFFIX}"));
         assert_eq!(
             lld_path(&executable, true),
-            Some(root.join(format!("{LLD_COFF}{EXE_SUFFIX}")))
+            Some(root.join(TOOLS_DIR).join(format!("{LLD_COFF}{EXE_SUFFIX}")))
         );
         assert_eq!(
             lld_path(&executable, false),
-            Some(root.join(format!("{LLD_ELF}{EXE_SUFFIX}")))
+            Some(root.join(TOOLS_DIR).join(format!("{LLD_ELF}{EXE_SUFFIX}")))
         );
     }
 }

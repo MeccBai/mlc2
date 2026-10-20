@@ -1,7 +1,7 @@
 use mlc_builder::artifacts;
 use std::{fs, path::Path, process::Command};
 
-fn run(root: &Path) {
+fn run(root: &Path) -> std::process::Output {
     let output = Command::new(env!("CARGO_BIN_EXE_mlc"))
         .current_dir(root)
         .args([
@@ -9,6 +9,9 @@ fn run(root: &Path) {
             "main.m2",
             "--type",
             "static",
+            // The test toolchain is on PATH, not an installed MLC tools/ tree.
+            "--archiver",
+            "llvm-ar",
             "--config",
             "config.toml",
             "-o",
@@ -21,6 +24,7 @@ fn run(root: &Path) {
         "{}",
         String::from_utf8_lossy(&output.stderr)
     );
+    output
 }
 
 #[test]
@@ -37,7 +41,14 @@ fn cli_implementation_change_rebuilds_only_its_object_and_relinks() {
         "export func f() -> i32 { return 1; }",
     )
     .unwrap();
-    run(root.path());
+    let first = run(root.path());
+    let summary = String::from_utf8_lossy(&first.stdout);
+    assert!(summary.contains("Build completed in "), "{summary}");
+    assert!(
+        summary.contains("Cache hits: 0.0% (0/2 object checks)"),
+        "{summary}"
+    );
+    assert!(!first.stderr.contains(&b'\r'));
     let objects = root
         .path()
         .join("out/objects")
@@ -49,7 +60,13 @@ fn cli_implementation_change_rebuilds_only_its_object_and_relinks() {
     let leaf_time = fs::metadata(&leaf).unwrap().modified().unwrap();
     let library_time = fs::metadata(&library).unwrap().modified().unwrap();
     let previous = artifacts::load(&objects.join("leaf.sym")).unwrap();
-    run(root.path());
+    let second = run(root.path());
+    let summary = String::from_utf8_lossy(&second.stdout);
+    assert!(
+        summary.contains("Cache hits: 100.0% (2/2 object checks)"),
+        "{summary}"
+    );
+    assert!(summary.contains("links reused: 1/1"), "{summary}");
     assert_eq!(fs::metadata(&main).unwrap().modified().unwrap(), main_time);
     assert_eq!(fs::metadata(&leaf).unwrap().modified().unwrap(), leaf_time);
     assert_eq!(

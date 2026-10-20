@@ -78,6 +78,28 @@ fn unchanged_build_reuses_all_artifacts() {
 }
 
 #[test]
+fn progress_observes_each_cached_node_once() {
+    let project = Project::new();
+    project.write("main.m2", "import leaf; func main() {}");
+    project.write("leaf.m2", "export func leaf() {}");
+    project.build(count());
+    let completed = count();
+    let observer = completed.clone();
+    let report = build_with_progress(
+        project.plan(),
+        project.options(),
+        |_| Err("must hit cache".into()),
+        move |_, result| {
+            assert!(matches!(result, NodeResult::Cached(_)));
+            observer.fetch_add(1, Ordering::SeqCst);
+        },
+    )
+    .unwrap();
+    assert!(report.succeeded());
+    assert_eq!(completed.load(Ordering::SeqCst), 2);
+}
+
+#[test]
 fn ordinary_body_change_does_not_rebuild_parent() {
     let project = Project::new();
     project.write("main.m2", "import leaf; func main() {}");
@@ -308,7 +330,7 @@ fn local_directory_wins_and_library_fallback_is_deduplicated() {
 }
 
 #[test]
-fn local_declaration_wins_over_system_source() {
+fn system_source_wins_over_local_declaration() {
     let project = Project::new();
     project.write("main.m2", "func main() {}");
     let artifact = project.build(count()).results[0]
@@ -325,7 +347,12 @@ fn local_declaration_wins_over_system_source() {
         resolver
             .resolve(&project.root.path().join("main.m2"), &import)
             .unwrap(),
-        project.root.path().join("leaf.sym").canonicalize().unwrap()
+        project
+            .root
+            .path()
+            .join("lib/leaf.m2")
+            .canonicalize()
+            .unwrap()
     );
 }
 

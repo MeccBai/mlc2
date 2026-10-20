@@ -1,7 +1,9 @@
 mod cache;
+mod formatting;
 mod frontend;
 mod ir_dump;
 mod link;
+mod progress;
 use crate::cli::{Cli, Commands};
 use mlc_builder::{
     config::GlobalConfig,
@@ -10,11 +12,25 @@ use mlc_builder::{
     project::{ProjectFile, TargetKind},
     schedule::{self, BuildOptions, CompileOutput},
 };
+use progress::Progress;
 use std::{collections::HashMap, path::Path};
 
 pub fn run(cli: Cli) -> Result<i32, String> {
+    let operation = match &cli.command {
+        Commands::Build { .. } => Some("Build"),
+        Commands::Fmt { .. } => Some("Format"),
+        _ => None,
+    };
+    let progress = Progress::new(operation);
+    let result = run_inner(cli, &progress);
+    progress.finish(result.is_ok());
+    result
+}
+
+fn run_inner(cli: Cli, progress: &Progress) -> Result<i32, String> {
     let root = std::env::current_dir().map_err(|e| e.to_string())?;
     let targets = match &cli.command {
+        Commands::Fmt { input } => return formatting::run(&root, input.as_deref(), progress),
         Commands::Ll { input } => {
             vec![(input.clone(), None, TargetKind::Bin)]
         }
@@ -77,7 +93,15 @@ pub fn run(cli: Cli) -> Result<i32, String> {
                 "mlc run requires a bin target; static and shared libraries cannot be run".into(),
             );
         }
-        let artifact = build(&cli, &global, &root, &entry, name.as_deref(), kind)?;
+        let artifact = build(
+            &cli,
+            &global,
+            &root,
+            &entry,
+            name.as_deref(),
+            kind,
+            progress,
+        )?;
         if matches!(cli.command, Commands::Run { .. }) {
             let artifact = artifact.ok_or("Build did not produce an executable")?;
             let status = std::process::Command::new(&artifact)
@@ -98,7 +122,9 @@ fn build(
     entry: &Path,
     name: Option<&str>,
     kind: TargetKind,
+    progress: &Progress,
 ) -> Result<Option<std::path::PathBuf>, String> {
+    progress.stage("Discovering sources", 0);
     let executable = std::env::current_exe().map_err(|e| e.to_string())?;
     let mut paths = if name.is_none() {
         PathResolver::standalone(&executable, root, global)?
@@ -156,6 +182,7 @@ fn build(
     } else {
         mlc_optimizer::OptimizeConfig::default()
     };
+    progress.stage("Analyzing and generating IR", 0);
     let generated = frontend::generate_with_options(&plan, &paths.triplet, kind, optimize)?;
     if matches!(cli.command, Commands::Ll { .. }) {
         let directory = if cli.output.is_some() {
@@ -193,17 +220,25 @@ fn build(
     if options.workers == 0 {
         return Err("--jobs must be greater than zero".into());
     }
-    let report = schedule::build(plan, options, move |request| {
-        Ok(CompileOutput {
-            global_init: global_inits.get(&request.target.id.0).cloned(),
-            ir: Some(
-                modules
-                    .get(&request.target.id.0)
-                    .ok_or("Missing generated module")?
-                    .clone(),
-            ),
-        })
-    })?;
+    progress.stage("Compiling modules", plan.targets.len());
+    let observer = progress.clone();
+    let report = schedule::build_with_progress(
+        plan,
+        options,
+        move |request| {
+            Ok(CompileOutput {
+                global_init: global_inits.get(&request.target.id.0).cloned(),
+                ir: Some(
+                    modules
+                        .get(&request.target.id.0)
+                        .ok_or("Missing generated module")?
+                        .clone(),
+                ),
+            })
+        },
+        move |_, result| observer.node(result),
+    )?;
+    progress.clear();
     for warning in &report.warnings {
         eprintln!("warning: {warning}");
     }
@@ -213,19 +248,23 @@ fn build(
     std::fs::create_dir_all(&paths.output).map_err(|e| e.to_string())?;
     let mut objects = report.objects;
     if let Some(ir) = generated.supplement {
+        progress.stage("Compiling generic instances", 1);
         let object = paths.output.join("__mlc_instances.obj");
         let key = mlc_builder::artifacts::semantic_hash(&(
             &paths.triplet,
             env!("CARGO_PKG_VERSION"),
             &ir,
         ))?;
-        if !cache::matches(&object, &key) {
+        let hit = cache::matches(&object, &key);
+        if !hit {
             mlc_builder::llvm::IrCompiler::init(&paths.triplet)
                 .map_err(|e| e.to_string())?
                 .emit(ir, &object)
                 .map_err(|e| e.to_string())?;
             cache::record(&object, &key)?;
         }
+        progress.object(hit);
+        progress.advance();
         objects.push(object);
     }
     let stem = name
@@ -245,7 +284,7 @@ fn build(
         })
         .collect::<Result<Vec<_>, _>>()?;
     let linker = if kind == TargetKind::Static {
-        cli.archiver.clone()
+        link::archiver_path(cli)?
     } else {
         link::linker_path(cli, &paths.triplet)?
     };
@@ -284,10 +323,16 @@ fn build(
     ))?;
     // Extra linker arguments may reference external libraries/scripts that are
     // not represented in our dependency graph. Relink conservatively in that case.
-    if tool.is_none() || !cli.link_args.is_empty() || !cache::matches(&artifact, &link_key) {
+    progress.stage("Linking", 1);
+    let link_hit =
+        tool.is_some() && cli.link_args.is_empty() && cache::matches(&artifact, &link_key);
+    if !link_hit {
         link::link(cli, &objects, &artifact, kind, &paths.triplet)?;
         cache::record(&artifact, &link_key)?;
     }
+    progress.link(link_hit);
+    progress.advance();
+    progress.clear();
     println!("Built {}", artifact.display());
     Ok(Some(artifact))
 }

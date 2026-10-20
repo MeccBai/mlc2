@@ -8,26 +8,30 @@
 ```text
 installation/
   mlc.exe
-  lld-link.exe / ld.lld.exe
-  runtime/                  # 此目录加入 PATH
-    LLVM-C.dll
+  LLVM-C.dll                # 编译器启动依赖
+  tools/                    # lld-link.exe / ld.lld.exe / llvm-ar.exe
+  runtimes/
     <triplet>/              # CRT .o、运行库 .a、系统导入库
   lib/
     <triplet>/
       std/
-        io.m2 或 io.sym
+        io.m2
+  objects/
+    universal/              # Object=None 的声明
+    <triplet>/              # .sym、.obj/.o、.mg
 ```
 
-`BackendConfig.tools` 指向安装根目录，不再指向 `tools/` 子目录。
+`BackendConfig.tools` 指向安装根目录下的 `tools/` 子目录。
 `ImportResolver::from_executable()` 默认使用安装根目录的 `lib/<host-triplet>/`；
 调用方可以通过 `lib_dirs` 增加有序库路径。
 
 `import std::io;` 查找顺序为：
 
-1. 当前导入文件所在目录的 `std/io.m2`、`std/io.sym`。
-2. 各系统库目录的 `std/io.m2`、`std/io.sym`。
+1. 当前导入文件所在目录的 `std/io.m2`。
+2. 各目标专用库目录的 `std/io.m2`，然后对应 universal 源码。
+3. 无源码时，查本地 `std/io.sym`，然后 objects/<triplet> 和 objects/universal。
 
-目录优先级高于文件格式优先级：本地 `.sym` 优先于系统 `.m2`。
+源码优先于任何位置的 `.sym`。完整布局和打包方法见 [安装分发](distribution.md)。
 所有存在的文件路径规范化后去重；重复 import 只产生一条依赖边。
 递归扫描会在启动线程池前发现并返回依赖环。
 
@@ -56,7 +60,7 @@ taskflowrs 的任务没有业务返回值，因此这里使用每节点一个
 ## 产物与缓存
 
 通过 `PathResolver` 构建时，项目模块 `std::io` 位于
-`build/objects/<triplet>/std/io.*`；库默认在 `lib/<triplet>/std/io.*` 原地缓存。
+`build/objects/<triplet>/std/io.*`；库默认在安装目录 `objects/<triplet>/std/io.*` 缓存。
 显式库缓存目录或原目录写入失败时，回退到
 `build/objects/lib/<triplet>/std/io.*`，并收集警告。
 低层 `BuildPlan::discover()` 仍保留调用方直接指定输出目录的接口。
@@ -117,9 +121,9 @@ object 和模板先写入，manifest 最后原子替换。不再被引用的旧�
 配置的库根目录和缓存根目录均自动追加 `<triplet>`。
 同一级 `LibDirs` 数组按顺序查找，显式配置替换下一级目录列表。
 当前导入文件所在目录仍优先于所有库目录。
-所有 triplet 库目录都未找到模块时，再依次搜索对应库根目录的
-`universal/<module>.sym`。该回退仅接受 `Object = "None"`，不读取源码。
-仓库提供 `lib/universal/c_std/io.sym` 中的 C ABI `printf` 声明，
+源码库也搜索 `lib/universal`。全部源码位置均未找到后才搜索 objects 目录，
+其中 `objects/universal/<module>.sym` 仅接受 `Object = "None"`。
+仓库提供 `objects/universal/c_std/io.sym` 中的 C ABI `printf` 声明，
 通过 `import c_std::io;` 使用；实际实现和链接库由目标 C 运行时提供。
 项目配置的相对路径基于项目根目录，全局配置的相对路径基于配置文件目录。
 
@@ -170,7 +174,7 @@ cargo test --manifest-path experiments/taskflow/Cargo.toml
 覆盖 Temp 往返、源码到 object、增量缓存、损坏恢复、模板变化、
 传递依赖变化、独立任务失败隔离、目录优先级、重复依赖和环检测。
 
-Windows 的 `hello_world` 测试加载仓库 `lib/universal/c_std/io.sym`，
+Windows 的 `hello_world` 测试加载仓库 `objects/universal/c_std/io.sym`，
 编译 `tests/fixtures/hello_world.m2`：构造 i8 数组、手动将最后一项写为 0，
 将第一项的引用传给 printf。MLC/LLVM 生成 object 后，使用 PATH 中的
 LLVM-MinGW/UCRT `clang -fuse-ld=lld` 链接（可用 `MLC_TEST_CLANG` 指定驱动）。
@@ -184,8 +188,8 @@ Git 只保存标准库的 `.m2` 和声明 `.toml` 源文件；`.sym`、`.obj`、
 
 ```powershell
 cargo build --bin mlc
-.\target\debug\mlc.exe symbols lib/universal/std/mem.toml
-.\target\debug\mlc.exe symbols lib/universal/c_std/io.toml
+.\target\debug\mlc.exe symbols lib/universal/std/mem.toml -o objects/universal/std/mem.sym
+.\target\debug\mlc.exe symbols lib/universal/c_std/io.toml -o objects/universal/c_std/io.sym
 ```
 
 标准库 `.m2` 的对象文件与模板缓存由正常构建按需生成。

@@ -143,7 +143,7 @@ impl Scanner<'_> {
 
     fn module_name(&self, file: &Path) -> String {
         // Canonical paths also normalize relative library roots and Windows prefixes.
-        let library_relative = self.resolver.lib_dirs.iter().find_map(|root| {
+        let library_relative = self.resolver.source_roots().iter().find_map(|root| {
             let root = root.canonicalize().ok()?;
             file.strip_prefix(root).ok().map(Path::to_owned)
         });

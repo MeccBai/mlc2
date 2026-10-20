@@ -83,6 +83,17 @@ pub fn build(
     options: BuildOptions,
     compile: impl Fn(CompileRequest<'_>) -> Result<CompileOutput, String> + Send + Sync + 'static,
 ) -> Result<BuildReport, String> {
+    build_with_progress(plan, options, compile, |_, _| {})
+}
+
+/// Reports each completed node, including cache hits, declarations and failures.
+/// The observer may run concurrently; it does not participate in cache decisions.
+pub fn build_with_progress(
+    plan: BuildPlan,
+    options: BuildOptions,
+    compile: impl Fn(CompileRequest<'_>) -> Result<CompileOutput, String> + Send + Sync + 'static,
+    completed: impl Fn(&Target, &NodeResult) + Send + Sync + 'static,
+) -> Result<BuildReport, String> {
     validate(&plan)?;
     if plan
         .triplet
@@ -95,6 +106,7 @@ pub fn build(
     let plan = Arc::new(plan);
     let options = Arc::new(options);
     let compile = Arc::new(compile);
+    let completed = Arc::new(completed);
     let results: Arc<Vec<OnceLock<NodeResult>>> =
         Arc::new((0..plan.targets.len()).map(|_| OnceLock::new()).collect());
     let mut graph = Taskflow::new();
@@ -103,6 +115,7 @@ pub fn build(
         let plan_ref = plan.clone();
         let options_ref = options.clone();
         let compile_ref = compile.clone();
+        let completed = completed.clone();
         let slots = results.clone();
         let handle = graph.emplace(move || {
             let target = &plan_ref.targets[id.0];
@@ -137,6 +150,7 @@ pub fn build(
                     },
                 }
             };
+            completed(target, &result);
             let _ = slots[id.0].set(result);
         });
         for dependency in &plan.targets[id.0].requires {

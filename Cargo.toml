@@ -12,6 +12,7 @@ members = [
     "crates/builder",
     "crates/examples",
     "crates/optimizer",
+    "crates/formatter",
 ]
 resolver = "3"
 
@@ -26,6 +27,7 @@ mlc_codegen = { path = "crates/codegen" }
 mlc_builder = { path = "crates/builder" }
 mlc_examples = { path = "crates/examples" }
 mlc_optimizer = { path = "crates/optimizer" }
+mlc_formatter = { path = "crates/formatter" }
 logos = "0.16.1"
 colored = "3.1.1"
 chumsky = { version = "0.13", features = ["serde"] }
@@ -39,6 +41,7 @@ tempfile = "3"
 clap = { version = "4.6", features = ["derive"] }
 
 [dependencies]
+mlc_formatter.workspace = true
 mlc_optimizer.workspace = true
 mlc_syntax.workspace = true
 mlc_core.workspace = true

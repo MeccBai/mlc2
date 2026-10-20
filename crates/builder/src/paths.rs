@@ -118,15 +118,20 @@ impl PathResolver {
         let relative = module_path(module)?;
         let library = self
             .imports
-            .lib_dirs
+            .source_roots()
             .iter()
-            .any(|root| root.canonicalize().is_ok_and(|root| file.starts_with(root)));
-        Ok(if library {
+            .find(|root| root.canonicalize().is_ok_and(|root| file.starts_with(root)))
+            .cloned();
+        Ok(if let Some(root) = library {
             vec![
                 self.lib_cache
                     .as_ref()
                     .map(|dir| dir.join(&relative))
-                    .unwrap_or_else(|| file.with_extension("")),
+                    .unwrap_or_else(|| {
+                        let mut objects = ImportResolver::object_root(&root);
+                        objects.set_file_name(&self.triplet);
+                        objects.join(&relative)
+                    }),
                 self.lib_fallback.join(relative),
             ]
         } else {

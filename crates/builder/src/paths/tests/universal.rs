@@ -22,7 +22,7 @@ fn fixture() -> (tempfile::TempDir, PathResolver, PathBuf) {
     .unwrap();
     let entry = root.path().join("main.m2");
     fs::write(&entry, "import c_std::io; func main() {}").unwrap();
-    let universal = root.path().join("lib/universal/c_std");
+    let universal = root.path().join("objects/universal/c_std");
     fs::create_dir_all(&universal).unwrap();
     let input = universal.join("io.toml");
     fs::write(&input, IO).unwrap();
@@ -83,9 +83,9 @@ fn all_target_directories_precede_universal_fallback() {
 }
 
 #[test]
-fn universal_rejects_non_declaration_artifacts_and_ignores_sources() {
+fn universal_rejects_target_objects_but_accepts_sources() {
     let (root, paths, entry) = fixture();
-    let file = root.path().join("lib/universal/c_std/io.sym");
+    let file = root.path().join("objects/universal/c_std/io.sym");
     let mut manifest = artifacts::load(&file).unwrap().manifest;
     manifest.config.object = ObjectMode::Only;
     fs::write(&file, artifacts::to_binary(&manifest).unwrap()).unwrap();
@@ -95,10 +95,63 @@ fn universal_rejects_non_declaration_artifacts_and_ignores_sources() {
             .contains("Object = None")
     );
     fs::remove_file(file).unwrap();
+    fs::create_dir_all(root.path().join("lib/universal/c_std")).unwrap();
     fs::write(
         root.path().join("lib/universal/c_std/io.m2"),
         "export func wrong() {}",
     )
     .unwrap();
-    assert!(BuildPlan::discover_with_paths(&entry, &paths).is_err());
+    let plan = BuildPlan::discover_with_paths(&entry, &paths).unwrap();
+    assert!(plan.targets[1].file.ends_with("lib/universal/c_std/io.m2"));
+}
+
+#[test]
+fn library_source_beats_local_binary_and_uses_separate_cache() {
+    let (root, paths, entry) = fixture();
+    fs::copy(
+        root.path().join("objects/universal/c_std/io.sym"),
+        root.path().join("local.sym"),
+    )
+    .unwrap();
+    fs::create_dir_all(root.path().join("c_std")).unwrap();
+    fs::copy(
+        root.path().join("local.sym"),
+        root.path().join("c_std/io.sym"),
+    )
+    .unwrap();
+    let source = paths.imports.lib_dirs[0].join("c_std/io.m2");
+    fs::create_dir_all(source.parent().unwrap()).unwrap();
+    fs::write(&source, "export func platform() {}").unwrap();
+    let plan = BuildPlan::discover_with_paths(&entry, &paths).unwrap();
+    assert_eq!(plan.targets[1].file, source.canonicalize().unwrap());
+    assert_eq!(
+        plan.targets[1].artifact_stems[0],
+        root.path()
+            .join("objects")
+            .join(HOST_TRIPLET)
+            .join("c_std/io")
+    );
+}
+
+#[test]
+fn universal_source_precedes_target_binary_and_caches_for_target() {
+    let (root, paths, entry) = fixture();
+    let target = root
+        .path()
+        .join("objects")
+        .join(HOST_TRIPLET)
+        .join("c_std/io.sym");
+    fs::create_dir_all(target.parent().unwrap()).unwrap();
+    fs::copy(root.path().join("objects/universal/c_std/io.sym"), &target).unwrap();
+    // With no source, the target-specific binary wins over universal declarations.
+    let binary = BuildPlan::discover_with_paths(&entry, &paths).unwrap();
+    assert_eq!(binary.targets[1].file, target.canonicalize().unwrap());
+
+    let source = root.path().join("lib/universal/c_std/io.m2");
+    fs::create_dir_all(source.parent().unwrap()).unwrap();
+    fs::write(&source, "export func platform() {}").unwrap();
+    let plan = BuildPlan::discover_with_paths(&entry, &paths).unwrap();
+    assert_eq!(plan.targets[1].file, source.canonicalize().unwrap());
+    assert_eq!(plan.targets[1].module_name, "c_std::io");
+    assert_eq!(plan.targets[1].artifact_stems[0], target.with_extension(""));
 }
