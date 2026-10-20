@@ -37,6 +37,8 @@ use crate::parser::out::{Spanned, TempType};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CompileType {
+    /// Immutable UTF-8 literal data with a compile-time-known payload.
+    Str,
     Function(FunctionType),
     Base(BaseType),
     Ref(RefType),
@@ -71,7 +73,7 @@ impl CompileType {
         match self {
             Self::Qualified { base, .. } => base.is_generic(arena),
             Generic(_) => true,
-            Base(_) | Enum(_) => false,
+            CompileType::Str | Base(_) | Enum(_) => false,
             Self::Function(function) => function.is_generic(arena),
             Ref(ref_type) => ref_type.base.is_generic(arena),
             Unit(unit_type) => unit_type.has_generic(),
@@ -81,6 +83,7 @@ impl CompileType {
 
     pub fn format(&self, arena: &(impl crate::ast::types::TypeLookup + ?Sized)) -> String {
         match self {
+            Self::Str => "str".into(),
             Self::Function(function) => function.format(arena),
             Self::Qualified { base, value } => format!("{}{}", value.prefix(), base.format(arena)),
             Base(base_type) => base_type.name(),
@@ -94,6 +97,7 @@ impl CompileType {
 
     pub fn dump(&self, arena: &(impl crate::ast::types::TypeLookup + ?Sized)) -> String {
         match self {
+            Self::Str => "str".into(),
             Self::Function(function) => function.format(arena),
             Self::Qualified { base, value } => format!("{}{}", value.prefix(), base.dump(arena)),
             Base(base) => base.dump(),
@@ -107,6 +111,7 @@ impl CompileType {
 
     pub fn size(&self, arena: &(impl crate::ast::types::TypeLookup + ?Sized)) -> usize {
         match self {
+            Self::Str => 16,
             Self::Function(_) => 8,
             Self::Qualified { base, .. } => base.size(arena),
             Base(base) => base.size(),
@@ -135,6 +140,7 @@ impl TypeArena {
             let ty_index = arena.insert_type(name, ty);
             view.insert(index, ty_index);
         }
+        arena.insert_type(get_ident(&"str".to_owned()), CompileType::Str);
         (arena, view)
     }
 }
@@ -177,6 +183,7 @@ impl TypeIndex {
     pub fn size(&self, arena: &(impl crate::ast::types::TypeLookup + ?Sized)) -> usize {
         let ty = arena.get_type(*self).unqualified();
         match ty {
+            CompileType::Str => 16,
             CompileType::Function(_) => 8,
             Base(base) => base.size(),
             Ref(ref_type) => ref_type.size(),
@@ -192,6 +199,7 @@ impl TypeIndex {
     pub fn align(&self, arena: &(impl crate::ast::types::TypeLookup + ?Sized)) -> usize {
         let ty = arena.get_type(*self).unqualified();
         match ty {
+            CompileType::Str => 8,
             CompileType::Function(_) => 8,
             Base(base) => base.align(),
             Ref(ref_type) => ref_type.align(),
@@ -210,6 +218,7 @@ impl TypeIndex {
             return ty.dump(arena);
         }
         match ty {
+            CompileType::Str => "str".into(),
             CompileType::Function(function) => function.format(arena),
             Base(base) => base.dump(),
             Ref(ref_type) => ref_type.dump(arena),
@@ -227,6 +236,7 @@ impl TypeIndex {
             return ty.format(arena);
         }
         match ty {
+            CompileType::Str => "str".into(),
             CompileType::Function(function) => function.format(arena),
             Base(base_type) => base_type.name(),
             Ref(ref_type) => ref_type.format(arena),
@@ -246,7 +256,7 @@ impl TypeIndex {
     pub fn has_generic(&self, arena: &(impl crate::ast::types::TypeLookup + ?Sized)) -> bool {
         let ty = arena.get_type(*self).unqualified();
         match ty {
-            Base(_) | Enum(_) => false,
+            CompileType::Str | Base(_) | Enum(_) => false,
             CompileType::Function(function) => function.is_generic(arena),
             Ref(ref_type) => ref_type.base.has_generic(arena),
             Unit(unit) => unit.has_generic(),
@@ -351,10 +361,7 @@ impl TypeIndex {
         }
     }
 
-    pub fn deref(
-        &self,
-        arena: &mut (impl TypeStorage + ?Sized),
-    ) -> Option<TypeIndex> {
+    pub fn deref(&self, arena: &mut (impl TypeStorage + ?Sized)) -> Option<TypeIndex> {
         let ty = arena.get_type(*self).unqualified();
         match ty {
             Ref(ref_type) => {
@@ -408,6 +415,7 @@ impl TypeIndex {
         let target = arena.get_type(*self).unqualified();
         let other = arena.get_type(*other).unqualified();
         match (target, other) {
+            (CompileType::Str, CompileType::Str) => true,
             (CompileType::Function(a), CompileType::Function(b)) => {
                 a.format(arena) == b.format(arena)
             }

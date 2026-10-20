@@ -1,11 +1,12 @@
-// aliases: using creates a symbol alias, not a new runtime object.
+// aliases: Alias a type, a function, and a standard-library macro.
 // Run: mlc run aliases.m2
 // Expected output: answer=42
-import c_std::io;
+import std;
+using println=std::println;
 using Number=i32;
-using print=c_std::io::printf;
 func twice(value:Number)->Number { return value*2; }
+using double=twice;
 func main()->i32 {
-    print(const_c_str("answer=%d\n"),twice(21));
+    println!("answer={}",double(21));
     return 0;
 }

@@ -1,7 +1,8 @@
 // references: @ borrows read-only, @mut borrows mutably, and $ accesses the referenced value.
 // Run: mlc run references.m2
 // Expected output (/ separates lines): value=42
-import c_std::io;
+import std;
+using println=std::println;
 
 func increment(value:$mut i32) {
     $value = $value + 1;
@@ -11,6 +12,6 @@ func main() -> i32 {
     var value = 41;
     increment(@mut value);
     val view = @value;
-    c_std::io::printf(const_c_str("value=%d\n"), $view);
+    println!("value={}", $view);
     return 0;
 }

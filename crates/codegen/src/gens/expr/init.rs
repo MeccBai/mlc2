@@ -27,7 +27,8 @@ impl Expander<'_> {
         if owner.is_empty() {
             fail("Initializer has an empty destination type");
         }
-        if matches!(self.symbols.get_type(owner).unqualified(), CompileType::Unit(unit) if unit.variant.is_some()) {
+        if matches!(self.symbols.get_type(owner).unqualified(), CompileType::Unit(unit) if unit.variant.is_some())
+        {
             return self.variant_initializer(owner, values);
         }
         let (fields, structure) = match self.symbols.get_type(owner).unqualified() {
@@ -133,7 +134,67 @@ impl Expander<'_> {
     }
 
     fn string(&mut self, value: &str, expected: Option<TypeIndex>) -> Lowered {
-        // The frontend represents strings as byte arrays, without an implicit NUL.
+        if expected
+            .is_none_or(|ty| matches!(self.symbols.get_type(ty).unqualified(), CompileType::Str))
+        {
+            let mut bytes = value.as_bytes().to_vec();
+            bytes.push(0);
+            let name = memory::string_name(&bytes);
+            let pointer = self.allocate();
+            let aggregate = self.allocate();
+            let result = self.allocate();
+            let ty = LlvmType::Struct(vec![LlvmType::Ptr, LlvmType::Int(64)]);
+            let code = vec![
+                Instruction::StringConstant {
+                    name: name.clone(),
+                    bytes,
+                },
+                Instruction::Gep {
+                    target: pointer,
+                    ty: LlvmType::Int(8),
+                    pointer: IrValue::Global(name),
+                    indices: vec![TypedValue {
+                        ty: LlvmType::Int(64),
+                        value: IrValue::Integer(0),
+                    }],
+                    inbounds: false,
+                },
+                Instruction::InsertValue {
+                    target: aggregate,
+                    aggregate: TypedValue {
+                        ty: ty.clone(),
+                        value: IrValue::ZeroInitializer,
+                    },
+                    value: TypedValue {
+                        ty: LlvmType::Ptr,
+                        value: IrValue::Reg(pointer),
+                    },
+                    index: 0,
+                },
+                Instruction::InsertValue {
+                    target: result,
+                    aggregate: TypedValue {
+                        ty: ty.clone(),
+                        value: IrValue::Reg(aggregate),
+                    },
+                    value: TypedValue {
+                        ty: LlvmType::Int(64),
+                        value: IrValue::Integer(value.len() as i128),
+                    },
+                    index: 1,
+                },
+            ];
+            return Lowered {
+                signed: false,
+                value: LlvmValue {
+                    code,
+                    ty,
+                    reg: Some(result),
+                    in_reg: true,
+                },
+            };
+        }
+        // Explicit byte-array destinations retain their existing copy semantics.
         let bytes = value.as_bytes().to_vec();
         let name = memory::string_name(&bytes);
         let length = expected

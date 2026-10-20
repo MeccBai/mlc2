@@ -46,18 +46,7 @@ pub(super) fn parse(
         })
         .collect::<Vec<_>>();
 
-    temp_generics.into_iter().for_each(|temp_generic| {
-        if config.is_poisoned() {
-            return;
-        }
-        let (generic_type, _span) = GenericRequire::new(&mut config, temp_generic, &mut symbols);
-        let ident = arena::get_ident(&generic_type.name);
-        symbols
-            .local_mut()
-            .generics
-            .requires
-            .insert(ident, generic_type);
-    });
+    GenericRequire::lower_all(config, temp_generics, symbols);
 
     unit_indexs
         .into_iter()

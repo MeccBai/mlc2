@@ -424,3 +424,89 @@ fn rejects_explicit_reference_syntax_for_method_receiver() {
         assert!(!errors.is_empty(), "accepted invalid receiver: {source}");
     }
 }
+
+#[test]
+fn macro_functions_and_iteration_have_independent_nodes() {
+    let module = parse_ok(
+        "export macro func format!(str:ConstStringView,args:std::macro::Args<std::fmt::Display>)->String{var writer=FormatWriter::new(str);macro for arg in args{writer.format(arg);}return writer.finalize();}func main(){var s=format!(\"{}\",42);}",
+    );
+    let TempGlobalStmt::MacroFunc(function) = &module[0].0 else {
+        panic!("macro expected")
+    };
+    assert_eq!(function.name, "format");
+    assert!(matches!(
+        function.body.statements[1].0,
+        TempStmt::MacroFor { .. }
+    ));
+    #[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+    struct Document {
+        module: TempModule,
+    }
+    let document = Document { module };
+    let text = crate::serialization::to_toml(&document).unwrap();
+    let restored: Document = crate::serialization::from_toml(&text).unwrap();
+    assert_eq!(document, restored);
+}
+
+#[test]
+fn macros_allow_no_return_value() {
+    let module = parse_ok(
+        "macro func print!(str:ConstStringView,args:std::macro::Args<std::fmt::Display>){macro for arg in args{consume(arg);}}func main(){print!(\"{}\",42);}",
+    );
+    let TempGlobalStmt::MacroFunc(function) = &module[0].0 else {
+        panic!("macro expected")
+    };
+    assert!(function.return_type.is_none());
+}
+
+#[test]
+fn generic_composition_uses_the_existing_requirement_list() {
+    let source = "export generic Combined = (right::Second && First) && Third;";
+    let module = parse_ok(source);
+    let TempGlobalStmt::Generic(generic) = &module[0].0 else {
+        panic!("generic expected")
+    };
+    assert_eq!(generic.visibility, Visibility::Export);
+    let names: Vec<_> = generic
+        .requirements
+        .iter()
+        .map(|(rule, span)| {
+            let GenericRequirement::Type {
+                path,
+                argument: None,
+            } = rule
+            else {
+                panic!("ordinary requirement expected")
+            };
+            assert_eq!(&source[span.into_range()], path.segments.join("::"));
+            path.segments.join("::")
+        })
+        .collect();
+    assert_eq!(names, ["right::Second", "First", "Third"]);
+}
+
+#[test]
+fn generic_composition_rejects_operators_other_than_and() {
+    for expression in [
+        "A || B",
+        "A & B",
+        "A | B",
+        "A + B",
+        "A - B",
+        "A * B",
+        "A == B",
+        "!A",
+        "A ^ B",
+        "A &&",
+        "&& A",
+        "",
+        "A B",
+        "A && B || C",
+        "A && (B || C)",
+    ] {
+        let source = format!("generic Combined = {expression};");
+        let lexed = tokenize(&source).unwrap();
+        let (_, errors) = parse(&lexed.tokens, source.len());
+        assert!(!errors.is_empty(), "accepted {source}");
+    }
+}

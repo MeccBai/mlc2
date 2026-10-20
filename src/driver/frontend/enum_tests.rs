@@ -12,12 +12,17 @@ fn generate_source(
         std::fs::write(root.path().join("colors.m2"), dependency).unwrap();
     }
     let plan = BuildPlan::discover(&entry, &ImportResolver { lib_dirs: vec![] }).unwrap();
-    let result = generate(&plan, "x86_64-pc-windows-msvc", TargetKind::Bin);
+    let result = generate(
+        &plan,
+        mlc_builder::manifest::X86_64_PC_WINDOWS_GNU,
+        TargetKind::Bin,
+    );
     (root, result)
 }
 
 fn verify_and_run(root: &std::path::Path, generated: Generated) {
-    let compiler = mlc_builder::llvm::IrCompiler::init("x86_64-pc-windows-msvc").unwrap();
+    let compiler =
+        mlc_builder::llvm::IrCompiler::init(mlc_builder::manifest::X86_64_PC_WINDOWS_GNU).unwrap();
     let mut objects = Vec::new();
     let mut modules = generated.modules;
     if let Some(ir) = generated.supplement {
@@ -31,9 +36,14 @@ fn verify_and_run(root: &std::path::Path, generated: Generated) {
     #[cfg(windows)]
     {
         let executable = root.join("main.exe");
-        let clang = std::env::var_os("MLC_TEST_CLANG").unwrap_or_else(|| "clang".into());
+        let clang = std::env::var_os("MLC_TEST_CLANG")
+            .unwrap_or_else(|| mlc_builder::manifest::DEFAULT_WINDOWS_LINKER.into());
         let linked = std::process::Command::new(clang)
             .arg("-fuse-ld=lld")
+            .arg(format!(
+                "--target={}",
+                mlc_builder::manifest::X86_64_PC_WINDOWS_GNU
+            ))
             .args(&objects)
             .arg("-o")
             .arg(&executable)
@@ -100,7 +110,7 @@ fn numeric_initialization_preserves_large_constants_and_runtime_widening() {
         func main() -> i32 {
             var number:u64 = 4294967296;
             var array:[u64:2] = [4294967296,1];
-            var floating:f32 = 1.5;
+            var floating:f32 = cast<f32>(1.5);
             var integer:u32 = 42.0;
             if (number != large || array[0] != wide()) { return 4; }
             if (floating != cast<f32>(1.5)) { return 5; }

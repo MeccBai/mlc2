@@ -5,6 +5,7 @@ pub enum Builtin {
     Cast,
     Dealloc,
     ConstCStr,
+    StrLen,
 }
 
 pub struct BuiltinDefinition {
@@ -15,6 +16,12 @@ pub struct BuiltinDefinition {
 }
 
 pub const FUNCTIONS: &[BuiltinDefinition] = &[
+    BuiltinDefinition {
+        name: "str::len",
+        kind: Builtin::StrLen,
+        type_arguments: 0,
+        arguments: 1,
+    },
     BuiltinDefinition {
         name: "std::mem::alloc",
         kind: Builtin::Alloc,

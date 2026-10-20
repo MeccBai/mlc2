@@ -6,6 +6,10 @@ use crate::ast::{
 };
 impl TypeInfer<'_> {
     pub(crate) fn atom_assignable(&mut self, expression: &CompAtom) -> bool {
+        let ty = self.atom_type(expression);
+        if !ty.is_empty() && matches!(self.symbols.get_type(ty).unqualified(), CompileType::Str) {
+            return false;
+        }
         let config = &mut *self.config;
         let symbols = &mut *self.symbols;
         match expression {
@@ -15,6 +19,10 @@ impl TypeInfer<'_> {
         }
     }
     pub fn assignable(&mut self, expression: &Expression) -> bool {
+        let ty = self.type_of(expression);
+        if !ty.is_empty() && matches!(self.symbols.get_type(ty).unqualified(), CompileType::Str) {
+            return false;
+        }
         let config = &mut *self.config;
         let symbols = &mut *self.symbols;
         match expression {

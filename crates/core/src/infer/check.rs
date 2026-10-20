@@ -175,6 +175,9 @@ impl TypeInfer<'_> {
                     let string_type = symbols.get_base(DataType::Integer, 8, true);
                     let target = symbols.get_type(target.clone()).unqualified();
 
+                    if matches!(target, CompileType::Str) {
+                        return true;
+                    }
                     let list = match target {
                         CompileType::List(list_type) => list_type,
                         _ => return false,

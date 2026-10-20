@@ -26,7 +26,7 @@ impl Expression {
         temp_expr: Spanned<TempExpr>,
         symbols: &mut dyn Resolution,
         context: Option<&crate::ast::symbols::StatementContext>,
-    ) -> Option<(Expression, InterfaceIndex)> {
+    ) -> Option<(Expression, InterfaceIndex, bool)> {
         if config.is_poisoned() {
             return None;
         }
@@ -61,19 +61,23 @@ impl Expression {
                 }
                 let owner_type = owner_type.into(crate::ast::types::ValueType::Flex, symbols);
                 let interface_name = SymbolName::callable(Some(&owner_type.format(symbols)), &name);
-                let Some(index) = symbols.associated_interface(owner_type, &interface_name) else {
+                let candidate = symbols.associated_interface(owner_type, &interface_name).map(|index| (index, false))
+                    .or_else(|| symbols.local().generics.interfaces.get_by_name(&interface_name).map(|index| (index, true)))
+                    .or_else(|| symbols.table(owner_type.file_id()).generics.interfaces.get_by_name(&interface_name).map(|index| (index, true)))
+                    .or_else(|| match symbols.lookup_export(&interface_name) { Some(crate::ast::symbols::ExportSymbol::Interface { index, generic: true }) => Some((index, true)), _ => None });
+                let Some((index, generic)) = candidate else {
                     config
                         .submit_error(CompileError::Resolve(ResolveError::UnknownInterface), span);
                     return None;
                 };
-                if !receiver && !symbols.get_interface_regular(index).public {
+                if !receiver && !symbols.get_interface(index, generic).public {
                     config.submit_error(
                         CompileError::IllegalUse(IllegalUseError::MemberAccessViolation),
                         span,
                     );
                     return None;
                 }
-                Some((owner, index))
+                Some((owner, index, generic))
             }
             _ => ice("Interface search cannot be performed on non-member expressions."),
         }

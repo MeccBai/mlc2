@@ -54,6 +54,9 @@ impl IrGenerator {
     pub fn type_lowering(index: TypeIndex, symbols: &PackageSymbolTable) -> LlvmType {
         let ty = symbols.get_type(index);
         match ty.unqualified() {
+            crate::ast::types::CompileType::Str => {
+                LlvmType::Struct(vec![LlvmType::Ptr, LlvmType::Int(64)])
+            }
             Base(base) => Self::base_lowering(base),
             Enum(enumeration) => Self::enum_lowering(enumeration),
             Ref(ref_ty) => LlvmType::Ptr,

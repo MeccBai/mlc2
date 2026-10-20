@@ -9,34 +9,27 @@ impl Expander<'_> {
         symbol: &FuncSymbol,
         argument: &Expression,
     ) -> Lowered {
-        if kind == Builtin::ConstCStr {
-            let Expression::InitListE(InitialList::String { value }) = argument else {
-                fail("Checked const_c_str argument is not a constant string");
-            };
-            let mut bytes = value.as_bytes().to_vec();
-            bytes.push(0);
-            let name = crate::gens::memory::string_name(&bytes);
+        if matches!(kind, Builtin::ConstCStr | Builtin::StrLen) {
+            let mut value = self.expression(argument).value;
+            let operand = self.load(&mut value);
             let target = self.allocate();
+            value.code.push(Instruction::ExtractValue {
+                target,
+                aggregate: TypedValue {
+                    ty: value.ty.clone(),
+                    value: operand,
+                },
+                index: usize::from(kind == Builtin::StrLen),
+            });
             return Lowered {
                 signed: false,
                 value: LlvmValue {
-                    code: vec![
-                        Instruction::StringConstant {
-                            name: name.clone(),
-                            bytes,
-                        },
-                        Instruction::Gep {
-                            target,
-                            ty: LlvmType::Int(8),
-                            pointer: IrValue::Global(name),
-                            indices: vec![TypedValue {
-                                ty: LlvmType::Int(64),
-                                value: IrValue::Integer(0),
-                            }],
-                            inbounds: false,
-                        },
-                    ],
-                    ty: LlvmType::Ptr,
+                    code: value.code,
+                    ty: if kind == Builtin::StrLen {
+                        LlvmType::Int(64)
+                    } else {
+                        LlvmType::Ptr
+                    },
                     reg: Some(target),
                     in_reg: true,
                 },
@@ -79,7 +72,9 @@ impl Expander<'_> {
         };
         let operand = self.load(&mut input.value);
         match kind {
-            Builtin::ConstCStr => unreachable!("constant string handled before argument lowering"),
+            Builtin::ConstCStr | Builtin::StrLen => {
+                unreachable!("constant string handled before argument lowering")
+            }
             Builtin::Cast => {
                 let result = symbol
                     .ret_type

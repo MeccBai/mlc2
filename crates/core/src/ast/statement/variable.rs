@@ -124,6 +124,11 @@ impl Variable {
             return Self::poison();
         }
         // Semantic constant evaluation remains mandatory for diagnostics and const.
+        let init_val = if let Some(target) = declared {
+            init_val.coerce_string_view(target, config, symbols, var_span)
+        } else {
+            init_val
+        };
         let original_init = (temp_var.value_type != ValueType::Constant).then(|| init_val.clone());
         let init_val = init_val.const_fold(config, symbols);
         if let Some(ty) = declared {
@@ -222,8 +227,20 @@ impl Variable {
             }
         }
         .into_value_type(temp_var.value_type, symbols);
+        // Native str bindings keep their compile-time payload and cannot be rebound.
+        let native_str = !ty.is_empty()
+            && matches!(
+                symbols.get_type(ty).unqualified(),
+                crate::ast::types::CompileType::Str
+            );
+        let ty = if native_str {
+            ty.into_value_type(ValueType::Constant, symbols)
+        } else {
+            ty
+        };
 
-        if temp_var.value_type == ValueType::Constant && !init_val.is_const(symbols) {
+        if (native_str || temp_var.value_type == ValueType::Constant) && !init_val.is_const(symbols)
+        {
             config.submit_error(
                 crate::diagnostic::error::CompileError::IllegalUse(
                     IllegalUseError::NonConstantInitializer,
@@ -246,6 +263,7 @@ impl Variable {
             var_type: ty,
             init_val: Box::new(
                 original_init
+                    .filter(|_| !native_str)
                     .unwrap_or(init_val)
                     .normalize_initializer(ty, symbols),
             ),

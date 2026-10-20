@@ -97,6 +97,10 @@ impl Statement {
                 }
                 Statement::VariableDecl(variable)
             }
+            TempStmt::MacroFor { .. } => {
+                config.submit_error(CompileError::IllegalUse(IllegalUseError::MacroExpansionRequired), span);
+                Self::Poison
+            }
             TempStmt::Assignment { target, value } => {
                 let ctxt = context.map(|ctxt| &*ctxt);
                 let right_expr = Expression::new(config, value, symbols, ctxt);
@@ -115,6 +119,7 @@ impl Statement {
                     return Self::Poison;
                 }
                 let target_type = left_expr.type_inference(config, symbols);
+                let right_expr = right_expr.coerce_string_view(target_type, config, symbols, span);
                 let source_type = right_expr.type_inference(config, symbols);
                 let function_pointer = [target_type, source_type].iter().any(|ty| {
                     !ty.is_empty()
@@ -131,6 +136,17 @@ impl Statement {
                         }),
                         span,
                     );
+                    return Self::Poison;
+                }
+                let float_narrowing = !target_type.is_empty() && !source_type.is_empty() && match (symbols.get_type(target_type).unqualified(), symbols.get_type(source_type).unqualified()) {
+                    (crate::ast::types::CompileType::Base(to), crate::ast::types::CompileType::Base(from)) =>
+                        to.data_type() == crate::ast::types::base_type::DataType::Float && from.data_type() == crate::ast::types::base_type::DataType::Float && to.bits() < from.bits(),
+                    _ => false,
+                };
+                if float_narrowing {
+                    config.submit_error(CompileError::IllegalUse(IllegalUseError::TypeMismatched {
+                        expected: target_type.format(symbols), found: source_type.format(symbols),
+                    }), span);
                     return Self::Poison;
                 }
                 right_expr.check_constant_range(target_type, config, symbols, span);

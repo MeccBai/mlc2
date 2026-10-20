@@ -1,7 +1,8 @@
 // control_flow: for includes its start and excludes its end; _ is the default match branch.
 // Run: mlc run control_flow.m2
 // Expected output (/ separates lines): sum=10 / matched ten
-import c_std::io;
+import std;
+using println=std::println;
 
 func main() -> i32 {
     var sum = 0;
@@ -10,12 +11,12 @@ func main() -> i32 {
         sum = sum + i;
     }
     if (sum == 10) {
-        c_std::io::printf(const_c_str("sum=%d\n"), sum);
+        println!("sum={}", sum);
     } else {
         return 1;
     }
     match (sum) {
-        10 => { c_std::io::printf(const_c_str("matched ten\n")); },
+        10 => { println!("matched ten"); },
         _ => { return 2; }
     }
     return 0;

@@ -148,6 +148,12 @@ where
             .map(Expr::Array)
             .map_with(|expr, extra| (expr, extra.span()));
 
+        let macro_call = path()
+            .then_ignore(operator(Token::LogicalNot))
+            .then(list.clone().delimited_by(keyword(Token::LParen), keyword(Token::RParen)))
+            .map(|(path, args)| Expr::MacroCall { path, args })
+            .map_with(|expr, extra| (expr, extra.span()));
+
         let generic_call = path()
             .then(
                 type_parser()
@@ -171,6 +177,7 @@ where
 
         let atom = choice((
             literal,
+            macro_call,
             generic_call,
             typed_init,
             path_expr,

@@ -53,6 +53,7 @@ pub(crate) fn generics(
                 .requires
                 .get_by_name(&config.symbol_name(&name))
                 .or_else(|| symbols.local().generics.requires.get_by_name(&name))
+                .or_else(|| name.strip_prefix(&format!("{}::", config.symbol_prefix())).and_then(|local| symbols.local().generics.requires.get_by_name(&local.to_owned())))
                 .or_else(|| match symbols.named_export(config, &name) {
                     Some(crate::ast::symbols::ExportSymbol::GenericRequire(index)) => Some(index),
                     _ => None,

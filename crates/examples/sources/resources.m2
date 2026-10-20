@@ -2,7 +2,8 @@
 // Run: mlc run resources.m2
 // Expected output: observed=21 result=42
 import std::mem;
-import c_std::io;
+import std;
+using println=std::println;
 func consume(memory:res $mut i32)->i32 {
     $memory=$memory*2;
     return $memory; // Release the resource after copying the return value.
@@ -17,6 +18,6 @@ func main()->i32 {
     } // Move owner only after the borrow ends.
     val result=consume(owner);
     // owner has moved; do not read or release it again.
-    c_std::io::printf(const_c_str("observed=%d result=%d\n"),observed,result);
+    println!("observed={} result={}",observed,result);
     return 0;
 }

@@ -115,6 +115,11 @@ where
                 .delimited_by(keyword(Token::LBrace), keyword(Token::RBrace)))
             .map(|((binding, value), branches)| Statement::VariantMatch { binding, value, branches });
 
+        let macro_for = keyword(Token::Macro).ignore_then(keyword(Token::For))
+            .ignore_then(spanned_ident()).then_ignore(keyword(Token::In))
+            .then(spanned_ident()).then(scope.clone())
+            .map(|((binding, pack), scope)| Statement::MacroFor { binding, pack, scope });
+
         let for_bounds = expression
             .clone()
             .then_ignore(operator(Token::Comma))
@@ -151,6 +156,7 @@ where
             continue_,
             if_,
             while_,
+            macro_for,
             for_,
             variant_match,
             match_,

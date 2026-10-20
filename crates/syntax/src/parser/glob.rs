@@ -21,6 +21,7 @@ use super::{
 enum RawItem {
     Import(TempPath),
     Function(TempFunc),
+    Macro(super::out::TempMacroFunc),
     Interface(TempInterface),
     Unit {
         name: Spanned<String>,
@@ -167,10 +168,49 @@ where
         })
         .map_with(|item, extra| (item, extra.span()));
 
+    let macro_function = keyword(Token::Macro)
+        .ignore_then(keyword(Token::Function))
+        .ignore_then(spanned_ident())
+        .then_ignore(operator(Token::LogicalNot))
+        .then(
+            spanned_ident()
+                .then_ignore(operator(Token::Colon))
+                .then(type_parser())
+                .map(|((name, name_span), ty)| super::out::TempParam {
+                    name,
+                    name_span,
+                    ty: Some(ty),
+                })
+                .separated_by(operator(Token::Comma))
+                .allow_trailing()
+                .collect::<Vec<_>>()
+                .delimited_by(keyword(Token::LParen), keyword(Token::RParen)),
+        )
+        .then(operator(Token::Arrow).ignore_then(type_parser()).or_not())
+        .then(super::stmt::scope_parser())
+        .map(|((((name, name_span), params), return_type), body)| {
+            RawItem::Macro(super::out::TempMacroFunc {
+                visibility: Default::default(),
+                name,
+                name_span,
+                params,
+                return_type,
+                body,
+            })
+        });
+
     let declaration = attributes()
         .then(visibility().map_with(|visibility, extra| (visibility, extra.span())))
         .then(choice((
-            import, union, unit, using, generic, enum_, interface, function,
+            macro_function,
+            import,
+            union,
+            unit,
+            using,
+            generic,
+            enum_,
+            interface,
+            function,
         )))
         .try_map(|((attributes, (visibility, visibility_span)), raw), _| {
             if !matches!(raw, RawItem::Interface(_))
@@ -186,6 +226,10 @@ where
                     path.segments,
                     matches!(visibility, TempVisibility::Export),
                 )),
+                RawItem::Macro(mut function) => {
+                    function.visibility = visibility;
+                    TempGlobalStmt::MacroFunc(function)
+                }
                 RawItem::Function(mut function) => {
                     function.symbol.visibility = visibility;
                     function.symbol.attributes = attributes;

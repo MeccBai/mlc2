@@ -1,8 +1,8 @@
 use mlc_syntax::manifest::SOURCE_SUFFIX;
 mod constant_control;
+mod function_pointer;
 mod numeric_initialization;
 mod resources;
-mod function_pointer;
 mod union;
 
 use super::*;
@@ -157,7 +157,7 @@ fn recursive_aggregate_and_context_typed_initializers() {
 #[test]
 fn strings_copy_decoded_bytes_and_deduplicate_module_constants() {
     let ir = emit(
-        r#"global var text = "中\n"; func first() { var local = "中\n"; var empty = ""; } func second() { var again = "中\n"; }"#,
+        r#"global var text:[i8:4] = "中\n"; func first() { var local:[i8:4] = "中\n"; var empty:[i8:0] = ""; } func second() { var again:[i8:4] = "中\n"; }"#,
         "strings",
     );
     assert_eq!(

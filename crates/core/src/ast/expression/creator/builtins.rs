@@ -35,6 +35,8 @@ impl Expression {
         }
         let target = if kind == Builtin::ConstCStr {
             symbols.get_base(DataType::Integer, 8, true)
+        } else if kind == Builtin::StrLen {
+            symbols.get_base(DataType::Integer, 64, false)
         } else {
             target
         };
@@ -51,8 +53,9 @@ impl Expression {
         }
         let valid = match kind {
             Builtin::ConstCStr => {
-                matches!(&args[0], Expression::InitListE(InitialList::String { .. }))
+                matches!(symbols.get_type(source).unqualified(), CompileType::Str)
             }
+            Builtin::StrLen => matches!(symbols.get_type(source).unqualified(), CompileType::Str),
             Builtin::Alloc => source.is_integer(symbols),
             Builtin::Cast => matches!(
                 (
@@ -89,6 +92,7 @@ impl Expression {
             }
         }
         let result = match kind {
+            Builtin::StrLen => Some(symbols.get_base(DataType::Integer, 64, false)),
             Builtin::ConstCStr => Some(
                 symbols
                     .get_base(DataType::Integer, 8, true)

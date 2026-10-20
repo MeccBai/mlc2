@@ -29,6 +29,7 @@ pub struct SymbolTable {
     pub names: HashSet<String>,
     pub(crate) declaration_spans: HashMap<String, crate::parser::out::Span>,
     pub usings: HashMap<String, String>,
+    pub exported_usings: HashSet<String>,
     pub function_instances: HashMap<FuncIndex, FuncBody>,
     pub interface_instances: HashMap<InterfaceIndex, Interface>,
 }
@@ -49,6 +50,7 @@ impl SymbolTable {
             names: HashSet::new(),
             declaration_spans: HashMap::new(),
             usings: HashMap::new(),
+            exported_usings: HashSet::new(),
             base_type_view: view,
             function_instances: HashMap::new(),
             interface_instances: HashMap::new(),

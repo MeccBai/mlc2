@@ -166,6 +166,8 @@ impl Expression {
             .into_iter()
             .map(|arg| Self::new(config, arg, symbols, context))
             .collect::<Vec<_>>();
+        let parameters=symbols.get_function_regular(signature).params.clone();
+        let args=Self::coerce_arguments(args,&parameters,config,symbols,span);
         if !Self::check_function_args(config, signature, &args, symbols, span) {
             return Self::Poison;
         }

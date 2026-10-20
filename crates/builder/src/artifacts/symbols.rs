@@ -55,6 +55,7 @@ impl Symbols {
             matches!(
                 item,
                 TempGlobalStmt::Using(_)
+                    | TempGlobalStmt::MacroFunc(_)
                     | TempGlobalStmt::Unit(_)
                     | TempGlobalStmt::Enum(_)
                     | TempGlobalStmt::Generic(_)
@@ -113,7 +114,7 @@ pub fn has_templates(module: &TempModule) -> bool {
         TempGlobalStmt::Unit(v) => !v.generics.is_empty(),
         TempGlobalStmt::Func(v) => !v.symbol.generics.is_empty(),
         TempGlobalStmt::Interface(v) => !v.symbol.generics.is_empty(),
-        TempGlobalStmt::Generic(_) => true,
+        TempGlobalStmt::Generic(_) | TempGlobalStmt::MacroFunc(_) => true,
         _ => false,
     })
 }

@@ -1,7 +1,8 @@
 // functions: Declare parameter and return types; compute Fibonacci recursively.
 // Run: mlc run functions.m2
 // Expected output (/ separates lines): fibonacci(10)=55
-import c_std::io;
+import std;
+using println=std::println;
 
 func fibonacci(n:i32) -> i32 {
     if (n == 0 || n == 1) {
@@ -11,6 +12,6 @@ func fibonacci(n:i32) -> i32 {
 }
 
 func main() -> i32 {
-    c_std::io::printf(const_c_str("fibonacci(10)=%d\n"), fibonacci(10));
+    println!("fibonacci(10)={}", fibonacci(10));
     return 0;
 }

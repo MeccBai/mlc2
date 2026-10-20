@@ -43,7 +43,11 @@ pub(crate) fn expression(value: &mut Expression, visit: &mut impl FnMut(&mut Exp
 fn atom_expression(atom: &mut CompAtom, visit: &mut impl FnMut(&mut Expression)) {
     let mut value = atom.clone().to_expression();
     expression(&mut value, visit);
-    *atom = CompAtom::from_expr(value);
+    // Aggregate constants cannot occupy scalar atom slots. Keep their binding,
+    // especially when it supplies storage for a borrowed native str.
+    if !matches!(value, Expression::InitListE(_)) {
+        *atom = CompAtom::from_expr(value);
+    }
 }
 
 pub(crate) fn expressions(scope: &mut [Statement], visit: &mut impl FnMut(&mut Expression)) {

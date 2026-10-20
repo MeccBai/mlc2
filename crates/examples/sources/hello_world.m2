@@ -1,9 +1,11 @@
-// hello_world: Learn main, import and const_c_str, which creates a NUL-terminated C string.
+// hello_world: Import the standard library and print a line with println!.
 // Run: mlc run hello_world.m2
 // Expected output (/ separates lines): Hello World!
-import c_std::io;
+import std;
+using println=std::println;
 
 func main() -> i32 {
-    c_std::io::printf(const_c_str("Hello World!\n"));
+    val greeting:str="Hello World!"; // str is an immutable compile-time string.
+    println!("{}",greeting);
     return 0;
 }

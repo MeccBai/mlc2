@@ -13,6 +13,7 @@ pub struct PackageSymbolTable {
     pub(super) names: std::collections::HashMap<String, FileId>,
     pub(super) configs: std::collections::HashMap<FileId, Config>,
     pub(super) exports: std::collections::HashMap<FileId, ExportTable>,
+    pub(super) aliases: std::collections::HashMap<String, (String, FileId)>,
     pub(super) searchable: std::collections::HashMap<String, ExportSymbol>,
     scopes: std::collections::HashMap<FileId, super::ResolveScope>,
 }
@@ -30,6 +31,7 @@ impl PackageSymbolTable {
             names: std::collections::HashMap::new(),
             configs: std::collections::HashMap::new(),
             exports: std::collections::HashMap::new(),
+            aliases: std::collections::HashMap::new(),
             searchable: std::collections::HashMap::new(),
             scopes: std::collections::HashMap::new(),
         }
@@ -57,6 +59,10 @@ impl PackageSymbolTable {
     }
 
     pub fn lookup_in(&self, name: &str, scope: &super::ResolveScope) -> Option<ExportSymbol> {
+        self.lookup_alias(name, scope, 0)
+    }
+    fn lookup_alias(&self, name: &str, scope: &super::ResolveScope, depth: usize) -> Option<ExportSymbol> {
+        if depth > 64 { return None; }
         self.searchable
             .get(name)
             .copied()
@@ -71,6 +77,11 @@ impl PackageSymbolTable {
                         !matches!(symbol, ExportSymbol::Type(_))
                             || self.local_type_name(scope.current, name)
                     })
+            })
+            .or_else(|| {
+                let (target, owner) = self.aliases.get(name)?;
+                if *owner != scope.current && !scope.imports.contains(owner) { return None; }
+                self.lookup_alias(target, &self.resolve_scope(*owner), depth + 1)
             })
     }
 

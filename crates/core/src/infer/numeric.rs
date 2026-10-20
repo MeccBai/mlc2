@@ -37,6 +37,13 @@ impl TypeInfer<'_> {
         if !numeric(to) || !numeric(from) {
             return None;
         }
+        // Floating-point narrowing requires an explicit cast, even for exact constants.
+        if to.data_type() == DataType::Float
+            && from.data_type() == DataType::Float
+            && to.bits() < from.bits()
+        {
+            return Some(false);
+        }
         Some(match number(expression, symbols) {
             Some(value) => representable(&value, to),
             None => to.type_check(true, from),

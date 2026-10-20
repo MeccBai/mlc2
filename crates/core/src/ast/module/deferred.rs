@@ -17,7 +17,7 @@ impl DeferredDeclarations {
                 TempGlobalStmt::Enum(_) => 0,
                 TempGlobalStmt::Unit(_) => 1,
                 TempGlobalStmt::Generic(_) => 2,
-                TempGlobalStmt::Func(_) => 3,
+                TempGlobalStmt::Func(_) | TempGlobalStmt::MacroFunc(_) => 3,
                 TempGlobalStmt::Interface(_) => 4,
                 TempGlobalStmt::Variable(_) => 5,
                 TempGlobalStmt::Using(_) => 6,
@@ -62,6 +62,7 @@ pub(super) fn split(
 
     temp_ast.into_iter().for_each(|(stmt, _span)| match stmt {
         TempGlobalStmt::Unit(temp_unit) => units.push(temp_unit),
+        TempGlobalStmt::MacroFunc(_) => {},
         TempGlobalStmt::Func(temp_func) => funcs.push(temp_func),
         TempGlobalStmt::Using(temp_using) => usings.push(temp_using),
         TempGlobalStmt::Generic(temp_generic) => generics.push(temp_generic),

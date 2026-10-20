@@ -1,5 +1,7 @@
 pub mod expr;
 pub mod func;
+mod macro_func;
+pub use macro_func::TempMacroFunc;
 pub mod stmt;
 pub mod types;
 
@@ -257,6 +259,7 @@ impl TempVar {
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(tag = "kind", content = "data")]
 pub enum TempGlobalStmt {
+    MacroFunc(TempMacroFunc),
     Unit(TempUnit),
     Func(TempFunc),
     Interface(TempInterface),
@@ -270,6 +273,7 @@ pub enum TempGlobalStmt {
 impl TempGlobalStmt {
     pub fn dump(&self) -> String {
         match self {
+            Self::MacroFunc(function) => format!("Macro function: {}!", function.name),
             Self::Unit(unit) => unit.dump(),
             Self::Func(function) => function.dump(),
             Self::Interface(interface) => interface.dump(),

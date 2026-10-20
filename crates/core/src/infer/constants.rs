@@ -48,6 +48,16 @@ where
                     .collect();
                 if let crate::ast::symbols::EnumBool::False(index) = call.func {
                     let symbol = symbols.get_function_regular(index);
+                    if symbol.builtin() == Some(crate::ast::builtins::Builtin::StrLen) {
+                        if let Some(Expression::InitListE(InitialList::String { value })) =
+                            call.args.first()
+                        {
+                            return Expression::ConstValueE(ConstValue {
+                                value: value.len().to_string(),
+                                ty: symbol.ret_type.unwrap(),
+                            });
+                        }
+                    }
                     if symbol.builtin() == Some(crate::ast::builtins::Builtin::Cast) {
                         if let (Some(target), Some(Expression::ConstValueE(input))) =
                             (symbol.ret_type, call.args.first())
@@ -100,6 +110,10 @@ where
             }
             Expression::UnaryExprE(unary) => Expression::UnaryExprE(match unary {
                 function @ UnaryExpr::Function { .. } => function,
+                UnaryExpr::Operator {
+                    op: op @ (Operator::AddressOf | Operator::MutOf),
+                    value,
+                } => UnaryExpr::Operator { op, value },
                 UnaryExpr::Operator { op, value } => UnaryExpr::Operator {
                     op,
                     value: Box::new(fold_atom(*value, config, symbols)),

@@ -40,7 +40,7 @@ valid_case!(
 );
 valid_case!(
     array_and_string_initialization,
-    "func main() { var a = [1,2,3]; var first = a[0]; var text = \"hello\"; var ch = text[1]; }"
+    "func main() { var a = [1,2,3]; var first = a[0]; var text:[i8:5] = \"hello\"; var ch = text[1]; }"
 );
 valid_case!(
     multidimensional_array_access,
@@ -154,4 +154,32 @@ fn typed_initializer_preserves_resolved_target() {
     };
     assert_eq!(*owner, variable.var_type);
     assert_eq!(values.len(), 1);
+}
+
+#[test]
+fn native_str_literals_and_bindings_keep_compile_time_payloads() {
+    let ast = valid(
+        r#"func main(){var inferred="中\0文";val typed:str=inferred;const empty:str="";const length:u64=str::len("中\0文");}"#,
+    );
+    for statement in &main_body(&ast)[..3] {
+        let Statement::VariableDecl(variable) = statement else {
+            panic!("variable expected")
+        };
+        assert!(matches!(
+            ast.symbols.types.get(variable.var_type).unqualified(),
+            crate::ast::types::CompileType::Str
+        ));
+        assert_eq!(
+            variable.var_type.value_type(&ast.symbols.types),
+            ValueType::Constant
+        );
+        assert!(matches!(
+            &*variable.init_val,
+            Expression::InitListE(InitialList::String { .. })
+        ));
+    }
+    let Statement::VariableDecl(length) = &main_body(&ast)[3] else {
+        panic!("variable expected")
+    };
+    assert!(matches!(&*length.init_val,Expression::ConstValueE(value) if value.value=="7"));
 }

@@ -52,7 +52,7 @@ impl TypeInfer<'_> {
     pub(crate) fn call_is_constant(expression: &FuncCall, symbols: &dyn Resolution) -> bool {
         expression.callee.is_none()
             && matches!(expression.func, crate::ast::symbols::EnumBool::False(index)
-            if matches!(symbols.get_function_regular(index).builtin(), Some(Builtin::Cast | Builtin::ConstCStr))
+            if matches!(symbols.get_function_regular(index).builtin(), Some(Builtin::Cast | Builtin::ConstCStr | Builtin::StrLen))
                 && expression.args.iter().all(|argument| argument.is_const(symbols)))
     }
 }

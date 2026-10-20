@@ -32,7 +32,7 @@ impl SymbolTable {
                         v.symbol.name_span,
                     )
                 }
-                TempGlobalStmt::Import(_) => continue,
+                TempGlobalStmt::Import(_) | TempGlobalStmt::MacroFunc(_) => continue,
             };
             if crate::ast::builtins::lookup(name.rsplit("::").next().unwrap_or(&name)).is_some() {
                 config.submit_error(
@@ -90,6 +90,7 @@ impl SymbolTable {
                 } else {
                     target
                 };
+                if using.visibility == crate::parser::out::TempVisibility::Export { self.exported_usings.insert(name.clone()); }
                 self.usings.insert(name, target);
             }
         }

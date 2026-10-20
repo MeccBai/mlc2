@@ -136,6 +136,22 @@ impl ResourceState {
                     }
                 }
                 if ty.has_res(symbols) {
+                    // Replacing an owned field does not move it out: codegen drops the
+                    // previous value before storing the independently owned replacement.
+                    if matches!(&*assign.variable, Expression::UnaryExprE(UnaryExpr::Access(Access::Member { .. }))) {
+                        let owners = self.owner_names(&assign.variable);
+                        if self.borrows.values().any(|borrowed| !borrowed.is_disjoint(&owners)) {
+                            Self::error(config, IllegalUseError::UnsupportedResourceOperation, span);
+                            return;
+                        }
+                        if !self.owner_names(&assign.value).is_disjoint(&owners) {
+                            Self::error(config, IllegalUseError::UnsupportedResourceOperation, span);
+                            return;
+                        }
+                        self.expression(&assign.variable, None, config, symbols, span);
+                        self.expression(&assign.value, Some(ty), config, symbols, span);
+                        return;
+                    }
                     let Expression::VarValueE(target) = &*assign.variable else {
                         Self::error(config, IllegalUseError::UnsupportedResourceOperation, span);
                         return;

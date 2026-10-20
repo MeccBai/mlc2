@@ -11,6 +11,8 @@ fn all_bundled_examples_build_and_run() {
         std::fs::write(&entry, example.source).unwrap();
         let resolver = ImportResolver {
             lib_dirs: vec![
+                std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                    .join("lib/x86_64-pc-windows-gnu"),
                 std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("lib/universal"),
             ],
         };
@@ -31,7 +33,8 @@ fn all_bundled_examples_build_and_run() {
         #[cfg(windows)]
         {
             let executable = root.path().join("main.exe");
-            let clang = std::env::var_os("MLC_TEST_CLANG").unwrap_or_else(|| mlc_builder::manifest::DEFAULT_WINDOWS_LINKER.into());
+            let clang = std::env::var_os("MLC_TEST_CLANG")
+                .unwrap_or_else(|| mlc_builder::manifest::DEFAULT_WINDOWS_LINKER.into());
             let linked = std::process::Command::new(clang)
                 .arg("-fuse-ld=lld")
                 .args(&objects)

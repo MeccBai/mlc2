@@ -126,7 +126,7 @@ func main() -> i32 {
 ```rust
 func main() -> i32 {
     var positive:u32 = 10;
-    var exact:f32 = 1.5;
+    var exact:f32 = cast<f32>(1.5);
     var small:i8 = 12;
     var wider:i32 = small;
     var deliberate:i8 = cast<i8>(300);
@@ -135,6 +135,7 @@ func main() -> i32 {
 ```
 
 `var x:i8 = 300;`、`var x:u32 = -1;`、`var x:f32 = 0.1;` 会报范围或精度错误。
+浮点窄化必须显式使用 cast：即使 10.0 可精确表示，`var a:f32 = 10.0;` 仍报错，应写 `var a:f32 = cast<f32>(10.0);`。
 cast<T>(value) 表示主动转换，不按目标数值范围拒绝输入；它不是饱和转换。
 当前内建 cast 支持基本类型间转换，以及 Ref 到 Ref 的转换，不能替代任意聚合类型转换。
 没有 i8(300) 这类类型名调用式转换；唯一内建转换入口是 cast。
@@ -196,8 +197,10 @@ func main() -> i32 {
 ```
 
 字符串可以初始化容量足够的 i8 字节数组；多余空间清零。
-普通字符串字面量不承诺自动追加 C 的结束零；需要 C 字符串时使用 const_c_str，
-或显式保留额外容量并写零。不提供独立的字符串对象、切片或动态数组容器语法。
+未指定数组类型的字符串字面量推断为原生 `str`，其绑定保存编译期内容且不可重新赋值。
+`str::len(text)` 返回 UTF-8 字节长度；`str` 不隐式转换为指针，调用 C 时显式使用
+`const_c_str(text)`，其静态只读存储附带终止零。显式初始化 i8 数组时仍按数组容量复制、补零，
+不会额外扩展数组。标准库格式化宏的格式串参数使用 `str`，详见 [str 类型](str.md)。
 
 ## 7. Ref、取引用、解引用与索引
 
@@ -375,6 +378,24 @@ func main() -> i32 {
 
 这些约束名称由编译器识别，无需 import std::generic。
 一个 generic 内各要求同时满足；也可要求具体 Interface 签名。
+
+命名约束可使用 `&&` 合并，任意排列并支持括号分组：
+
+```rust
+generic SignedInteger = Integer && Signed && Wide;
+generic Integer { std::generic::is_integer; }
+generic Signed { std::generic::is_signed; }
+generic Wide { std::generic::min_bits<32>; }
+func<T:SignedInteger> twice(value:T)->T { return value+value; }
+func main()->i32 { return twice(21); }
+```
+
+合并在 AST lower 时完成，直接展开为原有的要求列表，并去除重复要求，
+不会保留新的组合类型。支持前向引用、已导入的导出约束及 `using` 别名；
+循环引用和不存在的约束会报错。组合声明必须以分号结束。
+这里只允许 `&&`，不支持 `||`、`&`、算术或比较运算。
+`is_integer` 与 `is_float`、无法同时满足的位宽范围、同名但互斥的接口签名，
+都会在声明 lower 时直接报错，无需等到实例化。
 
 ```rust
 generic Readable {

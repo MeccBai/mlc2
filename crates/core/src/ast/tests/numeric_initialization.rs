@@ -9,7 +9,7 @@ fn numeric_constants_use_destination_range_and_exact_precision() {
         "var x:u8 = 255;",
         "var x:i8 = -128;",
         "var x:u32 = 2*3;",
-        "var x:f32 = 1.5;",
+        "var x:f32 = cast<f32>(1.5);",
         "var x:f64 = 42;",
         "var x:i32 = 42.0;",
         "var x:f32 = 16777216;",
@@ -75,4 +75,30 @@ fn runtime_initializers_require_lossless_domain_conversions() {
         }
     }
     valid("func main() { var x:f32 = cast<f32>(0.1); var y:u32 = cast<u32>(-1); }");
+}
+
+#[test]
+fn floating_narrowing_requires_explicit_cast_even_for_exact_constants() {
+    for source in [
+        "func main(){ var a:f32=10.0; }",
+        "func main(){ val a:f32=10.0; }",
+        "func main(){ const a:f32=10.0; }",
+        "func main(){ var a:f32=-10.0; }",
+        "func main(){ var a:f32=5.0+5.0; }",
+        "func main(){ const n=10.0; var a:f32=n; }",
+        "global var a:f32=10.0; func main(){}",
+        "func main(){ var a:[f32:1]=[10.0]; }",
+        "unit P { pub a:f32; }; func main(){var p=P{10.0};}",
+        "func main(){var a:f32=cast<f32>(0.0); a=10.0;}",
+    ] {
+        invalid_semantics(source);
+    }
+    valid("func main(){var a:f32=cast<f32>(10.0); val b:f32=cast<f32>(0.1); var c:f64=a;}");
+    let source = "func main(){var a:f32=10.0;}";
+    let ast = invalid_semantics(source);
+    let diagnostic = ast.config.error_handle().render(source);
+    assert!(
+        diagnostic.contains("f32") && diagnostic.contains("f64"),
+        "{diagnostic}"
+    );
 }

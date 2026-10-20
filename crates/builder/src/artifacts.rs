@@ -14,7 +14,7 @@ pub use storage::{Artifact, ArtifactPaths, convert_toml, load, publish};
 pub use symbols::Symbols;
 pub(crate) use symbols::has_templates;
 
-pub const FORMAT_VERSION: u32 = 3;
+pub const FORMAT_VERSION: u32 = 6;
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ObjectMode {

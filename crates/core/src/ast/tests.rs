@@ -164,3 +164,5 @@ mod statements;
 pub(crate) mod support;
 mod symbol_names;
 mod unit_applications;
+
+mod generic_composition;

@@ -1,6 +1,6 @@
 # Built-in functions
 
-`cast` and `const_c_str` are compiler-owned names and require no import.
+`cast`, `str::len` and `const_c_str` are compiler-owned names and require no import.
 Memory operations require `import std::mem;`; the old bare `alloc`/`dealloc`
 interfaces are not provided. Imported memory declarations lower to compiler intrinsics.
 
@@ -25,7 +25,10 @@ var message = const_c_str("Hello World!\n"); // immutable $i8, static lifetime
   the low bits; widening respects source signedness. Float-to-integer conversion
   truncates toward zero; values outside the representable range have LLVM poison
   semantics, not a defined wrapping result. Integer constant casts are folded.
-- `const_c_str(text)` accepts a constant string (literal or folded constant),
+- `str::len(text)` accepts native `str` and returns its UTF-8 byte length as `u64`.
+  Literal lengths are folded during compilation. Embedded NUL bytes count toward
+  the length; the trailing C terminator does not.
+- `const_c_str(text)` explicitly accepts native `str` (including a `str` parameter),
   appends one NUL byte after its UTF-8 bytes, and returns an immutable `$i8`.
   Storage is a deduplicated LLVM global constant, not stack or heap memory.
   It can be passed directly to `c_std::io::printf`; never deallocate it or pass

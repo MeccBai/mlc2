@@ -34,11 +34,23 @@ impl fmt::Display for ResolveError {
 
 impl fmt::Display for ConstraintError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::ConflictingRequirements { reason } => {
+                return write!(f, "Conflicting generic requirements: {reason}");
+            }
+            Self::CyclicRequirements { name } => {
+                return write!(f, "Cyclic generic requirements involving `{name}`");
+            }
+            _ => {}
+        }
         f.write_str(match self {
             Self::InvalidRequirement => "Invalid generic requirement",
             Self::InvalidArgument => "Invalid generic constraint argument",
             Self::NoRequirements => "Missing generic requirements",
             Self::NoArgument => "Missing generic constraint argument",
+            Self::ConflictingRequirements { .. } | Self::CyclicRequirements { .. } => {
+                unreachable!()
+            }
         })
     }
 }
@@ -59,6 +71,7 @@ impl fmt::Display for IllegalUseError {
         use IllegalUseError::*;
         f.write_str(match self {
             InvalidUnion { reason } => return f.write_str(reason),
+            InvalidStringOperation => "str is an immutable compile-time string; use str::len or const_c_str explicitly",
             InvalidFunctionPointerOperation => "Function pointers support calling, copying and borrowing, not arithmetic or value matching",
             FunctionPointerRequiresInitializer => "Every function pointer array element must be initialized; null function pointers are not supported",
             ReservedDeconstruct => "Unit deconstruct is generated automatically and cannot be defined by the user",
@@ -102,6 +115,7 @@ impl fmt::Display for IllegalUseError {
             InvalidIndexAccess => "Indexing requires an array or reference and an integer index",
             InvalidDereference => "Only reference types can be dereferenced",
             UnsupportedGenericCall => "Unsupported generic call",
+            MacroExpansionRequired => "Macro syntax must be expanded before runtime semantic analysis",
             IllegalVisibility => "This visibility modifier is not allowed on this declaration",
             CannotInferenceType => "Cannot infer the expression type",
             VariableMustBeInitialized => "Variable declarations require an initializer",

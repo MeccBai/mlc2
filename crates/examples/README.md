@@ -1,21 +1,27 @@
 # MLC examples
 
-Each file in `sources/` is an independent program using implemented syntax.
-The crate embeds these sources in mlc, so no separate example installation is needed.
+The 25 files in `sources/` are independent programs, embedded in the compiler.
+Each source explains its topic, run command, and expected output in English.
 
 ```powershell
 mlc example list
-mlc example hello-world
-mlc example generics
+mlc example hello-world > hello.m2
+mlc run hello.m2
+mlc example formatting > formatting.m2
+mlc run formatting.m2
 ```
 
-These commands only print text. Save a source as `main.m2`, then build it:
+Listing and printing source need no project, configuration, or LLVM initialization.
+For repository development, use `mlc run hello.m2 --lib-dir lib`. Installed mlc
+uses its sibling `lib` directory by default.
 
-```powershell
-mlc main.m2 --lib-dir lib
-```
+Ordinary examples use `std::println!` and `std::print!`. The standard-library
+examples cover owned String storage, non-owning byte-length views, `format!`,
+and custom Display implementations. The dedicated `c-interop` example covers
+C ABI declarations, `printf`, and NUL-terminated strings.
 
-The explicit `--lib-dir lib` is for repository development. Installed mlc uses its
-sibling `lib` directory by default. Printing needs neither LLVM nor a project config.
-The library currently provides C printf declarations and compiler-backed memory
-operations, not a complete standard library. Memory examples require manual cleanup.
+Resource examples distinguish explicit deallocation from automatic cleanup after
+ownership transfer. Floating-point narrowing uses an explicit `cast<f32>`.
+
+Tests parse every source, verify CLI source output, and build and run every
+example with exact expected stdout comparisons.

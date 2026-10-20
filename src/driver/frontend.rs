@@ -1,4 +1,5 @@
 //! Package analysis stays local; only finished IR crosses build worker boundaries.
+use std::collections::HashMap;
 use mlc_builder::{
     artifacts,
     plan::{BuildPlan, TargetInput},
@@ -22,6 +23,7 @@ mod enum_tests;
 #[cfg(test)]
 mod examples_tests;
 mod names;
+mod macros;
 #[cfg(test)]
 mod optimization_tests;
 mod startup;
@@ -56,6 +58,7 @@ pub fn generate_with_options(
 ) -> Result<Generated, String> {
     let mut package = PackageSymbolTable::new();
     let mut asts = vec![];
+    let mut parsed_modules = HashMap::new();
     for id in &plan.order {
         let target = &plan.targets[id.0];
         let module = match &target.input {
@@ -68,6 +71,12 @@ pub fn generate_with_options(
                     .unwrap_or_else(|| artifact.manifest.symbols.declarations())
             }
         };
+        parsed_modules.insert(id.0, module);
+    }
+    macros::expand(plan, &mut parsed_modules)?;
+    for id in &plan.order {
+        let target = &plan.targets[id.0];
+        let module = parsed_modules.remove(&id.0).unwrap();
         let file = target.file.to_string_lossy().into_owned();
         let mut config = Config::new(
             FileId::new(id.0),

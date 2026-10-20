@@ -20,6 +20,7 @@ use crate::parser::out::{Span, TempConstraints, TempGeneric, TempInterfaceSymbol
 use std::collections::HashMap;
 use std::sync::LazyLock;
 mod diagnostics;
+mod lower;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InterfaceRequire {
@@ -224,23 +225,57 @@ impl GenericRequire {
         symbols: &mut dyn Resolution,
     ) -> (Self, Span) {
         let name_span = prototype.name_span;
+        let mut requires = Vec::new();
+        for (temp, span) in prototype.requirements {
+            if config.is_poisoned() {
+                break;
+            }
+            let additions = match temp {
+                TempConstraints::Type { path, argument }
+                    if path.segments.starts_with(&["std".into(), "generic".into()]) =>
+                {
+                    GenericTypeRequire::new(config, (path, argument), span)
+                        .map(|rule| vec![Constraints::Type(rule)])
+                }
+                TempConstraints::Type { path, argument } => {
+                    if argument.is_some() {
+                        config.submit_error(
+                            CompileError::Resolve(ResolveError::Constraint(
+                                ConstraintError::InvalidArgument,
+                            )),
+                            span,
+                        );
+                        None
+                    } else if let Some(index) = Self::find(config, &path, symbols) {
+                        Some(symbols.get_generic(index).requires.clone())
+                    } else {
+                        config.submit_error(
+                            CompileError::Resolve(ResolveError::UnknownConstraint),
+                            span,
+                        );
+                        None
+                    }
+                }
+                TempConstraints::Interface(function) => {
+                    InterfaceRequire::new(config, function, symbols, span)
+                        .map(|rule| vec![Constraints::Interface(rule)])
+                }
+            };
+            if let Some(additions) = additions {
+                if let Err(reason) = Self::merge(&mut requires, additions, symbols) {
+                    config.submit_error(
+                        CompileError::Resolve(ResolveError::Constraint(
+                            ConstraintError::ConflictingRequirements { reason },
+                        )),
+                        span,
+                    );
+                }
+            }
+        }
         (
             Self {
                 name: prototype.name,
-                requires: prototype
-                    .requirements
-                    .into_iter()
-                    .filter_map(|(temp, span)| match temp {
-                        TempConstraints::Type { path, argument } => {
-                            GenericTypeRequire::new(config, (path, argument), span)
-                                .map(Constraints::Type)
-                        }
-                        TempConstraints::Interface(func) => {
-                            InterfaceRequire::new(config, func, symbols, span)
-                                .map(Constraints::Interface)
-                        }
-                    })
-                    .collect(),
+                requires,
                 attributes: prototype.attributes,
                 exported: prototype.visibility.normal_export(config, &name_span),
             },
@@ -329,9 +364,11 @@ impl TypeIndex {
         let value = self.value_type(symbols);
         let ty = symbols.get_type(self).unqualified().clone();
         match ty {
-            Base(_) | Enum(_) => Some(self),
+            CompileType::Str | Base(_) | Enum(_) => Some(self),
             CompileType::Function(function) if !function.is_generic(symbols) => Some(self),
-            CompileType::Function(function) => function.instantiation(config, params, symbols, actives, span).map(|index| index.into_value_type(value, symbols)),
+            CompileType::Function(function) => function
+                .instantiation(config, params, symbols, actives, span)
+                .map(|index| index.into_value_type(value, symbols)),
             CompileType::Generic(generic) => generic
                 .instantiation(config, params, symbols, span)
                 .map(|index| index.into_value_type(value, symbols)),

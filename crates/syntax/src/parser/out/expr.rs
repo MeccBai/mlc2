@@ -39,6 +39,7 @@ impl TempCallee {
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(tag = "kind", content = "data")]
 pub enum TempExpr {
+    MacroCall { path: TempPath, args: Vec<Spanned<TempExpr>> },
     Literal {
         kind: TempLiteralKind,
         text: String,
@@ -73,6 +74,7 @@ pub enum TempExpr {
 impl TempExpr {
     pub fn dump(&self) -> String {
         match self {
+            Self::MacroCall { path, .. } => format!("{}!(...)", path.segments.join("::")),
             Self::Literal { text, .. } => text.clone(),
             Self::Path(path) => path.segments.join("::"),
             Self::Group(inner) => format!("({})", inner.0.dump()),

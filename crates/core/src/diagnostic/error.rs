@@ -9,6 +9,8 @@ mod render;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum ConstraintError {
+    ConflictingRequirements { reason: String },
+    CyclicRequirements { name: String },
     InvalidRequirement,
     InvalidArgument,
     NoRequirements,
@@ -74,8 +76,11 @@ pub enum IllegalUseError {
     CyclicUsing,
     UnsupportedUsingTarget,
     ReservedDeconstruct,
-    InvalidUnion { reason: String },
+    InvalidUnion {
+        reason: String,
+    },
     InvalidFunctionPointerOperation,
+    InvalidStringOperation,
     FunctionPointerRequiresInitializer,
     DuplicateVariable {
         name: String,
@@ -104,6 +109,7 @@ pub enum IllegalUseError {
     InvalidIndexAccess,
     InvalidDereference,
     UnsupportedGenericCall,
+    MacroExpansionRequired,
     IllegalVisibility,
     CannotInferenceType,
     VariableMustBeInitialized,

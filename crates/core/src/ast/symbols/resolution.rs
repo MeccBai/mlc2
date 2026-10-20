@@ -118,6 +118,29 @@ pub trait Resolution: TypeStorage {
                         None,
                     );
                 }
+                if path.segments.len() > 1 {
+                    let owner_name = path.segments[..path.segments.len() - 1].join("::");
+                    let owner_name = self.using_target(config, &owner_name).unwrap_or(owner_name);
+                    if let Some(ExportSymbol::Type(owner)) = self.named_export(config, &owner_name)
+                    {
+                        let name = format!(
+                            "{}::{}",
+                            self.get_type(owner).unqualified().format(self),
+                            path.segments.last().unwrap()
+                        );
+                        if let Some(index) = self.associated_interface(owner, &name) {
+                            if self.get_interface(index, false).exported
+                                || self.table(owner.file_id()).types.file_id()
+                                    == self.local().types.file_id()
+                            {
+                                return Some(PathSymbol::Interface {
+                                    index,
+                                    generic: false,
+                                });
+                            }
+                        }
+                    }
+                }
                 continue;
             }
             if kind != PathSymbolKind::EnumValue {

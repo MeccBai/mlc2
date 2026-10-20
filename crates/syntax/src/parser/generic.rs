@@ -47,15 +47,36 @@ pub fn generic_parser<'tokens, I>() -> impl Parser<
 where
     I: ValueInput<'tokens, Token = TokenPack, Span = Span>,
 {
+    let terms = recursive(|terms| {
+        let named = path().map_with(|path, extra| {
+            vec![(
+                GenericRequirement::Type {
+                    path,
+                    argument: None,
+                },
+                extra.span(),
+            )]
+        });
+        choice((
+            named,
+            terms.delimited_by(keyword(Token::LParen), keyword(Token::RParen)),
+        ))
+        .separated_by(operator(Token::LogicalAnd))
+        .at_least(1)
+        .collect::<Vec<_>>()
+        .map(|groups| groups.into_iter().flatten().collect::<Vec<_>>())
+    });
+    let composition = operator(Token::Assign)
+        .ignore_then(terms)
+        .then_ignore(keyword(Token::Semicolon));
+    let body = requirement_parser()
+        .repeated()
+        .collect::<Vec<_>>()
+        .delimited_by(keyword(Token::LBrace), keyword(Token::RBrace))
+        .then_ignore(keyword(Token::Semicolon).or_not());
     keyword(Token::Generic)
         .ignore_then(spanned_ident())
-        .then(
-            requirement_parser()
-                .repeated()
-                .collect::<Vec<_>>()
-                .delimited_by(keyword(Token::LBrace), keyword(Token::RBrace)),
-        )
-        .then_ignore(keyword(Token::Semicolon).or_not())
+        .then(choice((composition, body)))
         .labelled("generic declaration")
         .boxed()
 }

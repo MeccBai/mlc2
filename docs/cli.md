@@ -33,11 +33,11 @@ mlc symbols c_api.toml -o lib/universal/c_api.sym
 程序继承当前终端的输入输出和工作目录，退出码由 mlc 原样返回。
 不再支持 `mlc main.m2` 形式。`ll`、`symbols` 和 `example` 命令保持独立。
 
-示例独立维护在 `crates/examples`（`mlc_examples` crate），目前有 21 个，
+示例独立维护在 `crates/examples`（`mlc_examples` crate），目前有 25 个，
 按基础、函数与泛型、类型与资源分组；每份源码包含英文说明、运行命令和预期输出。
 建议先运行 `mlc example list`，再按列表顺序学习。示例目录见 [示例指南](examples.md)。
 源码编译时内嵌到 mlc，安装后不需要额外部署示例目录；example 命令不读取项目或全局配置。
-打印出的源码保存为 `.m2` 后可以正常编译，依赖当前提供的 C printf 声明与 std::mem。
+打印出的源码保存为 `.m2` 后可以正常编译，普通输出使用 std::print! / std::println!；标准库示例展示 String、format! 与 Display，C 互操作单独展示。
 
 `symbols` 仅转换 `Object = "None"` 的手写声明，沿用原有 TOML 字段和 `$none` 表示法。
 该命令不读取项目或全局配置，不编译或链接；`-o` 在此命令中表示输出文件。

@@ -18,14 +18,14 @@ impl Expression {
         context: Option<&StatementContext>,
     ) -> Self {
         let indirect = matches!(&callee.0, TempExpr::Member { indirect: true, .. });
-        let (owner, interface) = match Self::search_interface(config, callee, symbols, context) {
-            Some((owner, interface)) => (owner, interface),
+        let (owner, mut interface, generic) = match Self::search_interface(config, callee, symbols, context) {
+            Some((owner, interface, generic)) => (owner, interface, generic),
             None => {
                 config.submit_error(CompileError::Resolve(ResolveError::UnknownInterface), span);
                 return Self::null();
             }
         };
-        let symbol = symbols.get_interface_regular(interface).clone();
+        let symbol = symbols.get_interface(interface, generic).clone();
         let mut params = Vec::new();
         if let Some(receiver_type) = symbol.receiver_type {
             if symbol.mutable && !owner.assignable(config, symbols) && !indirect {
@@ -62,10 +62,14 @@ impl Expression {
             params.push(Expression::new(config, arg, symbols, context));
         }
         let offset = usize::from(symbol.receiver_type.is_some());
-        if !crate::TypeInfer::new(config, symbols).check_arguments(
-            &symbol.params,
-            &params[offset..],
-            span,
+        let fixed = params.split_off(offset);
+        let fixed = Self::coerce_arguments(fixed, &symbol.params, config, symbols, span);
+        params.extend(fixed);
+        if generic {
+            let Some(index) = Self::infer_interface(config, interface, &params[offset..], span, symbols, context) else { return Self::Poison; };
+            interface = index;
+        } else if !crate::TypeInfer::new(config, symbols).check_arguments(
+            &symbol.params, &params[offset..], span,
         ) {
             return Self::Poison;
         }
@@ -108,8 +112,8 @@ impl Expression {
             return Self::new_indirect_call(config, callee, args, span, symbols, context);
         }
         if let TempExpr::Path(path) = &callee.0 {
-            if path.segments.len() == 1 {
-                if let Some(definition) = crate::ast::builtins::lookup(&path.segments[0]) {
+            if path.segments.len() == 1 || path.segments.join("::")=="str::len" {
+                if let Some(definition) = crate::ast::builtins::lookup(&path.segments.join("::")) {
                     if definition.type_arguments != 0 {
                         config.submit_error(
                             CompileError::IllegalUse(IllegalUseError::GenericCountMismatch),
@@ -162,6 +166,8 @@ impl Expression {
             .into_iter()
             .map(|arg| Expression::new(config, arg, symbols, context))
             .collect::<Vec<_>>();
+        let parameters = match function { EnumBool::False(index) => symbols.get_function_regular(index).params.clone(), EnumBool::True(index) => symbols.get_interface_regular(index).params.clone() };
+        let args = Self::coerce_arguments(args, &parameters, config, symbols, span);
         if let EnumBool::False(index) = function {
             if !Self::check_function_args(config, index, &args, symbols, span) {
                 return Self::Poison;

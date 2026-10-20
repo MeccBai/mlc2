@@ -7,6 +7,7 @@ mod generic_call;
 mod inferred_call;
 mod lookup;
 mod string;
+mod string_view;
 
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -26,7 +27,7 @@ use crate::diagnostic::error::{CompileError, IllegalUseError, ResolveError};
 
 use crate::parser::out::{
     Spanned, TempCallee, TempExpr,
-    TempExpr::{Array, Binary, Call, Group, Init, Literal, Member, Path, Unary},
+    TempExpr::{Array, Binary, Call, Group, Init, Literal, MacroCall, Member, Path, Unary},
     TempLiteralKind,
     TempLiteralKind::{Boolean, Float, Integer, Null},
 };
@@ -145,6 +146,16 @@ impl Expression {
                     );
                     return Self::null();
                 }
+                if !unary_type.is_empty()
+                    && matches!(symbols.get_type(unary_type).unqualified(), CompileType::Str)
+                    && !matches!(op, Operator::AddressOf)
+                {
+                    config.submit_error(
+                        CompileError::IllegalUse(IllegalUseError::InvalidStringOperation),
+                        span,
+                    );
+                    return Self::Poison;
+                }
                 if op == Operator::Dereference {
                     let ty = expr.type_inference(config, symbols);
                     if !ty.is_empty() && !ty.is_ref(symbols) {
@@ -212,6 +223,15 @@ impl Expression {
                         );
                         return;
                     }
+                    if !ty.is_empty()
+                        && matches!(symbols.get_type(ty).unqualified(), CompileType::Str)
+                    {
+                        config.submit_error(
+                            CompileError::IllegalUse(IllegalUseError::InvalidStringOperation),
+                            span,
+                        );
+                        return;
+                    }
                     if !ty.is_empty() && ty.is_ref(symbols) {
                         config.submit_error(
                             CompileError::IllegalUse(IllegalUseError::CannotInferenceType),
@@ -224,6 +244,13 @@ impl Expression {
                     members: expressions,
                     operators,
                 })
+            }
+            MacroCall { .. } => {
+                config.submit_error(
+                    CompileError::IllegalUse(IllegalUseError::MacroExpansionRequired),
+                    span,
+                );
+                Self::Poison
             }
             Group(inner) => Expression::new(config, *inner, symbols, context),
             Call { callee, args } => match callee {
@@ -317,6 +344,51 @@ impl Expression {
                             {
                                 config.submit_error(CompileError::IllegalUse(IllegalUseError::InvalidUnion { reason: "Initializer type is not a union candidate; use an explicit cast if necessary".into() }), span);
                                 return Self::Poison;
+                            }
+                        }
+                    }
+                }
+
+                let values = if let Some(owner) = ty {
+                    if let CompileType::Unit(unit) = symbols.get_type(owner).unqualified() {
+                        if unit.variant.is_none() {
+                            let parameters: Vec<_> = unit
+                                .members
+                                .iter()
+                                .map(|member| (member.member_type, member.name.clone()))
+                                .collect();
+                            Self::coerce_arguments(values, &parameters, config, symbols, span)
+                        } else {
+                            values
+                        }
+                    } else {
+                        values
+                    }
+                } else {
+                    values
+                };
+                // Typed unit constructors must validate fields before normalization.
+                if let Some(owner) = ty {
+                    if let CompileType::Unit(unit) = symbols.get_type(owner).unqualified() {
+                        if unit.variant.is_none() {
+                            let members: Vec<_> = unit
+                                .members
+                                .iter()
+                                .map(|member| member.member_type)
+                                .collect();
+                            for (value, member) in values.iter().zip(members) {
+                                let float_field = matches!(symbols.get_type(member).unqualified(), CompileType::Base(base)
+                                    if base.data_type() == crate::ast::types::base_type::DataType::Float);
+                                if float_field
+                                    && !crate::TypeInfer::new(config, symbols).check(
+                                        value,
+                                        member,
+                                        crate::infer::CheckMode::Initialization,
+                                        span,
+                                    )
+                                {
+                                    return Self::Poison;
+                                }
                             }
                         }
                     }

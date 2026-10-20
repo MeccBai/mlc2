@@ -52,13 +52,7 @@ impl TypeInfer<'_> {
                     };
                     (*ty).into(value, symbols)
                 }
-                InitialList::String { value } => {
-                    let string_type = symbols.get_base(DataType::Integer, 8, true);
-                    let ty = CompileType::List(ListType::new(string_type, value.len()));
-                    let name = ty.format(symbols);
-                    let ident = get_ident(&name);
-                    symbols.local_mut().types.insert(ident, ty)
-                }
+                InitialList::String { .. } => symbols.local_type("str").expect("native str type"),
             },
             Expression::CompositeE(composite) => composite.type_inference(config, symbols),
             Expression::FuncCallE(func_call) => func_call.type_inference(symbols),

@@ -62,3 +62,29 @@ fn interface_visibility_keeps_public_and_export_independent() {
         }
     }
 }
+
+#[test]
+fn composed_constraints_keep_export_visibility_and_cross_file_signature_identity() {
+    let mut package = PackageSymbolTable::new();
+    let mut owner = ast(
+        1,
+        "owner",
+        "generic Hidden{std::generic::is_integer;}export generic Integer=Hidden;export generic Reader{pub func read(self)->i32;}",
+    );
+    publish(&mut package, &mut owner);
+    package.set_imports(FileId::new(2), [FileId::new(1)]);
+    let mut caller = ast(
+        2,
+        "caller",
+        "generic Same{pub func read(self)->i32;}generic Both=owner::Reader && Same;generic Number=owner::Integer;unit P{};pub P::func read(self)->i32{return 42;}func<T:Both> check(value:T){}func<T:Number> number(value:T){}func main(){check(P{});number(42);}",
+    );
+    publish(&mut package, &mut caller);
+    analyze(&mut package, &mut caller);
+    let file = package.file(FileId::new(2)).unwrap();
+    let index = file.generics.requires.get_by_name(&"Both".into()).unwrap();
+    assert_eq!(file.generics.requires.get(index).requires.len(), 1);
+    package.set_imports(FileId::new(3), [FileId::new(1)]);
+    let mut denied = ast(3, "denied", "generic Nope=owner::Hidden;");
+    denied.export(&mut package);
+    assert!(denied.config.is_poisoned());
+}

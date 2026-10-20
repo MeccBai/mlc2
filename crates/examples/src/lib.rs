@@ -34,11 +34,11 @@ pub const EXAMPLES: &[Example] = &[
         "var, val, const and explicit numeric casts",
         "variables",
         "Basics",
-        "answer=42 counter=43 narrowed=44\n"
+        "answer=42 counter=43 narrowed=44\nfraction=1.5\n"
     ),
     example!(
         "arrays",
-        "Fixed arrays, indexing and NUL-terminated C strings",
+        "Fixed arrays, indexing and byte-length string views",
         "arrays",
         "Basics",
         "Hello World!\nnumbers[1]=25\n"
@@ -73,7 +73,7 @@ pub const EXAMPLES: &[Example] = &[
     ),
     example!(
         "aliases",
-        "Type and function aliases with using",
+        "Type, function and macro aliases with using",
         "aliases",
         "Functions and generics",
         "answer=42\n"
@@ -104,11 +104,11 @@ pub const EXAMPLES: &[Example] = &[
         "Base::swap: type inference for associated functions",
         "associated_generics",
         "Functions and generics",
-        "a=100 b=10 fa=80.0 fb=20.0\n"
+        "a=100 b=10 fa=80 fb=20\n"
     ),
     example!(
         "constraints",
-        "Generic constraints: accepting integers only",
+        "Combine integer, signedness and bit-width constraints with &&",
         "constraints",
         "Functions and generics",
         "answer=42\n"
@@ -168,6 +168,34 @@ pub const EXAMPLES: &[Example] = &[
         "resources",
         "Types and resources",
         "observed=21 result=42\n"
+    ),
+    example!(
+        "strings",
+        "Owned String, byte-length views, append and clone",
+        "strings",
+        "Standard library",
+        "Hello, world!\nbytes=13 empty=false\ncopy=Hello, world! original=Hello, world!?\n"
+    ),
+    example!(
+        "formatting",
+        "format!, print!, println! and escaped braces",
+        "formatting",
+        "Standard library",
+        "answer=42 ready=true\n{value}=1.5\ndone\n\n"
+    ),
+    example!(
+        "display",
+        "Custom Display through the format interface",
+        "display",
+        "Standard library",
+        "point=Point(3,4)\n"
+    ),
+    example!(
+        "c-interop",
+        "C ABI declarations and NUL-terminated C strings",
+        "c_interop",
+        "Interoperability",
+        "C printf: 42\nbyte=65\n"
     ),
 ];
 
