@@ -176,3 +176,16 @@ Windows 的 `hello_world` 测试加载仓库 `lib/universal/c_std/io.sym`，
 LLVM-MinGW/UCRT `clang -fuse-ld=lld` 链接（可用 `MLC_TEST_CLANG` 指定驱动）。
 运行结果必须为退出码 0、stdout `Hello World!\r\n`、stderr 为空。
 该测试不跳过缺失工具，也不替代正式的入口/链接参数编排。
+
+## 生成产物与首次检出
+
+Git 只保存标准库的 `.m2` 和声明 `.toml` 源文件；`.sym`、`.obj`、`.mg` 都是生成产物，不提交到仓库。
+首次检出后，先构建编译器并生成通用声明，再运行测试或示例：
+
+```powershell
+cargo build --bin mlc
+.\target\debug\mlc.exe symbols lib/universal/std/mem.toml
+.\target\debug\mlc.exe symbols lib/universal/c_std/io.toml
+```
+
+标准库 `.m2` 的对象文件与模板缓存由正常构建按需生成。

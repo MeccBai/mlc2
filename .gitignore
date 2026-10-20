@@ -5,3 +5,8 @@
 /docs/evolution-and-roadmap.md
 /docs/improve.md
 /scripts/*
+
+# Generated compiler artifacts (at every directory depth).
+*.sym
+*.obj
+*.mg
