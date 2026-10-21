@@ -40,6 +40,19 @@ fn error_count_matches_unique_submitted_diagnostics() {
 fn multiline_crlf_unicode_empty_and_invalid_spans_are_safe() {
     let source = "第一行\r\n第二行\r\n第三行\r\n";
     let text = context(source, 2, 2, 3..24);
+    // Highlighting may split a source line when the runner forces ANSI colors.
+    // Check its visible contents without changing the process-wide color setting.
+    let text = text
+        .split("\x1b[")
+        .enumerate()
+        .map(|(index, part)| {
+            if index == 0 {
+                part
+            } else {
+                part.split_once('m').expect("SGR color sequence").1
+            }
+        })
+        .collect::<String>();
     assert!(text.contains("第一行"));
     assert!(text.contains("第三行"));
     assert_eq!(text.matches('^').count(), 5);

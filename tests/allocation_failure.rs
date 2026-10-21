@@ -1,5 +1,6 @@
 #![cfg(windows)]
 
+mod support;
 use mlc_builder::{
     llvm::IrCompiler,
     manifest::{DEFAULT_WINDOWS_LINKER, X86_64_PC_WINDOWS_GNU},
@@ -19,7 +20,7 @@ fn allocation_failure_aborts_without_resource_cleanup() {
     let compile = Command::new(env!("CARGO_BIN_EXE_mlc"))
         .current_dir(root.path())
         .args(["ll", "main.m2", "--lib-dir"])
-        .arg(Path::new(env!("CARGO_MANIFEST_DIR")).join("lib"))
+        .arg(support::library())
         .output()
         .unwrap();
     assert!(

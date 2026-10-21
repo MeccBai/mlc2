@@ -310,7 +310,7 @@ fn build(
     });
     let link_key = mlc_builder::artifacts::semantic_hash(&(
         &report.link_key,
-        "native-lld-table-v1",
+        "native-lld-table-v2",
         &paths.triplet,
         format!("{kind:?}"),
         &cli.linker,

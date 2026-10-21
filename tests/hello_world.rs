@@ -1,6 +1,7 @@
 //! Real Windows executable: language array -> printf declaration -> LLVM -> CRT -> stdout.
 #![cfg(windows)]
 
+mod support;
 use mlc_builder::{
     artifacts,
     config::GlobalConfig,
@@ -23,7 +24,7 @@ use std::{path::PathBuf, process::Command};
 fn hello_world_array_printf_compiles_links_runs_and_matches_stdout() {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let paths =
-        PathResolver::new(&root.join("mlc.exe"), &root, None, &GlobalConfig::default()).unwrap();
+        PathResolver::new(&support::library().parent().unwrap().join("mlc.exe"), &root, None, &GlobalConfig::default()).unwrap();
     let plan = BuildPlan::discover_with_paths(&root.join("tests/fixtures/hello_world.m2"), &paths)
         .unwrap();
     let mut package = PackageSymbolTable::new();

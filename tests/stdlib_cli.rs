@@ -1,7 +1,7 @@
 #![cfg(windows)]
+mod support;
 use std::{
     fs,
-    path::Path,
     process::{Command, Output},
 };
 static COMPILER_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
@@ -22,7 +22,7 @@ fn compile(source: &str, run: bool) -> (tempfile::TempDir, Output) {
             "config.toml",
             "--lib-dir",
         ])
-        .arg(Path::new(env!("CARGO_MANIFEST_DIR")).join("lib"))
+        .arg(support::library())
         .output()
         .unwrap();
     (root, result)

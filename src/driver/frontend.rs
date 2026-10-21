@@ -19,6 +19,9 @@ use mlc_core::{
     diagnostic::{error::ErrorHandle, warning::WarningHandle},
 };
 #[cfg(test)]
+#[path = "../../tests/support/mod.rs"]
+mod test_support;
+#[cfg(test)]
 mod enum_tests;
 #[cfg(test)]
 mod examples_tests;

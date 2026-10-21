@@ -6,7 +6,7 @@ fn generate_source(source: &str) -> (tempfile::TempDir, Result<Generated, String
     let entry = root.path().join("main.m2");
     std::fs::write(&entry, source).unwrap();
     let resolver = ImportResolver {
-        lib_dirs: vec![std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("lib/universal")],
+        lib_dirs: vec![super::test_support::library().join("universal")],
     };
     let plan = BuildPlan::discover(&entry, &resolver).unwrap();
     let generated = generate(&plan, "x86_64-pc-windows-msvc", TargetKind::Bin);

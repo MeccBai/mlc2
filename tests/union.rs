@@ -1,4 +1,5 @@
 #![cfg(windows)]
+mod support;
 use mlc_builder::{
     llvm::IrCompiler,
     manifest::{DEFAULT_WINDOWS_LINKER, X86_64_PC_WINDOWS_GNU},
@@ -52,11 +53,10 @@ func main()->i32 {
 "#,
     )
     .unwrap();
-    let project = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
     let output = Command::new(env!("CARGO_BIN_EXE_mlc"))
         .current_dir(root.path())
         .args(["ll", "main.m2", "--lib-dir"])
-        .arg(project.join("lib"))
+        .arg(support::library())
         .output()
         .unwrap();
     assert!(
@@ -82,7 +82,7 @@ func main()->i32 {
     let link = Command::new(DEFAULT_WINDOWS_LINKER)
         .arg("-fuse-ld=lld")
         .args(objects)
-        .arg(project.join("tests/fixtures/union_runtime.c"))
+        .arg(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/union_runtime.c"))
         .arg("-o")
         .arg(&executable)
         .output()

@@ -1,4 +1,5 @@
 #![cfg(windows)]
+mod support;
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -28,11 +29,12 @@ fn cli_hello_world_builds_runs_and_reuses_objects() {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let output = tempfile::tempdir().unwrap();
     let destination = output.path().to_str().unwrap();
+    let library = support::library();
     let args = [
         "build",
         "tests/fixtures/hello_world.m2",
         "--lib-dir",
-        "lib",
+        library.to_str().unwrap(),
         "-o",
         destination,
     ];

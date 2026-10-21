@@ -21,6 +21,7 @@ mod memory;
 pub mod variable_stack;
 
 pub struct IrGenerator {
+    coff: bool,
     used_symbols: HashSet<String>,
     symbol_order: Vec<String>,
     header: String,
@@ -42,6 +43,7 @@ impl IrGenerator {
         header.reserve(1024 * 10);
 
         IrGenerator {
+            coff: tiplet.contains("windows"),
             used_symbols: HashSet::new(),
             symbol_order: Vec::new(),
             header,

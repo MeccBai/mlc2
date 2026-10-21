@@ -15,7 +15,7 @@ fn type_name_calls_are_not_builtin_conversions() {
             &entry,
             &ImportResolver {
                 lib_dirs: vec![
-                    std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("lib/universal"),
+                    super::test_support::library().join("universal"),
                 ],
             },
         )
@@ -42,7 +42,7 @@ fn builtins_lower_without_external_language_symbols() {
         &entry,
         &ImportResolver {
             lib_dirs: vec![
-                std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("lib/universal"),
+                super::test_support::library().join("universal"),
             ],
         },
     )
@@ -106,7 +106,7 @@ fn builtin_arguments_are_validated_before_generation() {
             &entry,
             &ImportResolver {
                 lib_dirs: vec![
-                    std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("lib/universal"),
+                    super::test_support::library().join("universal"),
                 ],
             },
         )
@@ -136,7 +136,7 @@ fn builtin_casts_and_generic_allocations_pass_llvm_verification() {
         &entry,
         &ImportResolver {
             lib_dirs: vec![
-                std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("lib/universal"),
+                super::test_support::library().join("universal"),
             ],
         },
     )
@@ -174,7 +174,7 @@ fn multilevel_reference_reads_and_writes_generate_valid_ir() {
         &entry,
         &ImportResolver {
             lib_dirs: vec![
-                std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("lib/universal"),
+                super::test_support::library().join("universal"),
             ],
         },
     )
@@ -215,7 +215,7 @@ fn constant_integer_narrowing_reports_out_of_range() {
             &entry,
             &ImportResolver {
                 lib_dirs: vec![
-                    std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("lib/universal"),
+                    super::test_support::library().join("universal"),
                 ],
             },
         )
@@ -250,7 +250,7 @@ fn array_initializers_allow_missing_elements_and_reject_braces_and_excess() {
             &entry,
             &ImportResolver {
                 lib_dirs: vec![
-                    std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("lib/universal"),
+                    super::test_support::library().join("universal"),
                 ],
             },
         )
@@ -284,7 +284,7 @@ fn local_generic_instance_is_defined_only_in_supplement() {
         &entry,
         &ImportResolver {
             lib_dirs: vec![
-                std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("lib/universal"),
+                super::test_support::library().join("universal"),
             ],
         },
     )

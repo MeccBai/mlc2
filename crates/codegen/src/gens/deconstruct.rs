@@ -121,9 +121,17 @@ impl IrGenerator {
         code.push(Instruction::Return { value: None });
         self.add_resources(&[], &["free".into()]);
         // pub 不等于 export；合并同一具体类型在不同 OBJ 中的内部生成实现。
+        let name = IrValue::Global(body.name.clone()).to_string();
+        let comdat = if self.coff {
+            // COFF requires an explicit COMDAT group to merge ODR definitions.
+            let group = format!("${}", &name[1..]);
+            self.header.push_str(&format!("{group} = comdat any\n"));
+            format!(" comdat({group})")
+        } else {
+            String::new()
+        };
         self.bodys.push_str(&format!(
-            "define linkonce_odr void {}(ptr %r0) {{\nentry:\n",
-            IrValue::Global(body.name.clone())
+            "define linkonce_odr void {name}(ptr %r0){comdat} {{\nentry:\n"
         ));
         InstructionBuffer { instructions: code }
             .write_to(&mut self.bodys)

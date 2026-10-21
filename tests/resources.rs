@@ -1,4 +1,5 @@
 #![cfg(windows)]
+mod support;
 use mlc_builder::{
     llvm::IrCompiler,
     manifest::{DEFAULT_WINDOWS_LINKER, X86_64_PC_WINDOWS_GNU},
@@ -7,7 +8,7 @@ use std::{fs, process::Command};
 #[test]
 fn resource_errors_are_reported_before_generation() {
     let root = tempfile::tempdir().unwrap();
-    let lib = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("lib");
+    let lib = support::library();
     for (body, message) in [
         ("var p = std::mem::alloc<i32>(1);", "explicit res owner"),
         (
@@ -91,7 +92,7 @@ func main() -> i32 {
 }
 "#;
     fs::write(root.path().join("main.m2"), source).unwrap();
-    let lib = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("lib");
+    let lib = support::library();
     let compile = Command::new(env!("CARGO_BIN_EXE_mlc"))
         .current_dir(root.path())
         .args(["ll", "main.m2", "--lib-dir"])

@@ -19,11 +19,11 @@ pub const X86_64_PC_WINDOWS_GNU: &str = "x86_64-pc-windows-gnu";
 pub const DEFAULT_WINDOWS_LINKER: &str = "x86_64-w64-mingw32-clang";
 
 /// The compiler executable's platform, not the machine running Cargo.
-/// Preserve architecture and Linux libc; Windows defaults to the GNU ABI.
+/// Preserve architecture and Linux libc; Windows defaults to the MSVC ABI.
 pub fn system_triplet(target: &str) -> String {
     if target.contains("-windows-") {
         format!(
-            "{}-pc-windows-gnu",
+            "{}-pc-windows-msvc",
             target.split('-').next().unwrap_or("x86_64")
         )
     } else {
@@ -49,9 +49,9 @@ mod tests {
     #[test]
     fn system_defaults_preserve_architecture_and_platform() {
         for (input, expected) in [
-            ("x86_64-pc-windows-msvc", "x86_64-pc-windows-gnu"),
-            ("aarch64-pc-windows-msvc", "aarch64-pc-windows-gnu"),
-            ("x86_64-pc-windows-gnu", "x86_64-pc-windows-gnu"),
+            ("x86_64-pc-windows-msvc", "x86_64-pc-windows-msvc"),
+            ("aarch64-pc-windows-msvc", "aarch64-pc-windows-msvc"),
+            ("x86_64-pc-windows-gnu", "x86_64-pc-windows-msvc"),
             ("x86_64-unknown-linux-gnu", "x86_64-unknown-linux-gnu"),
             ("aarch64-unknown-linux-musl", "aarch64-unknown-linux-musl"),
             ("x86_64-apple-darwin", "x86_64-apple-darwin"),

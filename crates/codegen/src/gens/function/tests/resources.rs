@@ -8,6 +8,13 @@ fn generated_unit_destructors_are_recursive_public_and_emitted_once() {
     );
     assert_eq!(ir.matches("define linkonce_odr void").count(), 2);
     assert!(ir.contains("Outer::deconstruct"));
+    assert!(ir.contains(" = comdat any"));
+    for definition in ir.lines().filter(|line| line.starts_with("define linkonce_odr void ")) {
+        let name = definition.strip_prefix("define linkonce_odr void ").unwrap().split("(ptr").next().unwrap();
+        let group = format!("${}", &name[1..]);
+        assert!(definition.contains(&format!(" comdat({group})")), "{definition}");
+        assert!(ir.contains(&format!("{group} = comdat any")));
+    }
     assert!(ir.contains("Inner::deconstruct"));
     assert!(ir.contains("zeroinitializer"));
     assert!(ir.contains("call void @\"free\""));

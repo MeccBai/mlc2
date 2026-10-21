@@ -1,4 +1,5 @@
 #![cfg(windows)]
+mod support;
 use mlc_builder::{
     llvm::IrCompiler,
     manifest::{DEFAULT_WINDOWS_LINKER, X86_64_PC_WINDOWS_GNU},
@@ -48,7 +49,7 @@ func main()->i32 {
 }
 "#;
     fs::write(root.path().join("main.m2"), source).unwrap();
-    let lib = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("lib");
+    let lib = support::library();
     let build = Command::new(env!("CARGO_BIN_EXE_mlc"))
         .current_dir(root.path())
         .args(["ll", "main.m2", "--lib-dir"])

@@ -40,11 +40,7 @@ pub fn runtime_identity(triplet: &str) -> Result<Vec<(PathBuf, String)>, String>
         .ok_or("Compiler has no parent")?
         .join(mlc_builder::manifest::RUNTIMES_DIR)
         .join(triplet);
-    let mut files = std::fs::read_dir(&root)
-        .map_err(|e| format!("{}: {e}", root.display()))?
-        .map(|entry| entry.map(|entry| entry.path()))
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|e| e.to_string())?;
+    let mut files = targets::profile(triplet)?.runtime_files(&root)?;
     files.sort();
     files
         .into_iter()

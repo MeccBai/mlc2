@@ -1,17 +1,19 @@
 #![cfg(windows)]
 
+mod support;
 use mlc_builder::{
     llvm::IrCompiler,
     manifest::{DEFAULT_WINDOWS_LINKER, X86_64_PC_WINDOWS_GNU},
 };
-use std::{fs, path::Path, process::Command};
+use std::path::Path;
+use std::{fs, process::Command};
 
 fn compile(source: &str, root: &Path) -> std::process::Output {
     fs::write(root.join("main.m2"), source).unwrap();
     Command::new(env!("CARGO_BIN_EXE_mlc"))
         .current_dir(root)
         .args(["ll", "main.m2", "--lib-dir"])
-        .arg(Path::new(env!("CARGO_MANIFEST_DIR")).join("lib"))
+        .arg(support::library())
         .output()
         .unwrap()
 }

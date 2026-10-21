@@ -11,9 +11,8 @@ fn all_bundled_examples_build_and_run() {
         std::fs::write(&entry, example.source).unwrap();
         let resolver = ImportResolver {
             lib_dirs: vec![
-                std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-                    .join("lib/x86_64-pc-windows-gnu"),
-                std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("lib/universal"),
+                super::test_support::library().join("x86_64-pc-windows-gnu"),
+                super::test_support::library().join("universal"),
             ],
         };
         let plan = BuildPlan::discover(&entry, &resolver).unwrap();

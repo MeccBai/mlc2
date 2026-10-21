@@ -46,3 +46,26 @@ pwsh -NoProfile -File scripts/copy_to.ps1 -Profile debug -Destination out/MLC `
 脚本可以更新既有目录，但不会删除其中的旧文件。建议版本分发使用空目录，
 以免旧 lib 中遗留的源码优先于新的 objects。LLVM-C.dll 若不在构建输出旁，
 需要自行提供；它不是目标运行库，不能仅移动到 runtimes 后期待 Windows 自动加载。
+
+## Windows linker profiles
+
+Windows 默认目标为 `x86_64-pc-windows-msvc`。`src/driver/link/targets.rs`
+按 triplet 选择工具和参数，未配置的目标会明确报错。
+
+| Triplet | Linker | Runtime libraries |
+| --- | --- | --- |
+| x86_64-pc-windows-msvc | tools/lld-link.exe | runtimes/x86_64-pc-windows-msvc/*.lib |
+| x86_64-pc-windows-gnu | tools/ld.lld.exe | runtimes/x86_64-pc-windows-gnu 的 CRT 对象和 .a |
+
+MSVC 配置使用 msvcrt.lib、vcruntime.lib、ucrt.lib、kernel32.lib、
+legacy_stdio_definitions.lib 和 oldnames.lib；EXE 注入 /subsystem:console，DLL 注入 /dll。
+完整的随包运行库优先使用，不依赖系统 SDK。缺库时可从开发环境 LIB、
+VCToolsInstallDir、vswhere 发现的 Build Tools 和 Windows SDK 查找。
+System32 中的 DLL 是运行时实现，不作为 .lib 链接输入。
+
+完整链接验证：
+
+```powershell
+cargo test --test msvc_cli -- --include-ignored
+cargo test --test stdlib_cli -- --include-ignored
+```

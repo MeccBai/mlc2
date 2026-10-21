@@ -1,3 +1,4 @@
+mod support;
 use std::{fs, process::Command};
 
 /// Every standalone language example must still pass the real CLI frontend
@@ -5,7 +6,7 @@ use std::{fs, process::Command};
 #[test]
 fn standalone_language_documentation_examples_compile() {
     let document = include_str!("../docs/language.md");
-    let lib = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("lib");
+    let lib = support::library();
     let mut example = None;
     let mut examples = Vec::new();
     for line in document.lines() {
