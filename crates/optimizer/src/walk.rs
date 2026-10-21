@@ -7,20 +7,20 @@ use std::rc::Rc;
 
 pub(crate) fn expression(value: &mut Expression, visit: &mut impl FnMut(&mut Expression)) {
     match value {
-        Expression::CompositeE(composite) => {
+        Expression::CompositeE(composite, ..) => {
             for atom in &mut composite.members {
                 atom_expression(atom, visit);
             }
         }
-        Expression::UnaryExprE(UnaryExpr::Operator { value, .. }) => atom_expression(value, visit),
-        Expression::UnaryExprE(UnaryExpr::Access(Access::Member { base, .. })) => {
+        Expression::UnaryExprE(UnaryExpr::Operator { value, .. }, ..) => atom_expression(value, visit),
+        Expression::UnaryExprE(UnaryExpr::Access(Access::Member { base, .. }), ..) => {
             atom_expression(base, visit)
         }
-        Expression::UnaryExprE(UnaryExpr::Access(Access::Index { base, index })) => {
+        Expression::UnaryExprE(UnaryExpr::Access(Access::Index { base, index }), ..) => {
             expression(base, visit);
             expression(index, visit);
         }
-        Expression::FuncCallE(call) => {
+        Expression::FuncCallE(call, ..) => {
             if let Some(callee) = &mut call.callee {
                 expression(callee, visit);
             }
@@ -30,7 +30,7 @@ pub(crate) fn expression(value: &mut Expression, visit: &mut impl FnMut(&mut Exp
         }
         Expression::InitListE(
             InitialList::List { values, .. } | InitialList::Array { values, .. },
-        ) => {
+         ..) => {
             for value in values {
                 expression(value, visit);
             }
@@ -45,7 +45,7 @@ fn atom_expression(atom: &mut CompAtom, visit: &mut impl FnMut(&mut Expression))
     expression(&mut value, visit);
     // Aggregate constants cannot occupy scalar atom slots. Keep their binding,
     // especially when it supplies storage for a borrowed native str.
-    if !matches!(value, Expression::InitListE(_)) {
+    if !matches!(value, Expression::InitListE(_, ..)) {
         *atom = CompAtom::from_expr(value);
     }
 }
@@ -61,7 +61,7 @@ pub(crate) fn expressions(scope: &mut [Statement], visit: &mut impl FnMut(&mut E
         }
         Statement::Expression(value) => expression(value, visit),
         Statement::FuncCall(call) => {
-            let mut value = Expression::FuncCallE(call.clone());
+            let mut value = Expression::FuncCallE(call.clone(), (0..0).into());
             expression(&mut value, visit);
             *statement = Statement::Expression(value);
         }

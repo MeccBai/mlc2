@@ -117,17 +117,17 @@ fn numeric_loop_counter_identity_survives_ast_build() {
     let Statement::VariableDecl(counter) = block.init.as_deref().unwrap() else {
         panic!("counter expected");
     };
-    let Expression::CompositeE(condition) = &*block.condition else {
+    let Expression::CompositeE(condition, ..) = &*block.condition else {
         panic!("comparison expected");
     };
-    let CompAtom::VarValueA(condition_counter) = &condition.members[0] else {
+    let CompAtom::VarValueA(condition_counter, ..) = &condition.members[0] else {
         panic!("counter use expected");
     };
     assert!(Rc::ptr_eq(counter, condition_counter));
     let Statement::VariableDecl(local) = &block.stmts[0] else {
         panic!("local expected");
     };
-    let Expression::VarValueE(body_counter) = &*local.init_val else {
+    let Expression::VarValueE(body_counter, ..) = &*local.init_val else {
         panic!("counter use expected");
     };
     assert!(Rc::ptr_eq(counter, body_counter));

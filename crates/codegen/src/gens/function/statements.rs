@@ -17,6 +17,7 @@ impl FunctionGenerator<'_> {
 
     fn statement(&mut self, statement: &Statement) {
         match statement {
+            Statement::SourcePosition(span) => self.code.push(Instruction::Location { span: *span, step_into: true }),
             Statement::VariantMatch(statement) => self.variant_match(statement),
             Statement::Poison => fail("Poison statement reached function generation"),
             Statement::VariableDecl(variable) => {
@@ -49,7 +50,7 @@ impl FunctionGenerator<'_> {
                 self.expression(expression);
             }
             Statement::FuncCall(call) => {
-                self.expression(&Expression::FuncCallE(call.clone()));
+                self.expression(&Expression::FuncCallE(call.clone(), (0..0).into()));
             }
             Statement::ReturnBlock(ReturnStatement { value }) => {
                 match (self.return_slot.clone(), value) {

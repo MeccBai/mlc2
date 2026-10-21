@@ -48,6 +48,7 @@ fn plain_function_call_resolves_symbol_arguments_and_return_type() {
     let index = symbols.functions.insert(
         "identity".into(),
         FuncSymbol {
+            span: (0..0).into(),
             name: "identity".into(),
             params: vec![(i32_type, "value".into())],
             ret_type: Some(i32_type),
@@ -69,7 +70,8 @@ fn plain_function_call_resolves_symbol_arguments_and_return_type() {
             callee: None,
             func: EnumBool::False(actual),
             args,
-        }) if *actual == index && args.len() == 1
+            ..
+        }, ..) if *actual == index && args.len() == 1
     ));
     assert_eq!(
         expression.type_inference(&mut config, &mut symbols),
@@ -87,6 +89,7 @@ fn regular_function_wins_over_generic_candidate_without_argument_fallback() {
         let span = (0..8).into();
         let i32_type = symbols.get_base(DataType::Integer, 32, true);
         let symbol = FuncSymbol {
+            span: (0..0).into(),
             name: "choose".into(),
             params: vec![(i32_type, "x".into())],
             ret_type: Some(i32_type),
@@ -115,7 +118,7 @@ fn regular_function_wins_over_generic_candidate_without_argument_fallback() {
         if valid_argument {
             assert!(matches!(expression, Expression::FuncCallE(FuncCall {
                 func: EnumBool::False(index), ..
-            }) if index == normal));
+            }, ..) if index == normal));
             assert!(!config.is_poisoned());
         } else {
             assert!(config.is_poisoned());
@@ -151,6 +154,7 @@ fn member_call_resolves_interface_and_prepends_owner() {
     let index = symbols.interfaces.insert(
         "Point::get".into(),
         InterfaceSymbol {
+            span: (0..0).into(),
             public: true,
             has_self: true,
             mutable: false,
@@ -183,8 +187,9 @@ fn member_call_resolves_interface_and_prepends_owner() {
             callee: None,
             func: EnumBool::True(actual),
             args,
-        }) if *actual == index && args.len() == 2
-            && matches!(&args[0], Expression::UnaryExprE(crate::ast::expression::UnaryExpr::Operator { op: crate::ast::expression::Operator::AddressOf, .. }))
+            ..
+        }, ..) if *actual == index && args.len() == 2
+            && matches!(&args[0], Expression::UnaryExprE(crate::ast::expression::UnaryExpr::Operator { op: crate::ast::expression::Operator::AddressOf, .. }, ..))
     ));
     assert_eq!(
         expression.type_inference(&mut config, &mut symbols),

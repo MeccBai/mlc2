@@ -33,19 +33,19 @@ impl ResourceState {
 
     fn owner_names(&self, expression: &Expression) -> HashSet<String> {
         match expression {
-            Expression::VarValueE(variable) => self
+            Expression::VarValueE(variable, ..) => self
                 .borrows
                 .get(&variable.name)
                 .cloned()
                 .unwrap_or_else(|| HashSet::from([variable.name.clone()])),
-            Expression::UnaryExprE(UnaryExpr::Access(Access::Index { base, .. })) => {
+            Expression::UnaryExprE(UnaryExpr::Access(Access::Index { base, .. }), ..) => {
                 self.owner_names(base)
             }
-            Expression::UnaryExprE(UnaryExpr::Access(Access::Member { base, .. }))
-            | Expression::UnaryExprE(UnaryExpr::Operator { value: base, .. }) => {
+            Expression::UnaryExprE(UnaryExpr::Access(Access::Member { base, .. }), ..)
+            | Expression::UnaryExprE(UnaryExpr::Operator { value: base, .. }, ..) => {
                 self.owner_names(&base.clone().to_expression())
             }
-            Expression::FuncCallE(call) => call
+            Expression::FuncCallE(call, ..) => call
                 .args
                 .iter()
                 .flat_map(|argument| self.owner_names(argument))
@@ -119,7 +119,7 @@ impl ResourceState {
                         return;
                     }
                 }
-                if let Expression::VarValueE(target) = &*assign.variable {
+                if let Expression::VarValueE(target, ..) = &*assign.variable {
                     if self
                         .borrows
                         .values()
@@ -138,7 +138,7 @@ impl ResourceState {
                 if ty.has_res(symbols) {
                     // Replacing an owned field does not move it out: codegen drops the
                     // previous value before storing the independently owned replacement.
-                    if matches!(&*assign.variable, Expression::UnaryExprE(UnaryExpr::Access(Access::Member { .. }))) {
+                    if matches!(&*assign.variable, Expression::UnaryExprE(UnaryExpr::Access(Access::Member { .. }), ..)) {
                         let owners = self.owner_names(&assign.variable);
                         if self.borrows.values().any(|borrowed| !borrowed.is_disjoint(&owners)) {
                             Self::error(config, IllegalUseError::UnsupportedResourceOperation, span);
@@ -152,7 +152,7 @@ impl ResourceState {
                         self.expression(&assign.value, Some(ty), config, symbols, span);
                         return;
                     }
-                    let Expression::VarValueE(target) = &*assign.variable else {
+                    let Expression::VarValueE(target, ..) = &*assign.variable else {
                         Self::error(config, IllegalUseError::UnsupportedResourceOperation, span);
                         return;
                     };
@@ -188,13 +188,13 @@ impl ResourceState {
             }
             Statement::Expression(expr) => {
                 let ty = expr.type_inference(config, symbols);
-                if ty.has_res(symbols) && !matches!(expr, Expression::VarValueE(_)) {
+                if ty.has_res(symbols) && !matches!(expr, Expression::VarValueE(_, ..)) {
                     Self::error(config, IllegalUseError::ResourceRequiresOwner, span);
                 }
                 self.expression(expr, None, config, symbols, span);
             }
             Statement::FuncCall(call) => self.expression(
-                &Expression::FuncCallE(call.clone()),
+                &Expression::FuncCallE(call.clone(), (0..0).into()),
                 None,
                 config,
                 symbols,
@@ -291,12 +291,12 @@ impl ResourceState {
             return;
         }
         let transfer = expected.is_some_and(|ty| ty.has_res(symbols));
-        if transfer && matches!(expr, Expression::UnaryExprE(_) | Expression::CompositeE(_)) {
+        if transfer && matches!(expr, Expression::UnaryExprE(_, ..) | Expression::CompositeE(_, ..)) {
             Self::error(config, IllegalUseError::UnsupportedResourceOperation, span);
             return;
         }
         match expr {
-            Expression::VarValueE(variable) => {
+            Expression::VarValueE(variable, ..) => {
                 let names = self.owner_names(expr);
                 if let Some(name) = names.iter().find(|name| self.moved.contains(*name)) {
                     Self::error(
@@ -329,7 +329,7 @@ impl ResourceState {
                     }
                 }
             }
-            Expression::FuncCallE(call) => {
+            Expression::FuncCallE(call, ..) => {
                 if let Some(callee) = &call.callee {
                     self.expression(callee, None, config, symbols, span);
                 }
@@ -383,12 +383,12 @@ impl ResourceState {
                     Self::error(config, IllegalUseError::ResourceRequiresOwner, span);
                 }
             }
-            Expression::CompositeE(composite) => {
+            Expression::CompositeE(composite, ..) => {
                 for atom in &composite.members {
                     self.expression(&atom.clone().to_expression(), None, config, symbols, span);
                 }
             }
-            Expression::UnaryExprE(UnaryExpr::Operator { op, value }) => {
+            Expression::UnaryExprE(UnaryExpr::Operator { op, value }, ..) => {
                 if matches!(
                     op,
                     crate::ast::expression::operators::Operator::AddressOf
@@ -404,14 +404,14 @@ impl ResourceState {
                 }
                 self.expression(&value.clone().to_expression(), None, config, symbols, span)
             }
-            Expression::UnaryExprE(UnaryExpr::Access(Access::Index { base, index })) => {
+            Expression::UnaryExprE(UnaryExpr::Access(Access::Index { base, index }), ..) => {
                 self.expression(base, None, config, symbols, span);
                 self.expression(index, None, config, symbols, span);
             }
-            Expression::UnaryExprE(UnaryExpr::Access(Access::Member { base, .. })) => {
+            Expression::UnaryExprE(UnaryExpr::Access(Access::Member { base, .. }), ..) => {
                 self.expression(&base.clone().to_expression(), None, config, symbols, span)
             }
-            Expression::InitListE(list) => {
+            Expression::InitListE(list, ..) => {
                 let (owner, values) = match list {
                     InitialList::Array { ty, values } => (Some(*ty), values),
                     InitialList::List { onwer, values } => (onwer.or(expected), values),

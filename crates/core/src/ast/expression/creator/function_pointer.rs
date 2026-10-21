@@ -25,7 +25,7 @@ impl Expression {
         };
         let owner = Self::new(config, (**base).clone(), symbols, context);
         if config.is_poisoned() {
-            return Self::Poison;
+            return Self::Poison(span);
         }
         let mut ty = owner.type_inference(config, symbols);
         if *indirect && !ty.is_empty() && ty.is_ref(symbols) {
@@ -53,14 +53,14 @@ impl Expression {
                 CompileError::IllegalUse(IllegalUseError::ArgumentCountMismatch),
                 span,
             );
-            return Self::Poison;
+            return Self::Poison(span);
         }
         let (TempExpr::Path(path), arg_span) = args.remove(0) else {
             config.submit_error(
                 CompileError::IllegalUse(IllegalUseError::SymbolNotCallable),
                 span,
             );
-            return Self::Poison;
+            return Self::Poison(span);
         };
         let Some(PathSymbol::Function { mut index, generic }) =
             symbols.resolve_path(config, &path, context)
@@ -69,7 +69,7 @@ impl Expression {
                 CompileError::IllegalUse(IllegalUseError::SymbolNotCallable),
                 arg_span,
             );
-            return Self::Poison;
+            return Self::Poison(span);
         };
         let symbol = symbols.get_function(index, generic).clone();
         if symbol.builtin().is_some() {
@@ -77,14 +77,14 @@ impl Expression {
                 CompileError::IllegalUse(IllegalUseError::UnsupportedSymbolValue),
                 arg_span,
             );
-            return Self::Poison;
+            return Self::Poison(span);
         }
         if symbol.generics.len() != generics.len() {
             config.submit_error(
                 CompileError::IllegalUse(IllegalUseError::GenericCountMismatch),
                 span,
             );
-            return Self::Poison;
+            return Self::Poison(span);
         }
         if generic {
             let types = generics
@@ -99,14 +99,14 @@ impl Expression {
                 })
                 .collect::<Option<Vec<_>>>();
             let Some(types) = types else {
-                return Self::Poison;
+                return Self::Poison(span);
             };
             if types.iter().any(|ty| ty.is_generic(symbols)) {
                 config.submit_error(
                     CompileError::IllegalUse(IllegalUseError::UnsupportedGenericCall),
                     span,
                 );
-                return Self::Poison;
+                return Self::Poison(span);
             }
             let bindings = symbol
                 .generics
@@ -122,7 +122,7 @@ impl Expression {
                 span,
             );
             if config.is_poisoned() {
-                return Self::Poison;
+                return Self::Poison(span);
             }
         }
         let signature = FunctionType::new(index, symbols.get_function_regular(index));
@@ -134,7 +134,7 @@ impl Expression {
         Self::UnaryExprE(UnaryExpr::Function {
             function: index,
             ty,
-        })
+        }, span)
     }
 
     pub(super) fn new_indirect_call(
@@ -146,7 +146,7 @@ impl Expression {
         context: Option<&StatementContext>,
     ) -> Self {
         if callee.is_poisoned() {
-            return Self::Poison;
+            return Self::Poison(span);
         }
         let ty = callee.type_inference(config, symbols);
         let Some(signature) = (!ty.is_empty())
@@ -160,7 +160,7 @@ impl Expression {
                 CompileError::IllegalUse(IllegalUseError::SymbolNotCallable),
                 span,
             );
-            return Self::Poison;
+            return Self::Poison(span);
         };
         let args = args
             .into_iter()
@@ -169,13 +169,14 @@ impl Expression {
         let parameters=symbols.get_function_regular(signature).params.clone();
         let args=Self::coerce_arguments(args,&parameters,config,symbols,span);
         if !Self::check_function_args(config, signature, &args, symbols, span) {
-            return Self::Poison;
+            return Self::Poison(span);
         }
         Self::FuncCallE(FuncCall {
+            pipeline: false,
             callee: Some(Box::new(callee)),
             func: EnumBool::False(signature),
             args,
-        })
+        }, span)
     }
 
     pub(super) fn is_function_builtin(path: &TempPath) -> bool {

@@ -13,8 +13,9 @@ impl Expression {
         target: TypeIndex,
         config: &mut Config,
         symbols: &mut dyn Resolution,
-        span: Span,
+        _span: Span,
     ) -> Self {
+        let source_span = self.span();
         if target.is_empty() {
             return self;
         }
@@ -29,7 +30,7 @@ impl Expression {
             return self;
         }
         let value = self.const_fold(config, symbols);
-        let Self::InitListE(InitialList::String { value: text }) = &value else {
+        let Self::InitListE(InitialList::String { value: text }, ..) = &value else {
             return value;
         };
         let value = text;
@@ -57,12 +58,12 @@ impl Expression {
                     kind: TempLiteralKind::String,
                     text: literal,
                 },
-                span,
+                source_span,
             )],
-            span,
+            source_span,
             symbols,
             None,
-        );
+        ).with_span(source_span);
         Self::InitListE(InitialList::List {
             onwer: Some(target),
             values: vec![
@@ -70,9 +71,9 @@ impl Expression {
                 Self::ConstValueE(ConstValue {
                     value: length.to_string(),
                     ty: fields[1],
-                }),
+                }, source_span),
             ],
-        })
+        }, source_span)
     }
     pub(crate) fn coerce_arguments(
         args: Vec<Self>,

@@ -86,11 +86,11 @@ fn evaluate(
     package: &PackageSymbolTable,
     binding: Option<(&Variable, Scalar)>,
 ) -> Option<Scalar> {
-    if matches!(expression, Expression::ConstValueE(constant) if constant.ty.is_empty()) {
+    if matches!(expression, Expression::ConstValueE(constant, ..) if constant.ty.is_empty()) {
         return None;
     }
     match expression {
-        Expression::ConstValueE(constant) => match package.get_type(constant.ty).unqualified() {
+        Expression::ConstValueE(constant, ..) => match package.get_type(constant.ty).unqualified() {
             CompileType::Base(base) => match base.data_type() {
                 DataType::Integer => integer(constant.value.parse().ok()?, constant.ty, package),
                 DataType::Float => {
@@ -118,7 +118,7 @@ fn evaluate(
             }
             _ => None,
         },
-        Expression::VarValueE(variable) => {
+        Expression::VarValueE(variable, ..) => {
             if let Some((target, initial)) = binding {
                 if variable.name == target.name
                     && variable.var_type == target.var_type
@@ -131,8 +131,8 @@ fn evaluate(
                 .then(|| evaluate(&variable.init_val, package, binding))
                 .flatten()
         }
-        Expression::CompositeE(composite) => composite_value(composite, package, binding),
-        Expression::UnaryExprE(UnaryExpr::Operator { op, value }) => {
+        Expression::CompositeE(composite, ..) => composite_value(composite, package, binding),
+        Expression::UnaryExprE(UnaryExpr::Operator { op, value }, ..) => {
             let value = atom(value, package, binding)?;
             match (op, value) {
                 (Operator::LogicalNot, Scalar::Bool(value)) => Some(Scalar::Bool(!value)),
@@ -143,7 +143,7 @@ fn evaluate(
                 _ => None,
             }
         }
-        Expression::FuncCallE(call) => {
+        Expression::FuncCallE(call, ..) => {
             let EnumBool::False(index) = call.func else {
                 return None;
             };

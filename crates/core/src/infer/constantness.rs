@@ -8,31 +8,31 @@ use crate::ast::{
 impl TypeInfer<'_> {
     pub(crate) fn atom_is_constant(expression: &CompAtom, symbols: &dyn Resolution) -> bool {
         match expression {
-            CompAtom::ConstValueA(_) => true,
-            CompAtom::CompositeA(composite) => composite
+            CompAtom::ConstValueA(_, ..) => true,
+            CompAtom::CompositeA(composite, ..) => composite
                 .members
                 .iter()
                 .all(|member| member.is_const(symbols)),
-            CompAtom::FuncCallA(call) => call.is_const(symbols),
-            CompAtom::VarValueA(var) => var.var_type.value_type(symbols) == ValueType::Constant,
-            CompAtom::UnaryExprA(unary) => unary.is_const(symbols),
+            CompAtom::FuncCallA(call, ..) => call.is_const(symbols),
+            CompAtom::VarValueA(var, ..) => var.var_type.value_type(symbols) == ValueType::Constant,
+            CompAtom::UnaryExprA(unary, ..) => unary.is_const(symbols),
             _ => false,
         }
     }
     pub fn is_constant(expression: &Expression, symbols: &dyn Resolution) -> bool {
         match expression {
-            Expression::ConstValueE(_) => true,
-            Expression::CompositeE(composite) => composite
+            Expression::ConstValueE(_, ..) => true,
+            Expression::CompositeE(composite, ..) => composite
                 .members
                 .iter()
                 .all(|member| member.is_const(symbols)),
-            Expression::UnaryExprE(unary) => unary.is_const(symbols),
-            Expression::VarValueE(var) => var.var_type.value_type(symbols) == ValueType::Constant,
+            Expression::UnaryExprE(unary, ..) => unary.is_const(symbols),
+            Expression::VarValueE(var, ..) => var.var_type.value_type(symbols) == ValueType::Constant,
             Expression::InitListE(
                 InitialList::Array { values, .. } | InitialList::List { values, .. },
-            ) => values.iter().all(|value| value.is_const(symbols)),
-            Expression::InitListE(InitialList::String { .. }) => true,
-            Expression::FuncCallE(call) => call.is_const(symbols),
+             ..) => values.iter().all(|value| value.is_const(symbols)),
+            Expression::InitListE(InitialList::String { .. }, ..) => true,
+            Expression::FuncCallE(call, ..) => call.is_const(symbols),
             _ => false,
         }
     }

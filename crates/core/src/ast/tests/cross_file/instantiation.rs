@@ -329,7 +329,7 @@ fn foreign_recursive_function_reuses_active_owner_instance() {
     let Statement::ReturnBlock(ret) = &instance.body[0] else {
         panic!("return expected")
     };
-    let Some(Expression::FuncCallE(call)) = &ret.value else {
+    let Some(Expression::FuncCallE(call, ..)) = &ret.value else {
         panic!("call expected")
     };
     assert_eq!(call.func, crate::ast::EnumBool::False(instance.symbol));
@@ -366,4 +366,22 @@ fn foreign_recursive_unit_and_symbolic_arguments_keep_template_identity() {
     };
     assert_eq!(reference.base, node);
     assert!(node.size(&package) >= 12);
+}
+
+#[test]
+fn foreign_generic_spans_belong_to_the_definition_file() {
+    let source = "// 定义所在文件\n\nexport func<T> id(x:T)->T{return x;}";
+    let mut package = PackageSymbolTable::new();
+    let mut owner = ast(1, "owner", source);
+    publish(&mut package, &mut owner);
+    package.set_imports(FileId::new(2), [FileId::new(1)]);
+    let mut caller = ast(2, "caller", "func main(){var value=owner::id(1);}");
+    analyze(&mut package, &mut caller);
+    let file = package.file(FileId::new(1)).unwrap();
+    let instance = file.function_instances.values().next().unwrap();
+    assert_eq!(instance.symbol.file_id(), FileId::new(1));
+    assert_eq!(&source[instance.span.into_range()], "export func<T> id(x:T)->T{return x;}");
+    assert_eq!(file.functions.get(instance.symbol).span, instance.span);
+    let crate::ast::statement::Statement::ReturnBlock(returned) = &instance.body[0] else { panic!() };
+    assert_eq!(&source[returned.value.as_ref().unwrap().span().into_range()], "x");
 }

@@ -29,6 +29,7 @@ struct Lowered {
 }
 
 struct Expander<'a> {
+    current_span: mlc_core::parser::out::Span,
     next: usize,
     symbols: &'a PackageSymbolTable,
     bindings: &'a ExpressionBindings,
@@ -41,6 +42,7 @@ impl IrGenerator {
     ) -> Option<TypeIndex> {
         let bindings = ExpressionBindings::new();
         Expander {
+            current_span: (0..0).into(),
             next: 0,
             symbols,
             bindings: &bindings,
@@ -65,6 +67,7 @@ impl IrGenerator {
         expected: Option<TypeIndex>,
     ) -> (usize, LlvmValue) {
         let mut expander = Expander {
+            current_span: (0..0).into(),
             next: start_reg,
             symbols,
             bindings,
@@ -77,7 +80,7 @@ impl IrGenerator {
 impl Expander<'_> {
     fn expression_expected(&mut self, expr: &Expression, expected: Option<TypeIndex>) -> Lowered {
         if expected.is_some_and(|ty| ty.has_res(self.symbols)) {
-            if let Expression::VarValueE(variable) = expr {
+            if let Expression::VarValueE(variable, ..) = expr {
                 let mut value = self.expression(expr);
                 let pointer = self.load(&mut value.value);
                 let slot = self
@@ -102,7 +105,7 @@ impl Expander<'_> {
                 return value;
             }
         }
-        if let Expression::InitListE(list) = expr {
+        if let Expression::InitListE(list, ..) = expr {
             self.initializer_expected(list, expected)
         } else if let Some(target) = expected {
             self.expression(&expr.clone().normalize_initializer(target, self.symbols))
@@ -124,10 +127,18 @@ impl Expander<'_> {
     }
 
     fn expression(&mut self, expr: &Expression) -> Lowered {
+        let previous = self.current_span;
+        self.current_span = expr.span();
+        let result = self.expression_inner(expr);
+        self.current_span = previous;
+        result
+    }
+
+    fn expression_inner(&mut self, expr: &Expression) -> Lowered {
         match expr {
-            Expression::Poison => fail("Poisoned AST reached expression lowering"),
-            Expression::ConstValueE(value) => self.constant(value),
-            Expression::VarValueE(var) => {
+            Expression::Poison(..) => fail("Poisoned AST reached expression lowering"),
+            Expression::ConstValueE(value, ..) => self.constant(value),
+            Expression::VarValueE(var, ..) => {
                 if self.symbols.global_owner(var).is_some() {
                     let ty = IrGenerator::type_lowering(var.var_type, self.symbols);
                     let target = self.allocate();
@@ -169,11 +180,11 @@ impl Expander<'_> {
                     },
                 }
             }
-            Expression::CompositeE(c) => self.composite(c),
-            Expression::FuncCallE(call) => self.call(call),
-            Expression::UnaryExprE(UnaryExpr::Operator { op, value }) => self.unary(op, value),
-            Expression::UnaryExprE(UnaryExpr::Access(access)) => self.access(access),
-            Expression::UnaryExprE(UnaryExpr::Function { function, .. }) => {
+            Expression::CompositeE(c, ..) => self.composite(c),
+            Expression::FuncCallE(call, ..) => self.call(call),
+            Expression::UnaryExprE(UnaryExpr::Operator { op, value }, ..) => self.unary(op, value),
+            Expression::UnaryExprE(UnaryExpr::Access(access), ..) => self.access(access),
+            Expression::UnaryExprE(UnaryExpr::Function { function, .. }, ..) => {
                 use super::func::SymbolIr;
                 let func = self
                     .symbols
@@ -194,21 +205,24 @@ impl Expander<'_> {
                     },
                 }
             }
-            Expression::InitListE(list) => self.initializer(list),
+            Expression::InitListE(list, ..) => self.initializer(list),
         }
     }
 
     fn atom(&mut self, atom: &CompAtom) -> Lowered {
         match atom {
-            CompAtom::Poison => fail("Poisoned AST reached expression lowering"),
-            CompAtom::ConstValueA(v) => self.constant(v),
-            CompAtom::CompositeA(c) => self.composite(c),
-            CompAtom::FuncCallA(c) => self.call(c),
-            CompAtom::VarValueA(v) => self.expression(&Expression::VarValueE(v.clone())),
-            CompAtom::UnaryExprA(UnaryExpr::Operator { op, value }) => self.unary(op, value),
-            CompAtom::UnaryExprA(UnaryExpr::Access(access)) => self.access(access),
-            CompAtom::UnaryExprA(function @ UnaryExpr::Function { .. }) => {
-                self.expression(&Expression::UnaryExprE(function.clone()))
+            CompAtom::Poison(..) => fail("Poisoned AST reached expression lowering"),
+            CompAtom::ConstValueA(v, ..) => self.constant(v),
+            CompAtom::CompositeA(c, ..) => self.composite(c),
+            CompAtom::FuncCallA(c, span) => {
+                let previous = self.current_span; self.current_span = *span;
+                let result = self.call(c); self.current_span = previous; result
+            },
+            CompAtom::VarValueA(v, span) => self.expression(&Expression::VarValueE(v.clone(), *span)),
+            CompAtom::UnaryExprA(UnaryExpr::Operator { op, value }, ..) => self.unary(op, value),
+            CompAtom::UnaryExprA(UnaryExpr::Access(access), ..) => self.access(access),
+            CompAtom::UnaryExprA(function @ UnaryExpr::Function { .. }, span) => {
+                self.expression(&Expression::UnaryExprE(function.clone(), *span))
             }
         }
     }

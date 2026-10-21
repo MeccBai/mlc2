@@ -21,7 +21,7 @@ fn literal(ty: TypeIndex, text: &str) -> CompAtom {
     CompAtom::ConstValueA(ConstValue {
         value: text.into(),
         ty,
-    })
+    }, (0..0).into())
 }
 
 #[test]
@@ -38,7 +38,7 @@ fn reference_index_loads_pointer_and_uses_single_gep_index() {
         declaration_span: (0..0).into(),
         name: "pointer".into(),
         var_type: ty,
-        init_val: Box::new(Expression::Poison),
+        init_val: Box::new(Expression::Poison((0..0).into())),
     });
     let bindings = HashMap::from([(
         "pointer".into(),
@@ -50,9 +50,9 @@ fn reference_index_loads_pointer_and_uses_single_gep_index() {
         },
     )]);
     let expr = Expression::UnaryExprE(UnaryExpr::Access(crate::ast::expression::Access::Index {
-        base: Box::new(Expression::VarValueE(variable)),
+        base: Box::new(Expression::VarValueE(variable, (0..0).into())),
         index: Box::new(literal(element, "2").to_expression()),
-    }));
+    }), (0..0).into());
     let (_, value) = IrGenerator::expression_expand(1, &expr, &package, &bindings);
     assert!(matches!(
         value.code.first(),
@@ -68,7 +68,7 @@ fn expr(ty: TypeIndex, ops: Vec<AstOp>) -> Expression {
     Expression::CompositeE(Composite {
         members: ["20", "3", "2"].map(|v| literal(ty, v)).to_vec(),
         operators: ops,
-    })
+    }, (0..0).into())
 }
 fn operations(value: &LlvmValue) -> Vec<Operator> {
     value
@@ -126,11 +126,11 @@ fn grouping_and_unsigned_operations() {
     let group = CompAtom::CompositeA(Composite {
         members: vec![literal(ty, "20"), literal(ty, "3")],
         operators: vec![AstOp::Add],
-    });
+    }, (0..0).into());
     let expression = Expression::CompositeE(Composite {
         members: vec![group, literal(ty, "2")],
         operators: vec![AstOp::Divide],
-    });
+    }, (0..0).into());
     let (_, value) = IrGenerator::expression_expand(0, &expression, &package, &HashMap::new());
     assert_eq!(operations(&value), vec![Operator::Add, Operator::UDiv]);
 }
@@ -143,7 +143,7 @@ fn variable_binding_is_loaded_without_replaying_initialization() {
         declaration_span: (0..0).into(),
         name: "a".into(),
         var_type: ty,
-        init_val: Box::new(Expression::Poison),
+        init_val: Box::new(Expression::Poison((0..0).into())),
     });
     let mut bindings = HashMap::new();
     bindings.insert(
@@ -156,9 +156,9 @@ fn variable_binding_is_loaded_without_replaying_initialization() {
         },
     );
     let expression = Expression::CompositeE(Composite {
-        members: vec![CompAtom::VarValueA(variable), literal(ty, "2")],
+        members: vec![CompAtom::VarValueA(variable, (0..0).into()), literal(ty, "2")],
         operators: vec![AstOp::Add],
-    });
+    }, (0..0).into());
     let (_, value) = IrGenerator::expression_expand(2, &expression, &package, &bindings);
     assert!(matches!(
         value.code[0],
@@ -177,7 +177,7 @@ fn malformed_operands_and_overflow_are_collected() {
     let malformed = Expression::CompositeE(Composite {
         members: vec![],
         operators: vec![],
-    });
+    }, (0..0).into());
     let invalid_operands = expr(ty, vec![AstOp::LogicalAnd, AstOp::LogicalOr]);
     let literal = literal(ty, "1").to_expression();
     let mut handle = crate::gens::error::GenerationErrorHandle::default();
@@ -214,11 +214,11 @@ fn nested_short_circuit_and_float_pass_llvm_verification() {
     let nested = CompAtom::CompositeA(Composite {
         members: vec![literal(bool_ty, "true"), literal(bool_ty, "false")],
         operators: vec![AstOp::LogicalOr],
-    });
+    }, (0..0).into());
     let expression = Expression::CompositeE(Composite {
         members: vec![literal(bool_ty, "false"), nested],
         operators: vec![AstOp::LogicalAnd],
-    });
+    }, (0..0).into());
     let (_, value) = IrGenerator::expression_expand(0, &expression, &package, &HashMap::new());
     assert_eq!(
         value
@@ -246,7 +246,7 @@ fn nested_short_circuit_and_float_pass_llvm_verification() {
     let float_expr = Expression::CompositeE(Composite {
         members: vec![literal(float_ty, "1.25"), literal(float_ty, "2.5")],
         operators: vec![AstOp::Add],
-    });
+    }, (0..0).into());
     let (_, value) = IrGenerator::expression_expand(0, &float_expr, &package, &HashMap::new());
     assert_eq!(operations(&value), vec![Operator::FAdd]);
     let mut buffer = InstructionBuffer {
@@ -308,6 +308,7 @@ fn array_index_and_call_pass_llvm_verification() {
         .types
         .insert("array".into(), CompileType::List(ListType::new(ty, 2)));
     let symbol = FuncSymbol {
+        span: (0..0).into(),
         name: "f".into(),
         params: vec![(ty, "x".into())],
         ret_type: Some(ty),
@@ -323,19 +324,20 @@ fn array_index_and_call_pass_llvm_verification() {
             literal(ty, "3").to_expression(),
             literal(ty, "7").to_expression(),
         ],
-    });
+    }, (0..0).into());
     let argument = Expression::UnaryExprE(UnaryExpr::Access(Access::Index {
         base: Box::new(array),
         index: Box::new(literal(ty, "1").to_expression()),
-    }));
+    }), (0..0).into());
     let expression = Expression::FuncCallE(FuncCall {
+            pipeline: false,
         callee: None,
         func: EnumBool::False(func),
         args: vec![argument],
-    });
+    }, (0..0).into());
     let (_, value) = IrGenerator::expression_expand(0, &expression, &package, &HashMap::new());
     assert!(matches!(
-        value.code.last(),
+        value.code.iter().rfind(|instruction| !matches!(instruction, Instruction::Location { .. })),
         Some(Instruction::MappedCall { .. })
     ));
     let mut buffer = InstructionBuffer {

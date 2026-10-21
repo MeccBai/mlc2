@@ -16,7 +16,7 @@ impl Expression {
         &self,
         context: Option<&crate::ast::symbols::StatementContext>,
     ) -> bool {
-        matches!(self, Self::VarValueE(variable) if context
+        matches!(self, Self::VarValueE(variable, ..) if context
             .and_then(|context| context.lookup("self"))
             .is_some_and(|receiver| std::rc::Rc::ptr_eq(variable, receiver)))
     }

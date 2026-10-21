@@ -56,13 +56,14 @@ impl Expression {
             .collect();
         let Some(index) = Self::infer_interface(config, template, &args, span, symbols, context)
         else {
-            return Self::Poison;
+            return Self::Poison(span);
         };
         Self::FuncCallE(FuncCall {
+            pipeline: false,
             callee: None,
             func: EnumBool::True(index),
             args,
-        })
+        }, span)
     }
 
     pub(super) fn new_inferred_call(
@@ -81,20 +82,20 @@ impl Expression {
                 CompileError::IllegalUse(IllegalUseError::ArgumentCountMismatch),
                 span,
             );
-            return Self::Poison;
+            return Self::Poison(span);
         }
         let args: Vec<_> = args
             .into_iter()
             .map(|arg| Self::new(config, arg, symbols, context))
             .collect();
         if config.is_poisoned() {
-            return Self::Poison;
+            return Self::Poison(span);
         }
         let args = Self::coerce_arguments(args, &symbol.params, config, symbols, span);
         let Some(bindings) =
             crate::TypeInfer::new(config, symbols).generic_arguments(&symbol, &args, span)
         else {
-            return Self::Poison;
+            return Self::Poison(span);
         };
         let index = template.instantiation(
             config,
@@ -104,12 +105,13 @@ impl Expression {
             span,
         );
         if config.is_poisoned() || !Self::check_function_args(config, index, &args, symbols, span) {
-            return Self::Poison;
+            return Self::Poison(span);
         }
         Self::FuncCallE(FuncCall {
+            pipeline: false,
             callee: None,
             func: EnumBool::False(index),
             args,
-        })
+        }, span)
     }
 }

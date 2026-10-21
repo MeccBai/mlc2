@@ -18,18 +18,18 @@ fn literal(text: &str, symbols: &SymbolTable) -> CompAtom {
     CompAtom::ConstValueA(ConstValue {
         value: text.into(),
         ty: symbols.get_base(DataType::Integer, 32, true),
-    })
+    }, (0..0).into())
 }
 
 fn expression(values: &[&str], operators: Vec<Operator>, symbols: &SymbolTable) -> Expression {
     Expression::CompositeE(Composite {
         members: values.iter().map(|v| literal(v, symbols)).collect(),
         operators,
-    })
+    }, (0..0).into())
 }
 
 fn assert_value(expr: Expression, expected: &str, symbols: &SymbolTable) {
-    let Expression::ConstValueE(value) = expr.const_fold(&mut config(), symbols) else {
+    let Expression::ConstValueE(value, ..) = expr.const_fold(&mut config(), symbols) else {
         panic!("expected folded constant");
     };
     assert_eq!(value.value, expected);
@@ -75,7 +75,7 @@ fn recursively_folds_groups() {
         Expression::CompositeE(Composite {
             members: vec![group, literal("3", &symbols)],
             operators: vec![Operator::Multiply],
-        }),
+        }, (0..0).into()),
         "9",
         &symbols,
     );
@@ -107,7 +107,7 @@ fn only_const_variables_are_expanded() {
             var_type: base.into(state, &mut symbols.types),
             init_val: Box::new(literal("5", &symbols).to_expression()),
         });
-        let expr = Expression::VarValueE(variable);
+        let expr = Expression::VarValueE(variable, (0..0).into());
         if state == ValueType::Constant {
             assert_value(expr, "5", &symbols);
         } else {
@@ -127,12 +127,12 @@ fn float_arithmetic_retains_type() {
                     CompAtom::ConstValueA(ConstValue {
                         value: v.into(),
                         ty,
-                    })
+                    }, (0..0).into())
                 })
                 .to_vec(),
             operators: vec![Operator::Remainder],
-        });
-        let Expression::ConstValueE(value) = expr.const_fold(&mut config(), &symbols) else {
+        }, (0..0).into());
+        let Expression::ConstValueE(value, ..) = expr.const_fold(&mut config(), &symbols) else {
             panic!()
         };
         assert_eq!(value.value, "1.5");
@@ -175,11 +175,11 @@ fn variable_construction_preserves_runtime_initializer_for_optimizer() {
         None,
     );
     assert!(config.error_handle().errors.is_empty());
-    assert!(matches!(&*variable.init_val, Expression::CompositeE(_)));
+    assert!(matches!(&*variable.init_val, Expression::CompositeE(_, ..)));
     let folded = (*variable.init_val)
         .clone()
         .const_fold(&mut config, &symbols);
-    let Expression::ConstValueE(value) = &folded else {
+    let Expression::ConstValueE(value, ..) = &folded else {
         panic!("initializer must remain foldable")
     };
     assert_eq!(value.value, "5");
@@ -187,7 +187,7 @@ fn variable_construction_preserves_runtime_initializer_for_optimizer() {
         variable.var_type.value_type(&symbols.types),
         ValueType::Flex
     );
-    let reference = Expression::VarValueE(variable);
+    let reference = Expression::VarValueE(variable, (0..0).into());
     assert_eq!(
         reference.clone().const_fold(&mut config, &symbols),
         reference

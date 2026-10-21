@@ -5,28 +5,28 @@ use crate::ast::symbols::EnumBool;
 impl Expander<'_> {
     pub(super) fn expression_type(&self, expr: &Expression) -> Option<TypeIndex> {
         match expr {
-            Expression::ConstValueE(v) => Some(v.ty),
-            Expression::VarValueE(v) => Some(v.var_type),
-            Expression::CompositeE(c) => self.composite_type(c),
-            Expression::FuncCallE(call) => match call.func {
+            Expression::ConstValueE(v, ..) => Some(v.ty),
+            Expression::VarValueE(v, ..) => Some(v.var_type),
+            Expression::CompositeE(c, ..) => self.composite_type(c),
+            Expression::FuncCallE(call, ..) => match call.func {
                 EnumBool::True(i) => self.symbols.get_interface(i, false).ret_type,
                 EnumBool::False(i) => self.symbols.get_function(i, false).ret_type,
             },
-            Expression::UnaryExprE(unary) => self.unary_type(unary),
-            Expression::InitListE(InitialList::Array { ty, .. }) => Some(*ty),
-            Expression::InitListE(InitialList::List { onwer, .. }) => *onwer,
+            Expression::UnaryExprE(unary, ..) => self.unary_type(unary),
+            Expression::InitListE(InitialList::Array { ty, .. }, ..) => Some(*ty),
+            Expression::InitListE(InitialList::List { onwer, .. }, ..) => *onwer,
             _ => None,
         }
     }
 
     pub(super) fn atom_type(&self, atom: &CompAtom) -> Option<TypeIndex> {
         match atom {
-            CompAtom::ConstValueA(v) => Some(v.ty),
-            CompAtom::VarValueA(v) => Some(v.var_type),
-            CompAtom::CompositeA(c) => self.composite_type(c),
-            CompAtom::FuncCallA(c) => self.expression_type(&Expression::FuncCallE(c.clone())),
-            CompAtom::UnaryExprA(u) => self.unary_type(u),
-            CompAtom::Poison => None,
+            CompAtom::ConstValueA(v, ..) => Some(v.ty),
+            CompAtom::VarValueA(v, ..) => Some(v.var_type),
+            CompAtom::CompositeA(c, ..) => self.composite_type(c),
+            CompAtom::FuncCallA(c, span) => self.expression_type(&Expression::FuncCallE(c.clone(), *span)),
+            CompAtom::UnaryExprA(u, ..) => self.unary_type(u),
+            CompAtom::Poison(..) => None,
         }
     }
 

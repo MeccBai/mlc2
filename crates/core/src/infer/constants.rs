@@ -15,29 +15,30 @@ where
     S: Deref<Target = dyn Resolution + 'a>,
 {
     pub fn constant(&mut self, expression: Expression) -> Expression {
+        let span = expression.span();
         let config = &mut *self.config;
         let symbols: &dyn Resolution = &*self.symbols;
         if config.is_poisoned() {
-            return Expression::Poison;
+            return Expression::Poison(span);
         }
         match expression {
-            Expression::VarValueE(var)
+            Expression::VarValueE(var, ..)
                 if var.var_type.value_type(symbols) == ValueType::Constant =>
             {
-                (*var.init_val).clone()
+                (*var.init_val).clone().with_span(span)
             }
-            Expression::CompositeE(mut c) => {
+            Expression::CompositeE(mut c, ..) => {
                 c.members = c
                     .members
                     .into_iter()
                     .map(|a| fold_atom(a, config, symbols))
                     .collect();
                 if c.members.len() != c.operators.len() + 1 || c.members.is_empty() {
-                    return Expression::CompositeE(c);
+                    return Expression::CompositeE(c, span);
                 }
-                fold_composite(c, symbols).to_expression()
+                fold_composite(c, symbols).to_expression().with_span(span)
             }
-            Expression::FuncCallE(mut call) => {
+            Expression::FuncCallE(mut call, ..) => {
                 call.callee = call
                     .callee
                     .map(|callee| Box::new(callee.const_fold(config, symbols)));
@@ -49,17 +50,20 @@ where
                 if let crate::ast::symbols::EnumBool::False(index) = call.func {
                     let symbol = symbols.get_function_regular(index);
                     if symbol.builtin() == Some(crate::ast::builtins::Builtin::StrLen) {
-                        if let Some(Expression::InitListE(InitialList::String { value })) =
+                        if let Some(Expression::InitListE(InitialList::String { value }, ..)) =
                             call.args.first()
                         {
-                            return Expression::ConstValueE(ConstValue {
-                                value: value.len().to_string(),
-                                ty: symbol.ret_type.unwrap(),
-                            });
+                            return Expression::ConstValueE(
+                                ConstValue {
+                                    value: value.len().to_string(),
+                                    ty: symbol.ret_type.unwrap(),
+                                },
+                                span,
+                            );
                         }
                     }
                     if symbol.builtin() == Some(crate::ast::builtins::Builtin::Cast) {
-                        if let (Some(target), Some(Expression::ConstValueE(input))) =
+                        if let (Some(target), Some(Expression::ConstValueE(input, ..))) =
                             (symbol.ret_type, call.args.first())
                         {
                             if let CompileType::Base(ty) = symbols.get_type(target).unqualified() {
@@ -71,24 +75,30 @@ where
                                         if ty.signed() && converted >= (1i128 << (bits - 1)) {
                                             converted -= modulus;
                                         }
-                                        return Expression::ConstValueE(ConstValue {
-                                            value: converted.to_string(),
-                                            ty: target,
-                                        });
+                                        return Expression::ConstValueE(
+                                            ConstValue {
+                                                value: converted.to_string(),
+                                                ty: target,
+                                            },
+                                            span,
+                                        );
                                     }
                                 }
                             }
                         }
                     }
                 }
-                Expression::FuncCallE(call)
+                Expression::FuncCallE(call, span)
             }
-            Expression::UnaryExprE(UnaryExpr::Operator {
-                op: Operator::Negate,
-                value,
-            }) => {
+            Expression::UnaryExprE(
+                UnaryExpr::Operator {
+                    op: Operator::Negate,
+                    value,
+                },
+                ..,
+            ) => {
                 let value = fold_atom(*value, config, symbols);
-                if let CompAtom::ConstValueA(constant) = &value {
+                if let CompAtom::ConstValueA(constant, ..) = &value {
                     if constant.ty.is_integer(symbols) {
                         if let Some(negated) = constant
                             .value
@@ -96,61 +106,73 @@ where
                             .ok()
                             .and_then(i128::checked_neg)
                         {
-                            return Expression::ConstValueE(ConstValue {
-                                value: negated.to_string(),
-                                ty: constant.ty,
-                            });
+                            return Expression::ConstValueE(
+                                ConstValue {
+                                    value: negated.to_string(),
+                                    ty: constant.ty,
+                                },
+                                span,
+                            );
                         }
                     }
                 }
-                Expression::UnaryExprE(UnaryExpr::Operator {
-                    op: Operator::Negate,
-                    value: Box::new(value),
-                })
+                Expression::UnaryExprE(
+                    UnaryExpr::Operator {
+                        op: Operator::Negate,
+                        value: Box::new(value),
+                    },
+                    span,
+                )
             }
-            Expression::UnaryExprE(unary) => Expression::UnaryExprE(match unary {
-                function @ UnaryExpr::Function { .. } => function,
-                UnaryExpr::Operator {
-                    op: op @ (Operator::AddressOf | Operator::MutOf),
-                    value,
-                } => UnaryExpr::Operator { op, value },
-                UnaryExpr::Operator { op, value } => UnaryExpr::Operator {
-                    op,
-                    value: Box::new(fold_atom(*value, config, symbols)),
+            Expression::UnaryExprE(unary, ..) => Expression::UnaryExprE(
+                match unary {
+                    function @ UnaryExpr::Function { .. } => function,
+                    UnaryExpr::Operator {
+                        op: op @ (Operator::AddressOf | Operator::MutOf),
+                        value,
+                    } => UnaryExpr::Operator { op, value },
+                    UnaryExpr::Operator { op, value } => UnaryExpr::Operator {
+                        op,
+                        value: Box::new(fold_atom(*value, config, symbols)),
+                    },
+                    UnaryExpr::Access(Access::Member {
+                        base,
+                        indirect,
+                        name,
+                    }) => UnaryExpr::Access(Access::Member {
+                        base: Box::new(fold_atom(*base, config, symbols)),
+                        indirect,
+                        name,
+                    }),
+                    UnaryExpr::Access(Access::Index { base, index }) => {
+                        UnaryExpr::Access(Access::Index {
+                            base: Box::new(base.const_fold(config, symbols)),
+                            index: Box::new(index.const_fold(config, symbols)),
+                        })
+                    }
                 },
-                UnaryExpr::Access(Access::Member {
-                    base,
-                    indirect,
-                    name,
-                }) => UnaryExpr::Access(Access::Member {
-                    base: Box::new(fold_atom(*base, config, symbols)),
-                    indirect,
-                    name,
-                }),
-                UnaryExpr::Access(Access::Index { base, index }) => {
-                    UnaryExpr::Access(Access::Index {
-                        base: Box::new(base.const_fold(config, symbols)),
-                        index: Box::new(index.const_fold(config, symbols)),
-                    })
-                }
-            }),
-            Expression::InitListE(list) => Expression::InitListE(match list {
-                InitialList::List { onwer, values } => InitialList::List {
-                    onwer,
-                    values: values
-                        .into_iter()
-                        .map(|v| v.const_fold(config, symbols))
-                        .collect(),
+                span,
+            ),
+            Expression::InitListE(list, ..) => Expression::InitListE(
+                match list {
+                    InitialList::List { onwer, values } => InitialList::List {
+                        onwer,
+                        values: values
+                            .into_iter()
+                            .map(|v| v.const_fold(config, symbols))
+                            .collect(),
+                    },
+                    InitialList::Array { ty, values } => InitialList::Array {
+                        ty,
+                        values: values
+                            .into_iter()
+                            .map(|v| v.const_fold(config, symbols))
+                            .collect(),
+                    },
+                    string @ InitialList::String { .. } => string,
                 },
-                InitialList::Array { ty, values } => InitialList::Array {
-                    ty,
-                    values: values
-                        .into_iter()
-                        .map(|v| v.const_fold(config, symbols))
-                        .collect(),
-                },
-                string @ InitialList::String { .. } => string,
-            }),
+                span,
+            ),
             other => other,
         }
     }
@@ -160,6 +182,7 @@ fn fold_atom(a: CompAtom, config: &mut Config, symbols: &dyn Resolution) -> Comp
 }
 
 fn fold_composite(mut c: Composite, symbols: &dyn Resolution) -> CompAtom {
+    let span = c.span();
     if c.operators.is_empty() {
         return c.members.remove(0);
     }
@@ -182,15 +205,18 @@ fn fold_composite(mut c: Composite, symbols: &dyn Resolution) -> CompAtom {
         },
         symbols,
     );
-    if let (CompAtom::ConstValueA(a), CompAtom::ConstValueA(b)) = (&left, &right) {
+    if let (CompAtom::ConstValueA(a, ..), CompAtom::ConstValueA(b, ..)) = (&left, &right) {
         if let Some(value) = arithmetic(a, &op, b, symbols) {
-            return CompAtom::ConstValueA(value);
+            return CompAtom::ConstValueA(value, span);
         }
     }
-    CompAtom::CompositeA(Composite {
-        members: vec![left, right],
-        operators: vec![op],
-    })
+    CompAtom::CompositeA(
+        Composite {
+            members: vec![left, right],
+            operators: vec![op],
+        },
+        span,
+    )
 }
 
 fn arithmetic(

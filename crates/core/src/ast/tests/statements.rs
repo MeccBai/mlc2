@@ -20,27 +20,27 @@ fn assignment_left_sides_retain_variables_members_indices_and_dereferences() {
     assert_eq!(assignments.len(), 4);
     assert!(matches!(
         &*assignments[0].variable,
-        Expression::VarValueE(_)
+        Expression::VarValueE(_, ..)
     ));
     assert!(matches!(
         &*assignments[1].variable,
-        Expression::UnaryExprE(UnaryExpr::Access(Access::Member { .. }))
+        Expression::UnaryExprE(UnaryExpr::Access(Access::Member { .. }), ..)
     ));
     assert!(matches!(
         &*assignments[2].variable,
-        Expression::UnaryExprE(UnaryExpr::Access(Access::Index { .. }))
+        Expression::UnaryExprE(UnaryExpr::Access(Access::Index { .. }), ..)
     ));
     assert!(matches!(
         &*assignments[3].variable,
         Expression::UnaryExprE(UnaryExpr::Operator {
             op: Operator::Dereference,
             ..
-        })
+        }, ..)
     ));
     assert!(
         assignments
             .iter()
-            .all(|assignment| matches!(&*assignment.value, Expression::ConstValueE(_)))
+            .all(|assignment| matches!(&*assignment.value, Expression::ConstValueE(_, ..)))
     );
 }
 

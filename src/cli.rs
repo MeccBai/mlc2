@@ -4,6 +4,12 @@ use std::path::PathBuf;
 #[derive(Debug, Parser)]
 #[command(version, about = "MLC compiler and project builder")]
 pub struct Cli {
+    /// Generate source-level debugging information.
+    #[arg(long, global = true, conflicts_with = "release")]
+    pub debug: bool,
+    /// Build without source-level debugging information.
+    #[arg(long, global = true)]
+    pub release: bool,
     /// Enable all AST optimization passes.
     #[arg(long, global = true, conflicts_with = "no_optimize")]
     pub optimize: bool,

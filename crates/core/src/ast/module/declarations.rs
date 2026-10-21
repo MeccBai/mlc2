@@ -13,6 +13,17 @@ pub(super) fn parse(
     mut symbols: &mut dyn Resolution,
     temp_ast: TempModule,
 ) -> PendingBodies {
+    let source_spans: std::collections::HashMap<_, _> = temp_ast
+        .iter()
+        .filter_map(|(item, span)| {
+            let name_span = match item {
+                parser::TempGlobalStmt::Func(function) => function.symbol.name_span,
+                parser::TempGlobalStmt::Interface(function) => function.symbol.name_span,
+                _ => return None,
+            };
+            Some((name_span.start, *span))
+        })
+        .collect();
     let (enums, mut units, funcs, temp_generics, imports, globals, _usings, interfaces) =
         super::deferred::split(temp_ast);
 
@@ -76,7 +87,12 @@ pub(super) fn parse(
                 return None;
             }
             let (symbol, body) = temp_func.split();
-            let (symbol, _span) = FuncSymbol::new(&mut config, symbol, &mut symbols);
+            let (mut symbol, name_span) = FuncSymbol::new(&mut config, symbol, &mut symbols);
+            symbol.span = source_spans
+                .get(&name_span.start)
+                .copied()
+                .filter(|span| span.start < span.end)
+                .unwrap_or(name_span);
             let ident = get_ident(&symbol.name);
             let index = if symbol.has_generics() {
                 let index = symbols.local_mut().generics.functions.insert(ident, symbol);
@@ -111,7 +127,12 @@ pub(super) fn parse(
                 );
                 return None;
             }
-            let (symbol, _span) = InterfaceSymbol::new(&mut config, symbol, &mut symbols);
+            let (mut symbol, name_span) = InterfaceSymbol::new(&mut config, symbol, &mut symbols);
+            symbol.span = source_spans
+                .get(&name_span.start)
+                .copied()
+                .filter(|span| span.start < span.end)
+                .unwrap_or(name_span);
             let ident = get_ident(&symbol.name);
             let index = if symbol.has_generics() {
                 let index = symbols

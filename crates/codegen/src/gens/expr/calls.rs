@@ -4,6 +4,7 @@ use crate::gens::func::SymbolIr;
 
 impl Expander<'_> {
     pub(super) fn call(&mut self, call: &FuncCall) -> Lowered {
+        let source_span = self.current_span;
         if let EnumBool::False(index) = call.func
             && call.callee.is_none()
         {
@@ -65,6 +66,15 @@ impl Expander<'_> {
             let mut code = pointer.unwrap().code;
             code.append(&mut value.code);
             value.code = code;
+        }
+        let instance = match call.func {
+            EnumBool::False(index) => self.symbols.file(index.file_id()).is_some_and(|file| file.function_instances.contains_key(&index)),
+            EnumBool::True(index) => self.symbols.file(index.file_id()).is_some_and(|file| file.interface_instances.contains_key(&index)),
+        };
+        let step_into = !call.pipeline && !instance && !func.name().contains("__mlc_macro_");
+        if let Some(index) = value.code.iter().rposition(|instruction| matches!(instruction, Instruction::MappedCall { .. } | Instruction::IndirectCall { .. })) {
+            value.code.insert(index, Instruction::Location { span: source_span, step_into });
+            value.code.push(Instruction::Location { span: source_span, step_into: true });
         }
         self.next = next;
         Lowered {

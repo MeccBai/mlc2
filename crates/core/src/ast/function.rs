@@ -22,12 +22,14 @@ pub use instantiate::InstantiationActives;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FuncBody {
+    pub span: Span,
     pub symbol: FuncIndex,
     pub body: Vec<Statement>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FuncSymbol {
+    pub span: Span,
     pub name: String,
     pub params: Vec<(TypeIndex, String)>,
     pub ret_type: Option<TypeIndex>,
@@ -39,12 +41,14 @@ pub struct FuncSymbol {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Interface {
+    pub span: Span,
     pub symbol: InterfaceIndex,
     pub body: Vec<Statement>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InterfaceSymbol {
+    pub span: Span,
     pub public: bool,
     pub has_self: bool,
     pub mutable: bool,
@@ -103,6 +107,7 @@ impl FuncSymbol {
         );
         (
             Self {
+                span: name_span,
                 name,
                 params,
                 ret_type,
@@ -141,6 +146,7 @@ impl FuncBody {
 
         Statement::warn_unused(&body, config);
         Self {
+            span: symbols.get_function_regular(index).span,
             symbol: index,
             body,
         }
@@ -225,6 +231,7 @@ impl InterfaceSymbol {
             .then(|| owner.make_ref(symbols, prototype.mutable));
         (
             Self {
+                span: name_span,
                 name,
                 params,
                 ret_type,
@@ -269,6 +276,7 @@ impl Interface {
 
         Statement::warn_unused(&body, config);
         Self {
+            span: symbols.get_interface_regular(index).span,
             symbol: index,
             body,
         }

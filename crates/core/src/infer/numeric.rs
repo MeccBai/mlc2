@@ -64,6 +64,7 @@ impl TypeInfer<'_> {
         target: TypeIndex,
         symbols: &(impl crate::ast::types::TypeLookup + ?Sized),
     ) -> Expression {
+        let span = expression.span();
         if let CompileType::Base(to) = symbols.get_type(target).unqualified() {
             if numeric(to) {
                 if let Some(value) =
@@ -76,32 +77,46 @@ impl TypeInfer<'_> {
                         (Number::Float(value), DataType::Float) => value.to_string(),
                         _ => unreachable!("numeric target checked"),
                     };
-                    return Expression::ConstValueE(ConstValue { value, ty: target });
+                    return Expression::ConstValueE(ConstValue { value, ty: target }, span);
                 }
             }
         }
         match (expression, symbols.get_type(target).unqualified()) {
             (
-                Expression::InitListE(crate::ast::expression::InitialList::Array { ty, values }),
+                Expression::InitListE(
+                    crate::ast::expression::InitialList::Array { ty, values },
+                    ..,
+                ),
                 CompileType::List(list),
-            ) => Expression::InitListE(crate::ast::expression::InitialList::Array {
-                ty,
-                values: values
-                    .into_iter()
-                    .map(|value| value.normalize_initializer(list.element_type, symbols))
-                    .collect(),
-            }),
+            ) => Expression::InitListE(
+                crate::ast::expression::InitialList::Array {
+                    ty,
+                    values: values
+                        .into_iter()
+                        .map(|value| value.normalize_initializer(list.element_type, symbols))
+                        .collect(),
+                },
+                span,
+            ),
             (
-                Expression::InitListE(crate::ast::expression::InitialList::List { onwer, values }),
+                Expression::InitListE(
+                    crate::ast::expression::InitialList::List { onwer, values },
+                    ..,
+                ),
                 CompileType::Unit(unit),
-            ) => Expression::InitListE(crate::ast::expression::InitialList::List {
-                onwer,
-                values: values
-                    .into_iter()
-                    .zip(&unit.members)
-                    .map(|(value, member)| value.normalize_initializer(member.member_type, symbols))
-                    .collect(),
-            }),
+            ) => Expression::InitListE(
+                crate::ast::expression::InitialList::List {
+                    onwer,
+                    values: values
+                        .into_iter()
+                        .zip(&unit.members)
+                        .map(|(value, member)| {
+                            value.normalize_initializer(member.member_type, symbols)
+                        })
+                        .collect(),
+                },
+                span,
+            ),
             (value, _) => value,
         }
     }
@@ -115,7 +130,7 @@ fn number(
     symbols: &(impl crate::ast::types::TypeLookup + ?Sized),
 ) -> Option<Number> {
     match expression {
-        Expression::ConstValueE(value) => {
+        Expression::ConstValueE(value, ..) => {
             let CompileType::Base(base) = symbols.get_type(value.ty).unqualified() else {
                 return None;
             };
@@ -131,14 +146,20 @@ fn number(
                 _ => None,
             }
         }
-        Expression::UnaryExprE(UnaryExpr::Operator {
-            op: Operator::Negate,
-            value,
-        }) => {
-            let CompAtom::ConstValueA(value) = value.as_ref() else {
+        Expression::UnaryExprE(
+            UnaryExpr::Operator {
+                op: Operator::Negate,
+                value,
+            },
+            ..,
+        ) => {
+            let CompAtom::ConstValueA(value, ..) = value.as_ref() else {
                 return None;
             };
-            match number(&Expression::ConstValueE(value.clone()), symbols)? {
+            match number(
+                &Expression::ConstValueE(value.clone(), expression.span()),
+                symbols,
+            )? {
                 Number::Integer(value) => value.checked_neg().map(Number::Integer),
                 Number::Float(value) => Some(Number::Float(-value)),
             }

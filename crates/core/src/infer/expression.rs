@@ -18,12 +18,12 @@ impl TypeInfer<'_> {
             return TypeIndex::empty();
         }
         match expression {
-            CompAtom::Poison => TypeIndex::empty(),
-            CompAtom::VarValueA(var) => var.var_type,
-            CompAtom::CompositeA(composite) => composite.type_inference(config, symbols),
-            CompAtom::FuncCallA(func_call) => func_call.type_inference(symbols),
-            CompAtom::ConstValueA(const_value) => const_value.ty.into(ValueType::Constant, symbols),
-            CompAtom::UnaryExprA(unary) => unary.type_inference(config, symbols),
+            CompAtom::Poison(..) => TypeIndex::empty(),
+            CompAtom::VarValueA(var, ..) => var.var_type,
+            CompAtom::CompositeA(composite, ..) => composite.type_inference(config, symbols),
+            CompAtom::FuncCallA(func_call, ..) => func_call.type_inference(symbols),
+            CompAtom::ConstValueA(const_value, ..) => const_value.ty.into(ValueType::Constant, symbols),
+            CompAtom::UnaryExprA(unary, ..) => unary.type_inference(config, symbols),
         }
     }
     pub fn type_of(&mut self, expression: &Expression) -> TypeIndex {
@@ -33,13 +33,13 @@ impl TypeInfer<'_> {
             return TypeIndex::empty();
         }
         match expression {
-            Expression::Poison => TypeIndex::empty(),
-            Expression::VarValueE(var) => var.var_type,
-            Expression::ConstValueE(const_value) => {
+            Expression::Poison(..) => TypeIndex::empty(),
+            Expression::VarValueE(var, ..) => var.var_type,
+            Expression::ConstValueE(const_value, ..) => {
                 const_value.ty.into(ValueType::Constant, symbols)
             }
-            Expression::UnaryExprE(unary) => unary.type_inference(config, symbols),
-            Expression::InitListE(init_list) => match init_list {
+            Expression::UnaryExprE(unary, ..) => unary.type_inference(config, symbols),
+            Expression::InitListE(init_list, ..) => match init_list {
                 InitialList::List { onwer, values } => match onwer {
                     Some(ty) => *ty,
                     None => TypeIndex::empty(),
@@ -54,8 +54,8 @@ impl TypeInfer<'_> {
                 }
                 InitialList::String { .. } => symbols.local_type("str").expect("native str type"),
             },
-            Expression::CompositeE(composite) => composite.type_inference(config, symbols),
-            Expression::FuncCallE(func_call) => func_call.type_inference(symbols),
+            Expression::CompositeE(composite, ..) => composite.type_inference(config, symbols),
+            Expression::FuncCallE(func_call, ..) => func_call.type_inference(symbols),
         }
     }
     pub(crate) fn composite_type(&mut self, expression: &Composite) -> TypeIndex {

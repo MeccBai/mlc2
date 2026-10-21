@@ -112,7 +112,15 @@ pub enum Cast {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Instruction {
-    Switch { value: TypedValue, default: String, cases: Vec<(IrValue, String)> },
+    Location {
+        span: mlc_core::parser::out::Span,
+        step_into: bool,
+    },
+    Switch {
+        value: TypedValue,
+        default: String,
+        cases: Vec<(IrValue, String)>,
+    },
     FunctionAddress {
         func: Box<super::func::LlvmFunc>,
         target: usize,
@@ -239,9 +247,38 @@ impl InstructionBuffer {
     /// Append without allocating a separate string per instruction.
     pub fn write_to(&self, output: &mut impl Write) -> fmt::Result {
         for instruction in &self.instructions {
+            if matches!(instruction, Instruction::Location { .. }) {
+                continue;
+            }
             writeln!(output, "{instruction}")?;
         }
         Ok(())
+    }
+
+    pub fn write_with_locations(
+        &self,
+        output: &mut String,
+        locations: &mut Vec<(usize, mlc_core::parser::out::Span, bool)>,
+    ) {
+        let mut current = None;
+        let mut line = output.lines().count();
+        for instruction in &self.instructions {
+            if let Instruction::Location { span, step_into } = instruction {
+                current = Some((*span, *step_into));
+                continue;
+            }
+            if let Some((span, step_into)) = current {
+                if !matches!(instruction, Instruction::BasicBlock { .. }) {
+                    locations.push((line, span, step_into));
+                }
+            }
+            let begin = output.len();
+            writeln!(output, "{instruction}").expect("String write");
+            line += output[begin..]
+                .bytes()
+                .filter(|byte| *byte == b'\n')
+                .count();
+        }
     }
 
     pub fn format(&self) -> String {

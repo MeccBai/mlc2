@@ -70,6 +70,8 @@ pub struct AnonymousBlock {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Statement {
+    /// A source statement boundary retained for debug builds only.
+    SourcePosition(crate::parser::out::Span),
     VariantMatch(VariantMatch),
     VariableDecl(Rc<Variable>),
     Assignment(Assignment),

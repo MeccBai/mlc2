@@ -25,7 +25,7 @@ impl Variable {
             declaration_span: (0..0).into(),
             name: String::new(),
             var_type: TypeIndex::empty(),
-            init_val: Box::new(Expression::Poison),
+            init_val: Box::new(Expression::Poison((0..0).into())),
         })
     }
     pub fn empty() -> Rc<Self> {
@@ -116,7 +116,7 @@ impl Variable {
                         .into_iter()
                         .map(|value| Expression::new(config, value, symbols, ctxt))
                         .collect(),
-                })
+                }, var_span)
             }
             (_, expr) => Expression::new(config, (expr, var_span), symbols, ctxt),
         };
@@ -201,7 +201,7 @@ impl Variable {
                     );
                 }
                 if inferred.is_resource(symbols) {
-                    if !matches!(&init_val, Expression::VarValueE(_)) {
+                    if !matches!(&init_val, Expression::VarValueE(_, ..)) {
                         config.submit_error(
                             crate::diagnostic::error::CompileError::IllegalUse(
                                 IllegalUseError::ResourceRequiresOwner,

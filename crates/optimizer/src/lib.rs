@@ -171,7 +171,7 @@ fn rebind_global(
         ),
     >,
 ) {
-    if let ast::expression::Expression::VarValueE(variable) = expression {
+    if let ast::expression::Expression::VarValueE(variable, ..) = expression {
         if let Some((_, replacement)) = replacements.get(&(std::rc::Rc::as_ptr(variable) as usize))
         {
             *variable = replacement.clone();

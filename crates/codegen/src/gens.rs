@@ -10,6 +10,8 @@ pub mod func;
 pub mod value;
 pub use value::LlvmValue;
 mod deconstruct;
+mod debug;
+pub use debug::CodegenConfig;
 mod union;
 pub mod error;
 pub mod expr;
@@ -21,6 +23,7 @@ mod memory;
 pub mod variable_stack;
 
 pub struct IrGenerator {
+    debug: Option<debug::DebugInfoBuilder>,
     coff: bool,
     used_symbols: HashSet<String>,
     symbol_order: Vec<String>,
@@ -35,7 +38,9 @@ pub struct IrGenerator {
 use crate::manifest::IR_RESERVE_SIZE;
 
 impl IrGenerator {
-    pub fn new(tiplet: String) -> IrGenerator {
+    pub fn new(tiplet: String) -> IrGenerator { Self::with_config(tiplet, CodegenConfig::default()) }
+
+    pub fn with_config(tiplet: String, config: CodegenConfig) -> IrGenerator {
         let mut header = format!("target triple =  \"{}\"\n", tiplet);
 
         let mut bodys = String::new();
@@ -43,6 +48,7 @@ impl IrGenerator {
         header.reserve(1024 * 10);
 
         IrGenerator {
+            debug: config.debug_info.then(debug::DebugInfoBuilder::default),
             coff: tiplet.contains("windows"),
             used_symbols: HashSet::new(),
             symbol_order: Vec::new(),
@@ -106,6 +112,7 @@ impl IrGenerator {
             }
         }
         self.header.push_str(&self.bodys);
+        if let Some(debug) = self.debug { self.header.push_str(&debug.finish()); }
         self.errors.finish(self.header)
     }
 
@@ -195,7 +202,11 @@ impl IrGenerator {
                 }
                 generator.add_declaration(call);
             }
-            generator.bodys.push_str(&generated.ir);
+            let ir = match &mut generator.debug {
+                Some(debug) => debug.function(&func, abi.name(), &generated.ir, &generated.locations, package),
+                None => generated.ir.clone(),
+            };
+            generator.bodys.push_str(&ir);
         });
     }
 

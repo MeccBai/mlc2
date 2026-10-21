@@ -175,7 +175,9 @@ fn build(
         paths.lib_fallback = output.join("objects/lib").join(&paths.triplet);
     }
     let plan = BuildPlan::discover_with_paths(entry, &paths)?;
-    let optimize = if cli.no_optimize {
+    let debug = if cli.debug { true } else if cli.release { false } else { paths.mode == mlc_builder::project::BuildMode::Debug };
+    if debug && !paths.triplet.contains("windows") { return Err("Debug line tables currently require a Windows target".into()); }
+    let optimize = if debug || cli.no_optimize {
         mlc_optimizer::OptimizeConfig::disabled()
     } else if cli.optimize {
         mlc_optimizer::OptimizeConfig::enabled()
@@ -183,7 +185,7 @@ fn build(
         mlc_optimizer::OptimizeConfig::default()
     };
     progress.stage("Analyzing and generating IR", 0);
-    let generated = frontend::generate_with_options(&plan, &paths.triplet, kind, optimize)?;
+    let generated = frontend::generate_with_config(&plan, &paths.triplet, kind, optimize, mlc_codegen::gens::CodegenConfig { debug_info: debug })?;
     if matches!(cli.command, Commands::Ll { .. }) {
         let directory = if cli.output.is_some() {
             output
@@ -209,7 +211,7 @@ fn build(
         output: paths.output.clone(),
         target: paths.triplet.clone(),
         compiler_id: format!("mlc-{}-cli-v2", env!("CARGO_PKG_VERSION")),
-        compiler_options: vec![format!("kind={kind:?}"), format!("optimizer={optimize:?}")],
+        compiler_options: vec![format!("kind={kind:?}"), format!("optimizer={optimize:?}"), format!("debug-lines-v1={debug}")],
         module_fingerprints,
         workers: cli.jobs.unwrap_or_else(|| {
             std::thread::available_parallelism()
@@ -311,6 +313,7 @@ fn build(
     let link_key = mlc_builder::artifacts::semantic_hash(&(
         &report.link_key,
         "native-lld-table-v2",
+        debug,
         &paths.triplet,
         format!("{kind:?}"),
         &cli.linker,
@@ -325,9 +328,11 @@ fn build(
     // not represented in our dependency graph. Relink conservatively in that case.
     progress.stage("Linking", 1);
     let link_hit =
-        tool.is_some() && cli.link_args.is_empty() && cache::matches(&artifact, &link_key);
+        tool.is_some() && cli.link_args.is_empty() && cache::matches(&artifact, &link_key)
+            && (!debug || kind == TargetKind::Static || cache::matches(&artifact.with_extension("pdb"), &link_key));
     if !link_hit {
-        link::link(cli, &objects, &artifact, kind, &paths.triplet)?;
+        link::link(cli, &objects, &artifact, kind, &paths.triplet, debug)?;
+        if debug && kind != TargetKind::Static { cache::record(&artifact.with_extension("pdb"), &link_key)?; }
         cache::record(&artifact, &link_key)?;
     }
     progress.link(link_hit);

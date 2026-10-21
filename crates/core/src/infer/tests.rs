@@ -32,7 +32,7 @@ fn literal(value: &str, symbols: &SymbolTable) -> Expression {
     Expression::ConstValueE(ConstValue {
         value: value.into(),
         ty: symbols.get_base(DataType::Integer, 32, true),
-    })
+    }, (0..0).into())
 }
 
 fn variable(ty: TypeIndex) -> Expression {
@@ -42,7 +42,7 @@ fn variable(ty: TypeIndex) -> Expression {
         name: "value".into(),
         var_type: ty,
         init_val: Box::new(Expression::null()),
-    }))
+    }), (0..0).into())
 }
 
 #[test]
@@ -56,7 +56,7 @@ fn expression_inference_reports_value_place_and_reference_mutability() {
         let dereference = Expression::UnaryExprE(UnaryExpr::Operator {
             op: Operator::Dereference,
             value: Box::new(CompAtom::from_expr(pointer)),
-        });
+        }, (0..0).into());
         let Inference::Value(result) =
             TypeInfer::new(&mut config, &mut symbols).infer(&dereference)
         else {
@@ -91,11 +91,11 @@ fn readonly_constant_session_handles_folding_normalization_and_range_diagnostics
             CompAtom::from_expr(literal("200", &symbols)),
         ],
         operators: vec![Operator::Add],
-    });
+    }, (0..0).into());
     let mut infer = TypeInfer::read_only(&mut config, &symbols);
     assert!(infer.is_const(&expression));
     assert!(
-        matches!(infer.constant(expression.clone()), Expression::ConstValueE(value) if value.value=="300")
+        matches!(infer.constant(expression.clone()), Expression::ConstValueE(value, ..) if value.value=="300")
     );
     let span = (4..12).into();
     infer.check_constant_range(&expression, ty, span);
@@ -145,19 +145,19 @@ fn void_poison_and_target_typed_initializers_are_distinct() {
     else {
         panic!()
     };
-    let call = Expression::FuncCallE(FuncCall {
+    let call = Expression::FuncCallE(FuncCall { pipeline: false,
         callee: None,
         func: EnumBool::False(function.signature),
         args: vec![],
-    });
+    }, (0..0).into());
     let mut infer = TypeInfer::new(&mut config, &mut symbols);
     assert_eq!(infer.infer(&call), Inference::Void);
-    assert_eq!(infer.infer(&Expression::Poison), Inference::Poison);
+    assert_eq!(infer.infer(&Expression::Poison((0..0).into())), Inference::Poison);
     assert_eq!(
         infer.infer(&Expression::InitListE(InitialList::List {
             onwer: None,
             values: vec![]
-        })),
+        }, (0..0).into())),
         Inference::NeedsExpectedType
     );
 }

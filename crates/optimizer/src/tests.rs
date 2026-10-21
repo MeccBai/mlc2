@@ -38,16 +38,16 @@ fn optional_constant_folding_does_not_control_semantic_checks() {
     let Statement::VariableDecl(variable) = &body[0] else {
         panic!()
     };
-    assert!(matches!(*variable.init_val, Expression::CompositeE(_)));
+    assert!(matches!(*variable.init_val, Expression::CompositeE(_, ..)));
     let Statement::VariableDecl(variable) = &body[1] else {
         panic!()
     };
-    assert!(matches!(*variable.init_val, Expression::ConstValueE(_)));
+    assert!(matches!(*variable.init_val, Expression::ConstValueE(_, ..)));
     let (mut optimized, _) = optimize(source, OptimizeConfig::default());
     let Statement::VariableDecl(variable) = &body_mut(&mut optimized.body[0])[0] else {
         panic!()
     };
-    assert!(matches!(&*variable.init_val, Expression::ConstValueE(value) if value.value=="7"));
+    assert!(matches!(&*variable.init_val, Expression::ConstValueE(value, ..) if value.value=="7"));
     for source in [
         "func main(){var x:i8=150+150;}",
         "func main(){var x:i8=300;}",
@@ -95,7 +95,7 @@ fn unused_variables_preserve_effects_owners_and_address_taken_storage() {
     assert!(matches!(body[0], Statement::AnonymousBlock(_)));
     assert!(matches!(
         body[1],
-        Statement::Expression(Expression::FuncCallE(_))
+        Statement::Expression(Expression::FuncCallE(_, ..))
     ));
     assert!(matches!(&body[2], Statement::VariableDecl(variable) if variable.name=="owned"));
     assert!(matches!(&body[3], Statement::VariableDecl(variable) if variable.name=="x"));
@@ -151,14 +151,14 @@ fn folding_globals_rebinds_dependent_initializers_and_generic_bodies() {
     let file = package.file(ast.config.file_id()).unwrap();
     let first = &file.globals["first"].1;
     let second = &file.globals["second"].1;
-    assert!(matches!(&*first.init_val, Expression::ConstValueE(value) if value.value=="3"));
+    assert!(matches!(&*first.init_val, Expression::ConstValueE(value, ..) if value.value=="3"));
     assert!(
-        matches!(&*second.init_val, Expression::VarValueE(variable) if std::rc::Rc::ptr_eq(variable, first))
+        matches!(&*second.init_val, Expression::VarValueE(variable, ..) if std::rc::Rc::ptr_eq(variable, first))
     );
     let mut references = 0;
     for function in &mut ast.body {
         walk::expressions(body_mut(function), &mut |value| {
-            if let Expression::VarValueE(variable) = value {
+            if let Expression::VarValueE(variable, ..) = value {
                 if variable.name.ends_with("first") || variable.name.ends_with("second") {
                     assert!(package.global_owner(variable).is_some());
                     references += 1;
@@ -167,4 +167,20 @@ fn folding_globals_rebinds_dependent_initializers_and_generic_bodies() {
         });
     }
     assert!(references >= 2);
+}
+
+#[test]
+fn source_ranges_survive_folding_and_atom_rewrites() {
+    let source = "func main(){var first=1+2*3;var second=first+(4*5);}";
+    let (mut ast, _) = optimize(source, OptimizeConfig::default());
+    assert_eq!(&source[ast.body[0].span().into_range()], source);
+    let body = body_mut(&mut ast.body[0]);
+    let Statement::VariableDecl(first) = &body[0] else { panic!() };
+    assert!(matches!(&*first.init_val, Expression::ConstValueE(value, _) if value.value == "7"));
+    assert_eq!(&source[first.init_val.span().into_range()], "1+2*3");
+    let Statement::VariableDecl(second) = &body[1] else { panic!() };
+    assert_eq!(&source[second.init_val.span().into_range()], "first+(4*5)");
+    let Expression::CompositeE(composite, _) = &*second.init_val else { panic!() };
+    assert_eq!(&source[composite.members[0].span().into_range()], "first");
+    assert_eq!(&source[composite.members[1].span().into_range()], "(4*5)");
 }

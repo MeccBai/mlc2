@@ -97,6 +97,7 @@ impl fmt::Display for Instruction {
         }
         f.write_str("  ")?;
         match self {
+            Self::Location { .. } => Ok(()),
             Self::StringConstant { name, bytes } => {
                 write!(
                     f,

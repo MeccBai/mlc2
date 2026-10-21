@@ -79,6 +79,7 @@ pub fn link(
     output: &Path,
     kind: TargetKind,
     triplet: &str,
+    debug: bool,
 ) -> Result<(), String> {
     let parent = output.parent().ok_or("Output has no parent")?;
     std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
@@ -103,6 +104,25 @@ pub fn link(
             .join(mlc_builder::manifest::RUNTIMES_DIR)
             .join(triplet);
         command.args(targets::profile(triplet)?.arguments(&runtime, objects, &staged, kind)?);
+        if debug {
+            let pdb = staged.with_extension("pdb");
+            if triplet.ends_with("msvc") {
+                command
+                    .arg("/debug:full")
+                    .arg("/opt:noref")
+                    .arg("/opt:noicf")
+                    .arg(format!("/pdb:{}", pdb.display()))
+                    .arg(format!(
+                        "/pdbaltpath:{}",
+                        output.with_extension("pdb").display()
+                    ));
+            } else {
+                command.arg(format!("--pdb={}", pdb.display())).arg(format!(
+                    "--Xlink=/pdbaltpath:{}",
+                    output.with_extension("pdb").display()
+                ));
+            }
+        }
         command.args(&cli.link_args);
         command
     };
@@ -119,6 +139,13 @@ pub fn link(
     }
     if !result.stderr.is_empty() {
         eprint!("{}", String::from_utf8_lossy(&result.stderr));
+    }
+    if debug && kind != TargetKind::Static {
+        let published = tempfile::NamedTempFile::new_in(parent).map_err(|e| e.to_string())?;
+        std::fs::copy(staged.with_extension("pdb"), published.path()).map_err(|e| e.to_string())?;
+        published
+            .persist(output.with_extension("pdb"))
+            .map_err(|e| e.to_string())?;
     }
     let published = tempfile::NamedTempFile::new_in(parent).map_err(|e| e.to_string())?;
     std::fs::copy(&staged, published.path()).map_err(|e| e.to_string())?;

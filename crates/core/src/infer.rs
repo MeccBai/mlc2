@@ -74,7 +74,7 @@ impl<'a> TypeInfer<'a> {
             return Inference::Poison;
         }
         if ty.is_empty() {
-            return if matches!(expression, Expression::FuncCallE(_)) {
+            return if matches!(expression, Expression::FuncCallE(_, ..)) {
                 Inference::Void
             } else {
                 Inference::NeedsExpectedType
@@ -82,12 +82,12 @@ impl<'a> TypeInfer<'a> {
         }
         let category = if matches!(
             expression,
-            Expression::VarValueE(_)
-                | Expression::UnaryExprE(crate::ast::expression::UnaryExpr::Access(_))
+            Expression::VarValueE(_, ..)
+                | Expression::UnaryExprE(crate::ast::expression::UnaryExpr::Access(_), ..)
                 | Expression::UnaryExprE(crate::ast::expression::UnaryExpr::Operator {
                     op: crate::ast::expression::operators::Operator::Dereference,
                     ..
-                })
+                }, ..)
         ) {
             ValueCategory::Place {
                 mutable: self.assignable(expression),

@@ -57,6 +57,7 @@ impl GlobalConfig {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Config {
+    statement_locations: bool,
     file_id: FileId,
     system_path: Vec<String>,
     project_path: String,
@@ -78,6 +79,7 @@ impl Config {
     ) -> Self {
         let poisoned = !err_h.errors.is_empty();
         Self {
+            statement_locations: false,
             file_id,
             system_path,
             project_path,
@@ -100,6 +102,10 @@ impl Config {
     pub fn set_source_lines(&mut self, lines: mlc_syntax::lexer::LineTable) {
         self.source_lines = Some(std::rc::Rc::new(lines));
     }
+
+    pub fn set_statement_locations(&mut self, enabled: bool) { self.statement_locations = enabled; }
+
+    pub fn statement_locations(&self) -> bool { self.statement_locations }
 
     pub fn source_lines(&self) -> Option<&mlc_syntax::lexer::LineTable> {
         self.source_lines.as_deref()

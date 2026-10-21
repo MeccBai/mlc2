@@ -91,7 +91,7 @@ impl AstPass for UnusedVariableElimination {
             // it still needs storage and an exactly-once scope cleanup.
             if variable.read_count.get() != 0
                 || variable.var_type.has_res(symbols)
-                || matches!(&*variable.init_val, Expression::InitListE(_))
+                || matches!(&*variable.init_val, Expression::InitListE(_, ..))
             {
                 return;
             }

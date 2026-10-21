@@ -39,7 +39,7 @@ impl Expander<'_> {
         // truncate large literals to that default before converting to their target.
         let mut input = if kind == Builtin::Dealloc {
             self.expression_expected(argument, Some(symbol.params[0].0))
-        } else if let Expression::ConstValueE(value) = argument {
+        } else if let Expression::ConstValueE(value, ..) = argument {
             if let Ok(integer) = value.value.parse::<i128>() {
                 if value.ty.is_integer(self.symbols)
                     && (integer < i32::MIN as i128 || integer > i32::MAX as i128)

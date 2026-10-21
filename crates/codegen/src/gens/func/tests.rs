@@ -199,6 +199,7 @@ fn setup() -> (PackageSymbolTable, TypeIndex, TypeIndex, TypeIndex) {
 
 fn symbol(params: Vec<TypeIndex>, ret: Option<TypeIndex>) -> FuncSymbol {
     FuncSymbol {
+        span: (0..0).into(),
         name: "unnamed::test".into(),
         params: params
             .into_iter()
@@ -300,6 +301,7 @@ fn large_return_then_receiver_then_explicit_parameters() {
     let (mut package, small, large, _) = setup();
     let receiver_type = large.make_ref(package.file_mut(large.file_id()).unwrap(), true);
     let func = InterfaceSymbol {
+        span: (0..0).into(),
         name: "Owner::method".into(),
         public: true,
         has_self: true,

@@ -5,6 +5,7 @@ mod generic_diagnostics;
 mod generic_inference;
 mod numeric_initialization;
 mod resources;
+mod spans;
 mod function_pointer;
 mod union;
 mod usage;

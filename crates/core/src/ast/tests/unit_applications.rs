@@ -112,7 +112,7 @@ fn body_locals_and_uses_share_concrete_unit_instance() {
     let Statement::ReturnBlock(ret) = &instance.body[2] else {
         panic!("return expected");
     };
-    let Some(Expression::VarValueE(value)) = &ret.value else {
+    let Some(Expression::VarValueE(value, ..)) = &ret.value else {
         panic!("variable expected");
     };
     assert!(Rc::ptr_eq(local, value));

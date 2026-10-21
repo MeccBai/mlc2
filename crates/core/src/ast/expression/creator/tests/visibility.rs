@@ -35,6 +35,7 @@ fn fields_and_interfaces_enforce_receiver_and_public_rules() {
                     let method = symbols.interfaces.insert(
                         "Owner::method".into(),
                         InterfaceSymbol {
+                            span: (0..0).into(),
                             public,
                             has_self: true,
                             mutable: false,

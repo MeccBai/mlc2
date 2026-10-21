@@ -126,7 +126,7 @@ fn list_index_becomes_unary_access_with_element_type() {
 
     assert!(matches!(
         &expression,
-        Expression::UnaryExprE(UnaryExpr::Access(Access::Index { .. }))
+        Expression::UnaryExprE(UnaryExpr::Access(Access::Index { .. }), ..)
     ));
     assert_eq!(
         expression.type_inference(&mut config, &mut symbols),
@@ -149,7 +149,7 @@ fn array_literal_can_be_indexed() {
     );
     assert!(matches!(
         &expression,
-        Expression::UnaryExprE(UnaryExpr::Access(Access::Index { .. }))
+        Expression::UnaryExprE(UnaryExpr::Access(Access::Index { .. }), ..)
     ));
     assert_eq!(
         expression.type_inference(&mut config, &mut symbols),

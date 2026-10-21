@@ -144,3 +144,14 @@ fn imports_and_cache_fallback_are_target_specific() {
     let cached = schedule::build(plan, options, |_| Err("must reuse cache".into())).unwrap();
     assert!(cached.succeeded());
 }
+
+#[test]
+fn project_build_modes_follow_target_then_project_precedence() {
+    let root = tempfile::tempdir().unwrap();
+    fs::write(root.path().join("Project.toml"), "[Project]\nName='demo'\nVersion='1'\nOutputDir='build'\nMode='debug'\n[[Project.Targets]]\nName='app'\nEntry='main.m2'\nType='bin'\nMode='release'").unwrap();
+    let global = GlobalConfig::default();
+    let executable = root.path().join("mlc.exe");
+    assert_eq!(PathResolver::new(&executable, root.path(), None, &global).unwrap().mode, crate::project::BuildMode::Debug);
+    assert_eq!(PathResolver::new(&executable, root.path(), Some("app"), &global).unwrap().mode, crate::project::BuildMode::Release);
+    assert_eq!(PathResolver::standalone(&executable, root.path(), &global).unwrap().mode, crate::project::BuildMode::Release);
+}

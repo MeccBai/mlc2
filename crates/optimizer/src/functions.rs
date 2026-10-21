@@ -13,7 +13,7 @@ pub(crate) fn eliminate(modules: &mut [AbstractSyntaxTree], package: &mut Packag
     let mut functions = HashSet::new();
     let mut interfaces = HashSet::new();
     let mut reference = |value: &mut Expression| match value {
-        Expression::FuncCallE(call) => match call.func {
+        Expression::FuncCallE(call, ..) => match call.func {
             EnumBool::False(index) => {
                 functions.insert(index);
             }
@@ -21,7 +21,7 @@ pub(crate) fn eliminate(modules: &mut [AbstractSyntaxTree], package: &mut Packag
                 interfaces.insert(index);
             }
         },
-        Expression::UnaryExprE(UnaryExpr::Function { function, .. }) => {
+        Expression::UnaryExprE(UnaryExpr::Function { function, .. }, ..) => {
             functions.insert(*function);
         }
         _ => {}

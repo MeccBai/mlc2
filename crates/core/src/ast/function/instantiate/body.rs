@@ -73,7 +73,11 @@ impl FuncBody {
             actives,
             span,
         );
-        Self { symbol, body }
+        Self {
+            span: symbols.get_function_regular(symbol).span,
+            symbol,
+            body,
+        }
     }
 }
 
@@ -103,6 +107,10 @@ impl Interface {
             actives,
             span,
         );
-        Self { symbol, body }
+        Self {
+            span: symbols.get_interface_regular(symbol).span,
+            symbol,
+            body,
+        }
     }
 }

@@ -37,6 +37,15 @@ pub enum Function {
     Interface(Interface),
 }
 
+impl Function {
+    pub fn span(&self) -> crate::parser::out::Span {
+        match self {
+            Self::Func(function) => function.span,
+            Self::Interface(function) => function.span,
+        }
+    }
+}
+
 mod module;
 pub use module::AbstractSyntaxTree;
 pub use symbols::{ExportSymbol, ExportTable, ImportModule};

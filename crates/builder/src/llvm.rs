@@ -1,3 +1,4 @@
+mod codeview;
 mod config;
 mod emit;
 mod error;
@@ -26,6 +27,18 @@ impl IrCompiler {
     }
 
     pub fn with_config(triplet: &str, config: BackendConfig) -> Result<Self, BackendError> {
+        Self::with_level(
+            triplet,
+            config,
+            LLVMCodeGenOptLevel::LLVMCodeGenLevelDefault,
+        )
+    }
+
+    fn with_level(
+        triplet: &str,
+        config: BackendConfig,
+        level: LLVMCodeGenOptLevel,
+    ) -> Result<Self, BackendError> {
         target::initialize(triplet)?;
         let triplet = CString::new(triplet).map_err(|e| BackendError::Config(e.to_string()))?;
         let mut target = std::ptr::null_mut();
@@ -39,7 +52,7 @@ impl IrCompiler {
                 triplet.as_ptr(),
                 c"generic".as_ptr(),
                 c"".as_ptr(),
-                LLVMCodeGenOptLevel::LLVMCodeGenLevelDefault,
+                level,
                 LLVMRelocMode::LLVMRelocDefault,
                 LLVMCodeModel::LLVMCodeModelDefault,
             );
@@ -61,7 +74,27 @@ impl IrCompiler {
     }
 
     pub fn emit(&self, ir: String, output: &Path) -> Result<(), BackendError> {
-        emit::object(self.machine, &self.triplet, &ir, output)
+        if ir.contains("!llvm.dbg.cu") {
+            let debug = Self::with_level(
+                self.triplet
+                    .to_str()
+                    .map_err(|e| BackendError::Config(e.to_string()))?,
+                self.config.clone(),
+                LLVMCodeGenOptLevel::LLVMCodeGenLevelNone,
+            )?;
+            emit::object(debug.machine, &debug.triplet, &ir, output)?;
+            if self
+                .triplet
+                .to_bytes()
+                .windows(7)
+                .any(|bytes| bytes == b"windows")
+            {
+                codeview::preserve_step_over(output).map_err(BackendError::Codegen)?;
+            }
+            Ok(())
+        } else {
+            emit::object(self.machine, &self.triplet, &ir, output)
+        }
     }
 
     /// Arguments include objects, output path, SDK libraries and any linker script.

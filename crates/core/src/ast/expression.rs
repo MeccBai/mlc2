@@ -1,6 +1,7 @@
 use crate::ast::symbols::Resolution;
 pub mod cosnt_fold;
 pub mod creator;
+mod location;
 mod numeric_initialization;
 pub mod operators;
 mod range_check;
@@ -23,14 +24,14 @@ use crate::parser::out::TempLiteralKind;
 
 use operators::Operator;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub enum CompAtom {
-    Poison,
-    VarValueA(Rc<Variable>),
-    CompositeA(Composite),
-    FuncCallA(FuncCall),
-    ConstValueA(ConstValue),
-    UnaryExprA(UnaryExpr),
+    Poison(crate::parser::out::Span),
+    VarValueA(Rc<Variable>, crate::parser::out::Span),
+    CompositeA(Composite, crate::parser::out::Span),
+    FuncCallA(FuncCall, crate::parser::out::Span),
+    ConstValueA(ConstValue, crate::parser::out::Span),
+    UnaryExprA(UnaryExpr, crate::parser::out::Span),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -60,6 +61,7 @@ pub enum InitialList {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FuncCall {
+    pub pipeline: bool,
     pub callee: Option<Box<Expression>>,
     pub func: EnumBool<InterfaceIndex, FuncIndex>,
     pub args: Vec<Expression>,
@@ -135,37 +137,39 @@ pub enum UnaryExpr {
     Access(Access),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub enum Expression {
-    Poison,
-    VarValueE(Rc<Variable>),
-    InitListE(InitialList),
-    CompositeE(Composite),
-    FuncCallE(FuncCall),
-    ConstValueE(ConstValue),
-    UnaryExprE(UnaryExpr),
+    Poison(crate::parser::out::Span),
+    VarValueE(Rc<Variable>, crate::parser::out::Span),
+    InitListE(InitialList, crate::parser::out::Span),
+    CompositeE(Composite, crate::parser::out::Span),
+    FuncCallE(FuncCall, crate::parser::out::Span),
+    ConstValueE(ConstValue, crate::parser::out::Span),
+    UnaryExprE(UnaryExpr, crate::parser::out::Span),
 }
 impl CompAtom {
     pub fn from_expr(expr: Expression) -> Self {
+        let span = expr.span();
         match expr {
-            Expression::Poison => CompAtom::Poison,
-            Expression::CompositeE(composite) => CompAtom::CompositeA(composite),
-            Expression::FuncCallE(func_call) => CompAtom::FuncCallA(func_call),
-            Expression::ConstValueE(const_value) => CompAtom::ConstValueA(const_value),
-            Expression::VarValueE(var) => CompAtom::VarValueA(var),
-            Expression::UnaryExprE(unary) => CompAtom::UnaryExprA(unary),
-            Expression::InitListE(_) => ice("InitialList cannot be computed."),
+            Expression::Poison(..) => CompAtom::Poison(span),
+            Expression::CompositeE(composite, ..) => CompAtom::CompositeA(composite, span),
+            Expression::FuncCallE(func_call, ..) => CompAtom::FuncCallA(func_call, span),
+            Expression::ConstValueE(const_value, ..) => CompAtom::ConstValueA(const_value, span),
+            Expression::VarValueE(var, ..) => CompAtom::VarValueA(var, span),
+            Expression::UnaryExprE(unary, ..) => CompAtom::UnaryExprA(unary, span),
+            Expression::InitListE(_, ..) => ice("InitialList cannot be computed."),
         }
     }
 
     pub fn to_expression(self) -> Expression {
+        let span = self.span();
         match self {
-            CompAtom::Poison => Expression::Poison,
-            CompAtom::CompositeA(composite) => Expression::CompositeE(composite),
-            CompAtom::FuncCallA(func_call) => Expression::FuncCallE(func_call),
-            CompAtom::ConstValueA(const_value) => Expression::ConstValueE(const_value),
-            CompAtom::VarValueA(var) => Expression::VarValueE(var),
-            CompAtom::UnaryExprA(unary) => Expression::UnaryExprE(unary),
+            CompAtom::Poison(..) => Expression::Poison(span),
+            CompAtom::CompositeA(composite, ..) => Expression::CompositeE(composite, span),
+            CompAtom::FuncCallA(func_call, ..) => Expression::FuncCallE(func_call, span),
+            CompAtom::ConstValueA(const_value, ..) => Expression::ConstValueE(const_value, span),
+            CompAtom::VarValueA(var, ..) => Expression::VarValueE(var, span),
+            CompAtom::UnaryExprA(unary, ..) => Expression::UnaryExprE(unary, span),
         }
     }
 
@@ -188,7 +192,7 @@ impl CompAtom {
 
 impl Expression {
     pub fn is_poisoned(&self) -> bool {
-        matches!(self, Self::Poison)
+        matches!(self, Self::Poison(..))
     }
 
     pub fn type_inference(&self, config: &mut Config, symbols: &mut dyn Resolution) -> TypeIndex {
@@ -197,7 +201,7 @@ impl Expression {
 
     pub fn is_null(&self) -> bool {
         match self {
-            Expression::ConstValueE(const_value) => const_value.ty.is_empty(),
+            Expression::ConstValueE(const_value, ..) => const_value.ty.is_empty(),
             _ => false,
         }
     }

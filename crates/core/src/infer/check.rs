@@ -98,15 +98,15 @@ impl TypeInfer<'_> {
             return accepted;
         }
         match expression {
-            Expression::Poison => false,
-            Expression::VarValueE(var) => target.type_check(true, &var.var_type, symbols),
-            Expression::ConstValueE(const_value) => {
+            Expression::Poison(..) => false,
+            Expression::VarValueE(var, ..) => target.type_check(true, &var.var_type, symbols),
+            Expression::ConstValueE(const_value, ..) => {
                 target.type_check(true, &const_value.ty, symbols)
             }
-            Expression::UnaryExprE(unary) => unary
+            Expression::UnaryExprE(unary, ..) => unary
                 .type_inference(config, symbols)
                 .type_check(true, &target, symbols),
-            Expression::InitListE(init_list) => match init_list {
+            Expression::InitListE(init_list, ..) => match init_list {
                 InitialList::List { onwer, values } => match onwer {
                     Some(ty) => ty == target,
                     None => {
@@ -190,10 +190,10 @@ impl TypeInfer<'_> {
                     list.element_type.type_check(false, &string_type, symbols)
                 }
             },
-            Expression::CompositeE(composite) => composite
+            Expression::CompositeE(composite, ..) => composite
                 .type_inference(config, symbols)
                 .type_check(false, &target, symbols),
-            Expression::FuncCallE(func_call) => func_call
+            Expression::FuncCallE(func_call, ..) => func_call
                 .type_inference(symbols)
                 .type_check(false, &target, symbols),
         }

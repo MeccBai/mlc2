@@ -62,7 +62,7 @@ impl Statement {
                 }
                 _ => None,
             };
-            for (statement, span) in statements.iter().zip(spans) {
+            for (statement, span) in statements.iter().zip(spans.iter().copied()) {
                 context
                     .resources
                     .statement(statement, result, config, symbols, span);
@@ -71,7 +71,9 @@ impl Statement {
                 }
             }
         }
-        statements
+        if config.statement_locations() {
+            statements.into_iter().zip(spans).flat_map(|(statement, span)| [Self::SourcePosition(span), statement]).collect()
+        } else { statements }
     }
 
     fn create(

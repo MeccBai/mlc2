@@ -41,7 +41,7 @@ fn recursive_generic_body_reuses_registered_instance() {
     let Statement::ReturnBlock(ret) = &instance.body[0] else {
         panic!("return expected");
     };
-    let Some(Expression::FuncCallE(call)) = &ret.value else {
+    let Some(Expression::FuncCallE(call, ..)) = &ret.value else {
         panic!("call expected");
     };
     assert_eq!(call.func, EnumBool::False(instance.symbol));
@@ -75,7 +75,7 @@ fn concrete_local_declaration_and_use_share_rc() {
     let Statement::ReturnBlock(ret) = &instance.body[1] else {
         panic!("return expected");
     };
-    let Some(Expression::VarValueE(value)) = &ret.value else {
+    let Some(Expression::VarValueE(value, ..)) = &ret.value else {
         panic!("variable expected");
     };
     assert!(Rc::ptr_eq(local, value));
@@ -117,7 +117,7 @@ fn interface_body_uses_new_symbol_and_concrete_parameter_variables() {
         panic!("local expected");
     };
     assert_eq!(local.var_type, concrete);
-    let Expression::VarValueE(parameter) = &*local.init_val else {
+    let Expression::VarValueE(parameter, ..) = &*local.init_val else {
         panic!("parameter expected");
     };
     assert_eq!(parameter.name, "value");
@@ -125,7 +125,7 @@ fn interface_body_uses_new_symbol_and_concrete_parameter_variables() {
     let Statement::ReturnBlock(ret) = &body.body[1] else {
         panic!("return expected");
     };
-    let Some(Expression::VarValueE(value)) = &ret.value else {
+    let Some(Expression::VarValueE(value, ..)) = &ret.value else {
         panic!("variable expected");
     };
     assert!(Rc::ptr_eq(local, value));
@@ -206,7 +206,7 @@ fn function_body_parameters_belong_to_the_new_symbol_not_the_template() {
         let Statement::ReturnBlock(ret) = &instance.body[0] else {
             panic!("return expected");
         };
-        let Some(Expression::VarValueE(parameter)) = &ret.value else {
+        let Some(Expression::VarValueE(parameter, ..)) = &ret.value else {
             panic!("parameter expected");
         };
         assert_eq!(parameter.var_type, symbol.params[0].0);

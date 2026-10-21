@@ -34,7 +34,7 @@ use crate::parser::out::{
 
 impl Expression {
     pub fn null() -> Self {
-        Expression::ConstValueE(ConstValue::null())
+        Expression::ConstValueE(ConstValue::null(), (0..0).into())
     }
 
     pub fn new(
@@ -43,14 +43,15 @@ impl Expression {
         symbols: &mut dyn Resolution,
         context: Option<&crate::ast::symbols::StatementContext>,
     ) -> Self {
+        let span = temp_expr.1;
         if config.is_poisoned() {
-            return Self::Poison;
+            return Self::Poison(span);
         }
         let expression = Self::create(config, temp_expr, symbols, context);
         if config.is_poisoned() {
-            Self::Poison
+            Self::Poison(span)
         } else {
-            expression
+            expression.with_span(span)
         }
     }
 
@@ -65,16 +66,16 @@ impl Expression {
         match expr {
             Literal { kind, text } => match kind {
                 Integer | Float | Boolean | Null => {
-                    Self::ConstValueE(ConstValue::new((kind, text), symbols))
+                    Self::ConstValueE(ConstValue::new((kind, text), symbols), span)
                 }
                 TempLiteralKind::String => match string::decode(&text) {
-                    Some(value) => Self::InitListE(InitialList::from_string(value)),
+                    Some(value) => Self::InitListE(InitialList::from_string(value), span),
                     None => {
                         config.submit_error(
                             CompileError::IllegalUse(IllegalUseError::InvalidStringLiteral),
                             span,
                         );
-                        Self::Poison
+                        Self::Poison(span)
                     }
                 },
             },
@@ -84,10 +85,10 @@ impl Expression {
                         Ok(value) => Self::ConstValueE(ConstValue {
                             value: value.value.to_string(),
                             ty: value.enum_type,
-                        }),
+                        }, span),
                         Err(error) => {
                             config.submit_error(CompileError::Resolve(error), span);
-                            Self::Poison
+                            Self::Poison(span)
                         }
                     };
                 }
@@ -95,7 +96,7 @@ impl Expression {
                 let error = match symbols.resolve_path(config, &path, context) {
                     Some(PathSymbol::Variable(variable)) => {
                         variable.read_count.set(variable.read_count.get() + 1);
-                        return Self::VarValueE(variable);
+                        return Self::VarValueE(variable, span);
                     }
                     Some(PathSymbol::EnumValue(_)) => {
                         CompileError::IllegalUse(IllegalUseError::EnumValueRequiresPrefix)
@@ -109,21 +110,21 @@ impl Expression {
                     None => CompileError::Resolve(ResolveError::UnknownVariable),
                 };
                 config.submit_error(error, span);
-                Self::Poison
+                Self::Poison(span)
             }
             Unary { op, value } => {
                 let expr = Self::new(config, *value, symbols, context);
                 if expr.is_poisoned() {
-                    return Self::Poison;
+                    return Self::Poison(span);
                 }
                 // Initializer lists are not expression atoms. Borrow an initialized
                 // value instead of trying to take the address of an initializer.
-                if matches!(expr, Self::InitListE(_)) {
+                if matches!(expr, Self::InitListE(_, ..)) {
                     config.submit_error(
                         CompileError::IllegalUse(IllegalUseError::InvalidAssignment),
                         span,
                     );
-                    return Self::Poison;
+                    return Self::Poison(span);
                 }
                 let unary_type = expr.type_inference(config, symbols);
                 if !unary_type.is_empty()
@@ -137,7 +138,7 @@ impl Expression {
                         CompileError::IllegalUse(IllegalUseError::InvalidFunctionPointerOperation),
                         span,
                     );
-                    return Self::Poison;
+                    return Self::Poison(span);
                 }
                 if op == Operator::MutOf && !expr.assignable(config, symbols) {
                     config.submit_error(
@@ -154,7 +155,7 @@ impl Expression {
                         CompileError::IllegalUse(IllegalUseError::InvalidStringOperation),
                         span,
                     );
-                    return Self::Poison;
+                    return Self::Poison(span);
                 }
                 if op == Operator::Dereference {
                     let ty = expr.type_inference(config, symbols);
@@ -171,7 +172,7 @@ impl Expression {
                 Expression::UnaryExprE(UnaryExpr::Operator {
                     op,
                     value: Box::new(value),
-                })
+                }, span)
             }
             Binary {
                 mut operands,
@@ -197,7 +198,7 @@ impl Expression {
                     return Self::UnaryExprE(UnaryExpr::Access(Access::Index {
                         base: Box::new(base),
                         index: Box::new(index),
-                    }));
+                    }), span);
                 }
                 let expressions = operands
                     .into_iter()
@@ -208,7 +209,7 @@ impl Expression {
                     .collect::<Vec<_>>();
 
                 if config.is_poisoned() {
-                    return Self::Poison;
+                    return Self::Poison(span);
                 }
                 expressions.iter().for_each(|expr| {
                     let ty = expr.type_inference(config, symbols);
@@ -243,17 +244,19 @@ impl Expression {
                 Expression::CompositeE(Composite {
                     members: expressions,
                     operators,
-                })
+                }, span)
             }
             MacroCall { .. } => {
                 config.submit_error(
                     CompileError::IllegalUse(IllegalUseError::MacroExpansionRequired),
                     span,
                 );
-                Self::Poison
+                Self::Poison(span)
             }
             Group(inner) => Expression::new(config, *inner, symbols, context),
-            Call { callee, args } => match callee {
+            Call { callee, args } => {
+                let pipeline = matches!(&callee, TempCallee::Expr(callee) if callee.1.start > span.start);
+                let mut expression = match callee {
                 TempCallee::GenericPath {
                     path,
                     args: generic_args,
@@ -267,6 +270,9 @@ impl Expression {
                         Self::new_function_call(config, *callee, args, span, symbols, context)
                     }
                 }
+                };
+                if let Self::FuncCallE(call, _) = &mut expression { call.pipeline = pipeline; }
+                expression
             },
             Member {
                 base,
@@ -276,7 +282,7 @@ impl Expression {
             } => {
                 let owner = Expression::new(config, *base, symbols, context);
                 if owner.is_poisoned() {
-                    return Self::Poison;
+                    return Self::Poison(span);
                 }
                 let receiver = owner.is_receiver(context);
                 let mut owner_type = owner.type_inference(config, symbols);
@@ -306,7 +312,7 @@ impl Expression {
                     base: Box::new(CompAtom::from_expr(owner)),
                     indirect,
                     name,
-                }))
+                }), span)
             }
             Init { target, values } => {
                 let values = values
@@ -333,7 +339,7 @@ impl Expression {
                             let candidates = variant.candidates.clone();
                             if values.len() != 1 {
                                 config.submit_error(CompileError::IllegalUse(IllegalUseError::InvalidUnion { reason: "Union construction requires exactly one candidate value".into() }), span);
-                                return Self::Poison;
+                                return Self::Poison(span);
                             }
                             let source = values[0].type_inference(config, symbols);
                             if source.is_empty()
@@ -343,7 +349,7 @@ impl Expression {
                                 })
                             {
                                 config.submit_error(CompileError::IllegalUse(IllegalUseError::InvalidUnion { reason: "Initializer type is not a union candidate; use an explicit cast if necessary".into() }), span);
-                                return Self::Poison;
+                                return Self::Poison(span);
                             }
                         }
                     }
@@ -387,7 +393,7 @@ impl Expression {
                                         span,
                                     )
                                 {
-                                    return Self::Poison;
+                                    return Self::Poison(span);
                                 }
                             }
                         }
@@ -397,7 +403,7 @@ impl Expression {
                 InitListE(InitialList::List {
                     onwer: ty,
                     values: values,
-                })
+                }, span)
             }
             Array(values) => {
                 let values = values
@@ -430,7 +436,7 @@ impl Expression {
                 InitListE(InitialList::Array {
                     ty: ty,
                     values: values,
-                })
+                }, span)
             }
         }
     }

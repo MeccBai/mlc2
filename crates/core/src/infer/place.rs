@@ -13,8 +13,8 @@ impl TypeInfer<'_> {
         let config = &mut *self.config;
         let symbols = &mut *self.symbols;
         match expression {
-            CompAtom::VarValueA(var) => var.var_type.value_type(symbols) == ValueType::Flex,
-            CompAtom::UnaryExprA(unary) => unary.is_left_value(config, symbols),
+            CompAtom::VarValueA(var, ..) => var.var_type.value_type(symbols) == ValueType::Flex,
+            CompAtom::UnaryExprA(unary, ..) => unary.is_left_value(config, symbols),
             _ => false,
         }
     }
@@ -26,8 +26,8 @@ impl TypeInfer<'_> {
         let config = &mut *self.config;
         let symbols = &mut *self.symbols;
         match expression {
-            Expression::VarValueE(var) => var.var_type.value_type(symbols) == ValueType::Flex,
-            Expression::UnaryExprE(unary) => unary.is_left_value(config, symbols),
+            Expression::VarValueE(var, ..) => var.var_type.value_type(symbols) == ValueType::Flex,
+            Expression::UnaryExprE(unary, ..) => unary.is_left_value(config, symbols),
             _ => false,
         }
     }

@@ -10,6 +10,14 @@ pub enum TargetKind {
     Shared,
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum BuildMode {
+    Debug,
+    #[default]
+    Release,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase", deny_unknown_fields)]
 pub struct ProjectFile {
@@ -19,6 +27,8 @@ pub struct ProjectFile {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase", deny_unknown_fields)]
 pub struct Project {
+    #[serde(default)]
+    pub mode: Option<BuildMode>,
     #[serde(default)]
     pub lib_dirs: Option<Vec<PathBuf>>,
     #[serde(default)]
@@ -34,6 +44,8 @@ pub struct Project {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase", deny_unknown_fields)]
 pub struct Target {
+    #[serde(default)]
+    pub mode: Option<BuildMode>,
     #[serde(default)]
     pub lib_dirs: Option<Vec<PathBuf>>,
     #[serde(default)]

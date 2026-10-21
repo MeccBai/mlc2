@@ -23,6 +23,7 @@ mod tests;
 mod variant;
 
 pub struct GeneratedFunction {
+    pub locations: Vec<(usize, mlc_core::parser::out::Span, bool)>,
     pub name: String,
     pub ir: String,
     pub variables: VariableStack,
@@ -206,6 +207,7 @@ impl<'a> FunctionGenerator<'a> {
     }
 
     fn expression_expected(&mut self, expr: &Expression, expected: Option<TypeIndex>) -> LlvmValue {
+        self.code.push(Instruction::Location { span: expr.span(), step_into: true });
         let (next, mut value) = IrGenerator::expression_expand_expected(
             self.next_reg,
             expr,
@@ -440,18 +442,18 @@ impl<'a> FunctionGenerator<'a> {
                 _ => None,
             })
             .collect();
+        let mut locations = Vec::new();
         InstructionBuffer {
             instructions: self.entry,
         }
-        .write_to(&mut ir)
-        .expect("String write");
+        .write_with_locations(&mut ir, &mut locations);
         InstructionBuffer {
             instructions: self.code,
         }
-        .write_to(&mut ir)
-        .expect("String write");
+        .write_with_locations(&mut ir, &mut locations);
         ir.push_str("}\n");
         GeneratedFunction {
+            locations,
             name: self.abi.name().into(),
             ir,
             variables: self.variables,

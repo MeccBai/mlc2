@@ -31,7 +31,7 @@ impl Expression {
                 CompileError::IllegalUse(IllegalUseError::ArgumentCountMismatch),
                 span,
             );
-            return Self::Poison;
+            return Self::Poison(span);
         }
         let target = if kind == Builtin::ConstCStr {
             symbols.get_base(DataType::Integer, 8, true)
@@ -45,7 +45,7 @@ impl Expression {
             .map(|arg| Expression::new(config, arg, symbols, context).const_fold(config, symbols))
             .collect();
         if config.is_poisoned() {
-            return Self::Poison;
+            return Self::Poison(span);
         }
         let source = args[0].type_inference(config, symbols);
         if source.is_empty() {
@@ -83,12 +83,12 @@ impl Expression {
                     CompileError::IllegalUse(IllegalUseError::ResourceAggregateUnsupported),
                     span,
                 );
-                return Self::Poison;
+                return Self::Poison(span);
             }
             let size_ty = symbols.get_base(DataType::Integer, 64, false);
             args[0].check_constant_range(size_ty, config, symbols, span);
             if config.is_poisoned() {
-                return Self::Poison;
+                return Self::Poison(span);
             }
         }
         let result = match kind {
@@ -119,6 +119,7 @@ impl Expression {
         let index = symbols.local_mut().functions.insert(
             name.clone(),
             FuncSymbol {
+                span: span,
                 name,
                 params: vec![(source, "input".into())],
                 ret_type: result,
@@ -129,10 +130,11 @@ impl Expression {
             },
         );
         Self::FuncCallE(FuncCall {
+            pipeline: false,
             callee: None,
             func: EnumBool::False(index),
             args,
-        })
+        }, span)
     }
 
     fn invalid_builtin(config: &mut Config, name: &str, span: Span) -> Self {
@@ -140,6 +142,6 @@ impl Expression {
             CompileError::IllegalUse(IllegalUseError::InvalidBuiltinArgument { name: name.into() }),
             span,
         );
-        Self::Poison
+        Self::Poison(span)
     }
 }

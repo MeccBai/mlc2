@@ -167,3 +167,7 @@ cargo test --test hello_world
 
 CLI 执行测试保留完整构建、运行与缓存断言，目前显式标为 ignored，等待
 MSVC 链接环境配置完成；独立 hello_world 测试仍验证旧的 LLVM-MinGW/UCRT 环境。
+
+## Debug and release builds
+
+Use `mlc run main.m2 --debug` or `mlc build main --release`. Project and target tables may set `Mode = "debug"` or `Mode = "release"`; explicit flags take precedence. Standalone source files ignore Project.toml. The default remains release. See [basic debugging information](debug-info.md) for PDB output and stepping rules.

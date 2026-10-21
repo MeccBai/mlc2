@@ -37,7 +37,7 @@ impl Expression {
             })
             .collect::<Vec<_>>();
         if config.is_poisoned() {
-            return Self::Poison;
+            return Self::Poison(span);
         }
 
         if path.segments.len() == 1 {
@@ -49,7 +49,7 @@ impl Expression {
                         ),
                         span,
                     );
-                    return Self::Poison;
+                    return Self::Poison(span);
                 }
                 return Self::new_builtin_call(
                     config,
@@ -81,7 +81,7 @@ impl Expression {
                         ),
                         span,
                     );
-                    return Self::Poison;
+                    return Self::Poison(span);
                 }
 
                 let generic_map = generics_names
@@ -121,7 +121,7 @@ impl Expression {
                             ),
                             span,
                         );
-                        return Self::Poison;
+                        return Self::Poison(span);
                     }
                     return Self::new_builtin_call(
                         config, kind, params[0], args, span, symbols, context,
@@ -135,7 +135,7 @@ impl Expression {
                         ),
                         span,
                     );
-                    return Self::Poison;
+                    return Self::Poison(span);
                 }
                 let generic_map = generics_names
                     .iter()
@@ -166,7 +166,7 @@ impl Expression {
         };
 
         if config.is_poisoned() {
-            return Self::Poison;
+            return Self::Poison(span);
         }
         let args = args
             .into_iter()
@@ -177,13 +177,14 @@ impl Expression {
         let args = Self::coerce_arguments(args, &parameters, config, symbols, span);
         if let EnumBool::False(index) = func {
             if !Self::check_function_args(config, index, &args, symbols, span) {
-                return Self::Poison;
+                return Self::Poison(span);
             }
         }
         Self::FuncCallE(FuncCall {
+            pipeline: false,
             callee: None,
             func,
             args,
-        })
+        }, span)
     }
 }

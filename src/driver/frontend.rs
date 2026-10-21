@@ -53,11 +53,19 @@ pub fn generate(plan: &BuildPlan, triplet: &str, kind: TargetKind) -> Result<Gen
     )
 }
 
+#[cfg(test)]
 pub fn generate_with_options(
     plan: &BuildPlan,
     triplet: &str,
     kind: TargetKind,
     optimize: mlc_optimizer::OptimizeConfig,
+) -> Result<Generated, String> {
+    generate_with_config(plan, triplet, kind, optimize, mlc_codegen::gens::CodegenConfig::default())
+}
+
+pub fn generate_with_config(
+    plan: &BuildPlan, triplet: &str, kind: TargetKind,
+    optimize: mlc_optimizer::OptimizeConfig, codegen: mlc_codegen::gens::CodegenConfig,
 ) -> Result<Generated, String> {
     let mut package = PackageSymbolTable::new();
     let mut asts = vec![];
@@ -80,7 +88,10 @@ pub fn generate_with_options(
     for id in &plan.order {
         let target = &plan.targets[id.0];
         let module = parsed_modules.remove(&id.0).unwrap();
-        let file = target.file.to_string_lossy().into_owned();
+        let file = match &target.input {
+            TargetInput::Declaration(manifest) if codegen.debug_info && !manifest.config.source_file.is_empty() => manifest.config.source_file.clone(),
+            _ => target.file.to_string_lossy().into_owned(),
+        };
         let mut config = Config::new(
             FileId::new(id.0),
             vec![],
@@ -89,8 +100,11 @@ pub fn generate_with_options(
             ErrorHandle::new(file.clone()),
             WarningHandle::new(file),
         );
+        config.set_statement_locations(codegen.debug_info);
         if let TargetInput::Source { lines, .. } = &target.input {
             config.set_source_lines(lines.clone());
+        } else if codegen.debug_info {
+            if let Ok(text) = std::fs::read_to_string(config.current_file()) { config.set_source_lines(mlc_syntax::lexer::LineTable::new(&text)); }
         }
         package.set_imports(
             FileId::new(id.0),
@@ -135,7 +149,7 @@ pub fn generate_with_options(
         if !matches!(plan.targets[id.0].input, TargetInput::Source { .. }) {
             continue;
         }
-        let mut generator = IrGenerator::new(triplet.into());
+        let mut generator = IrGenerator::with_config(triplet.into(), codegen);
         generator.generate_globals(ast.config.file_id(), &package);
         let file_initializers = generator.global_initializers().to_vec();
         for function in ast.body {
@@ -198,7 +212,7 @@ pub fn generate_with_options(
         }
         modules.push((id.0, ir));
     }
-    let mut supplement = IrGenerator::new(triplet.into());
+    let mut supplement = IrGenerator::with_config(triplet.into(), codegen);
     let mut instances = vec![];
     for (_, file) in package.arenas().iter() {
         instances.extend(
@@ -214,6 +228,10 @@ pub fn generate_with_options(
                 .map(Function::Interface),
         );
     }
+    instances.sort_by_key(|function| match function {
+        Function::Func(body) => package.get_function(body.symbol, false).name.clone(),
+        Function::Interface(body) => package.get_interface(body.symbol, false).name.clone(),
+    });
     // A single supplementary object owns all newly instantiated bodies.
     let has_instances = !instances.is_empty();
     for function in instances {

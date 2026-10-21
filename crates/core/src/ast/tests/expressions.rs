@@ -148,7 +148,7 @@ fn typed_initializer_preserves_resolved_target() {
     let Expression::InitListE(InitialList::List {
         onwer: Some(owner),
         values,
-    }) = &*variable.init_val
+    }, ..) = &*variable.init_val
     else {
         panic!("typed initializer expected");
     };
@@ -175,11 +175,11 @@ fn native_str_literals_and_bindings_keep_compile_time_payloads() {
         );
         assert!(matches!(
             &*variable.init_val,
-            Expression::InitListE(InitialList::String { .. })
+            Expression::InitListE(InitialList::String { .. }, ..)
         ));
     }
     let Statement::VariableDecl(length) = &main_body(&ast)[3] else {
         panic!("variable expected")
     };
-    assert!(matches!(&*length.init_val,Expression::ConstValueE(value) if value.value=="7"));
+    assert!(matches!(&*length.init_val,Expression::ConstValueE(value, ..) if value.value=="7"));
 }

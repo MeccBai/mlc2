@@ -14,7 +14,7 @@ impl<'a> FunctionGenerator<'a> {
             .file(file)
             .unwrap_or_else(|| fail("Missing global initialization arena"));
         for variable in symbols.ordered_globals() {
-            let target = generator.expression(&Expression::VarValueE(variable.clone()));
+            let target = generator.expression(&Expression::VarValueE(variable.clone(), (0..0).into()));
             let signed = generator.source_signed(&variable.init_val);
             let value = generator.expression_expected(&variable.init_val, Some(variable.var_type));
             generator.store(&target, value, signed);

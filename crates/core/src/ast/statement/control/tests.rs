@@ -101,25 +101,25 @@ fn numeric_for_lowers_to_shared_counter_less_condition_and_increment() {
         panic!("counter expected");
     };
     assert_eq!(counter.var_type.format(&ast.symbols.types), "i32");
-    let Expression::CompositeE(condition) = &*block.condition else {
+    let Expression::CompositeE(condition, ..) = &*block.condition else {
         panic!("comparison expected");
     };
     assert_eq!(condition.operators, [Operator::Less]);
-    let CompAtom::VarValueA(value) = &condition.members[0] else {
+    let CompAtom::VarValueA(value, ..) = &condition.members[0] else {
         panic!("counter expected");
     };
     assert!(Rc::ptr_eq(counter, value));
     let Statement::Assignment(step) = block.execution.as_deref().unwrap() else {
         panic!("increment expected");
     };
-    let Expression::VarValueE(step_counter) = &*step.variable else {
+    let Expression::VarValueE(step_counter, ..) = &*step.variable else {
         panic!("counter expected");
     };
     assert!(Rc::ptr_eq(counter, step_counter));
     let Statement::VariableDecl(local) = &block.stmts[0] else {
         panic!("local expected");
     };
-    let Expression::VarValueE(value) = &*local.init_val else {
+    let Expression::VarValueE(value, ..) = &*local.init_val else {
         panic!("counter use expected");
     };
     assert!(Rc::ptr_eq(counter, value));

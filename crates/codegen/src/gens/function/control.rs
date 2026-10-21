@@ -108,7 +108,7 @@ impl FunctionGenerator<'_> {
             declaration_span: (0..0).into(),
             name: temporary.clone(),
             var_type: temporary_type,
-            init_val: Box::new(Expression::Poison),
+            init_val: Box::new(Expression::Poison((0..0).into())),
         });
         let end = self.label("match.end");
         let mut falls = false;
@@ -122,11 +122,11 @@ impl FunctionGenerator<'_> {
             let no = self.label("match.next");
             let comparison = Expression::CompositeE(Composite {
                 members: vec![
-                    CompAtom::VarValueA(variable.clone()),
+                    CompAtom::VarValueA(variable.clone(), (0..0).into()),
                     CompAtom::from_expr(pattern.clone()),
                 ],
                 operators: vec![Operator::Equal],
-            });
+            }, (0..0).into());
             self.condition(&comparison, yes.clone(), no.clone());
             self.block(yes);
             falls |= self.scope(body, end.clone());
