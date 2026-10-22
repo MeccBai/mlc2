@@ -65,7 +65,7 @@ fn hello_world_array_printf_compiles_links_runs_and_matches_stdout() {
         assert!(!ast.config.is_poisoned(), "{:?}", ast.config.error_handle());
         asts.push(ast);
     }
-    let triplet = mlc_builder::manifest::X86_64_PC_WINDOWS_GNU;
+    let triplet = mlc_builder::manifest::X86_64_PC_WINDOWS_MSVC;
     let mut generator = IrGenerator::new(triplet.into());
     for ast in asts {
         generator.generate_globals(ast.config.file_id(), &package);
@@ -84,18 +84,8 @@ fn hello_world_array_printf_compiles_links_runs_and_matches_stdout() {
         .emit(ir, &object)
         .unwrap();
 
-    // The installed LLVM-MinGW/UCRT driver supplies CRT startup and library paths.
-    // Only linking uses clang; language compilation and object emission use MLC/LLVM.
-    // This smoke test uses scalar/pointer C ABI signatures compatible with both CRT toolchains.
-    let clang = std::env::var_os("MLC_TEST_CLANG")
-        .unwrap_or_else(|| mlc_builder::manifest::DEFAULT_WINDOWS_LINKER.into());
-    let link = Command::new(clang)
-        .arg("-fuse-ld=lld")
-        .arg(&object)
-        .arg("-o")
-        .arg(&executable)
-        .output()
-        .expect("Install LLVM-MinGW/UCRT clang or set MLC_TEST_CLANG");
+    // Link directly with the production MSVC/UCRT argument table.
+    let link = support::link(std::slice::from_ref(&object), &executable);
     assert!(
         link.status.success(),
         "Link failed:\n{}\n{}",

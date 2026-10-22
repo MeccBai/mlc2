@@ -101,7 +101,15 @@ pub fn generate_with_module_configs(
         let target = &plan.targets[id.0];
         let module = match &target.input {
             TargetInput::Source { module, .. } => module.clone(),
-            TargetInput::Declaration(_) => {
+            TargetInput::Declaration(manifest) => {
+                if !manifest.config.target.is_empty() && manifest.config.target != triplet {
+                    return Err(format!(
+                        "{}: declaration target '{}' does not match '{}'",
+                        target.file.display(),
+                        manifest.config.target,
+                        triplet
+                    ));
+                }
                 let artifact = artifacts::load(&target.file)?;
                 artifact
                     .templates

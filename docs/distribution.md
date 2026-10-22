@@ -39,9 +39,10 @@ pwsh -NoProfile -File scripts/copy_to.ps1 -Profile debug -Destination out/MLC `
   -ToolsSource F:\Toolchain\tools -RuntimesSource F:\Toolchain\runtimes
 ```
 
-脚本构建 mlc、复制源码、复制 objects 预编译产物，将仓库 lib 下的 TOML
-声明转成目标目录 objects 下的 .sym，不向安装目录 lib 复制 TOML 或缓存。
-仓库中的 TOML 保留为声明编写输入。工具和运行库默认取仓库 tools/、runtimes/；
+脚本构建 mlc、复制源码、复制 objects 预编译产物，将仓库 lib 下的 TOML 或 .h
+声明转成目标目录 objects 下的 .sym，不向安装目录 lib 复制声明输入或缓存。
+头文件位于 lib/<triplet>/<module>.h，打包时按路径指定模块名和目标。
+仓库中的 TOML 和 .h 保留为声明编写输入。工具和运行库默认取仓库 tools/、runtimes/；
 目录不存在会明确警告，脚本不会自动下载工具链或猜测系统 CRT 位置。
 
 脚本可以更新既有目录，但不会删除其中的旧文件。建议版本分发使用空目录，

@@ -77,6 +77,8 @@ inner 声明不等于对外可见声明，不能直接拼接进公共搜索空�
 序列化保留 Span 和现有类型字段，不持久化运行期 arena index 或 Rc。
 二进制文件带有 magic 和版本头；旧格式构建缓存需要重新生成。
 手写 C 声明仍可维护为 TOML，通过 `mlc symbols io.toml` 生成 `io.sym` 后导入。
+也支持 `mlc symbols native.h`：受限固定宽度 C 声明由 ffi_parser 处理，生成
+目标专用 Object=None 符号表。普通源码不允许无 body 的 C ABI 声明。
 普通 import 不再直接读取 TOML；Project.toml 和全局配置格式不变。
 TOML 没有 null：编译器生成格式用保留表 `{ "$none" = true }`
 表示 `None` 和 unit 值；因此这不是最终面向人工编写的精简 C FFI 格式。
@@ -178,7 +180,11 @@ cargo test --manifest-path experiments/taskflow/Cargo.toml
 Windows 的 `hello_world` 测试加载仓库 `objects/universal/c_std/io.sym`，
 编译 `tests/fixtures/hello_world.m2`：构造 i8 数组、手动将最后一项写为 0，
 将第一项的引用传给 printf。MLC/LLVM 生成 object 后，使用 PATH 中的
-LLVM-MinGW/UCRT `clang -fuse-ld=lld` 链接（可用 `MLC_TEST_CLANG` 指定驱动）。
+MSVC/UCRT `lld-link` 直接链接，复用 CLI 参数表和库路径发现逻辑。
+可用 `MLC_TEST_LLD_LINK` 指定链接器；仅 C 插桩夹具通过 clang-cl /c 编译，
+可用 `MLC_TEST_CLANG_CL` 指定 C 编译器，不再使用 Clang 作为链接驱动。
+测试 CRT 优先使用 `MLC_TEST_RUNTIME_DIR`，其次测试程序安装目录或 PATH 中
+MLC 安装的 runtimes/<triplet>，最后使用现有 MSVC/SDK 自动发现。
 运行结果必须为退出码 0、stdout `Hello World!\r\n`、stderr 为空。
 该测试不跳过缺失工具，也不替代正式的入口/链接参数编排。
 

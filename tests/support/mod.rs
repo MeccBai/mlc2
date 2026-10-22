@@ -1,9 +1,15 @@
 //! Isolated installation layout, rebuilt from tracked library inputs.
+#![allow(dead_code)]
+#[cfg(windows)]
+mod windows;
 use std::{
     fs,
     path::{Path, PathBuf},
     sync::OnceLock,
 };
+#[cfg(windows)]
+#[allow(unused_imports)]
+pub use windows::{compile_c, link};
 
 pub fn library() -> PathBuf {
     static INSTALLATION: OnceLock<tempfile::TempDir> = OnceLock::new();
@@ -38,6 +44,23 @@ fn copy_inputs(source: &Path, directory: &Path, installation: &Path) {
                     .join(relative)
                     .with_extension("sym");
                 mlc_builder::artifacts::convert_toml(&path, &destination).unwrap();
+            }
+            Some("h") => {
+                let mut parts = relative.components();
+                let target = parts.next().unwrap().as_os_str().to_str().unwrap();
+                let module = parts
+                    .as_path()
+                    .with_extension("")
+                    .iter()
+                    .map(|part| part.to_str().unwrap().to_owned())
+                    .collect::<Vec<_>>()
+                    .join("::");
+                let destination = installation
+                    .join("objects")
+                    .join(relative)
+                    .with_extension("sym");
+                mlc_builder::artifacts::convert_c_header(&path, &destination, &module, target)
+                    .unwrap();
             }
             _ => {}
         }

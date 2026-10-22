@@ -33,7 +33,9 @@ pub(super) fn run(
                 "Prebuilt declarations have changed dependencies; rebuild their source".into(),
             );
         }
-        if artifact.object.is_some() && artifact.manifest.config.target != options.target {
+        if !artifact.manifest.config.target.is_empty()
+            && artifact.manifest.config.target != options.target
+        {
             return Err("Prebuilt object target does not match build target".into());
         }
         return Ok(NodeResult::Declaration(artifact));

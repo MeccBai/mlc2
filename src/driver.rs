@@ -34,12 +34,26 @@ fn run_inner(cli: Cli, progress: &Progress) -> Result<i32, String> {
         Commands::Ll { input } => {
             vec![(input.clone(), None, TargetKind::Bin)]
         }
-        Commands::Symbols { input } => {
+        Commands::Symbols { input, module } => {
             let output = cli
                 .output
                 .clone()
                 .unwrap_or_else(|| input.with_extension("sym"));
-            mlc_builder::artifacts::convert_toml(input, &output)?;
+            match input.extension().and_then(|extension| extension.to_str()) {
+                Some("h") => {
+                    let name = module
+                        .as_deref()
+                        .or_else(|| input.file_stem().and_then(|stem| stem.to_str()))
+                        .ok_or("Header has no valid module name")?;
+                    let target = cli
+                        .triplet
+                        .as_deref()
+                        .unwrap_or(mlc_builder::paths::HOST_TRIPLET);
+                    mlc_builder::artifacts::convert_c_header(input, &output, name, target)?;
+                }
+                Some("toml") => mlc_builder::artifacts::convert_toml(input, &output)?,
+                _ => return Err("symbols accepts only .h or .toml input".into()),
+            }
             println!("Written {}", output.display());
             return Ok(0);
         }

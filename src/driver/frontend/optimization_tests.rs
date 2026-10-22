@@ -37,13 +37,7 @@ fn optimizer_switches_control_ir_without_changing_required_calls() {
         #[cfg(windows)]
         {
             let executable = root.path().join(format!("{label}.exe"));
-            let linked = std::process::Command::new("clang")
-                .arg("-fuse-ld=lld")
-                .args(objects)
-                .arg("-o")
-                .arg(&executable)
-                .output()
-                .unwrap();
+            let linked = super::test_support::link(&objects, &executable);
             assert!(
                 linked.status.success(),
                 "{}",
@@ -101,14 +95,7 @@ fn pruned_control_flow_preserves_side_effects_and_unmatched_match_fallthrough() 
     #[cfg(windows)]
     {
         let executable = root.path().join("main.exe");
-        let clang = std::env::var_os("MLC_TEST_CLANG").unwrap_or_else(|| "clang".into());
-        let output = std::process::Command::new(clang)
-            .arg("-fuse-ld=lld")
-            .args(objects)
-            .arg("-o")
-            .arg(&executable)
-            .output()
-            .unwrap();
+        let output = super::test_support::link(&objects, &executable);
         assert!(
             output.status.success(),
             "{}",

@@ -298,15 +298,14 @@ fn primitive_formatters_match_numeric_reference_and_handle_ieee_edges() {
         r#"
 import std;
 import c_std::io;
-#[c_abi]# func snprintf(buffer:$mut i8,capacity:u64,pattern:$i8,...)->i32;
-#[c_abi]# func strcmp(a:$i8,b:$i8)->i32;
+import c_std::runtime;
 func check_float(bits:u64)->i32 {
     var value:f64=0.0;
     val slot=cast<$mut u64>(@mut value);$slot=bits;
     var actual=std::format!("{}",value);
     var expected:[i8:128]="";
-    snprintf(@mut expected[0],cast<u64>(128),const_c_str("%.17g"),value);
-    if(strcmp(actual.as_ptr(),@expected[0])!=0){c_std::io::printf(const_c_str("float bits=%llu expected=%s actual=%s\n"),bits,@expected[0],actual.as_ptr());return 1;}
+    c_std::runtime::snprintf(@mut expected[0],cast<u64>(128),const_c_str("%.17g"),value);
+    if(c_std::runtime::strcmp(actual.as_ptr(),@expected[0])!=0){c_std::io::printf(const_c_str("float bits=%llu expected=%s actual=%s\n"),bits,@expected[0],actual.as_ptr());return 1;}
     return 0;
 }
 func check_float32(bits:u32)->i32 {
@@ -314,8 +313,8 @@ func check_float32(bits:u32)->i32 {
     val slot=cast<$mut u32>(@mut value);$slot=bits;
     var actual=std::format!("{}",value);
     var expected:[i8:128]="";
-    snprintf(@mut expected[0],cast<u64>(128),const_c_str("%.17g"),cast<f64>(value));
-    if(strcmp(actual.as_ptr(),@expected[0])!=0){c_std::io::printf(const_c_str("float32 bits=%u expected=%s actual=%s\n"),bits,@expected[0],actual.as_ptr());return 1;}
+    c_std::runtime::snprintf(@mut expected[0],cast<u64>(128),const_c_str("%.17g"),cast<f64>(value));
+    if(c_std::runtime::strcmp(actual.as_ptr(),@expected[0])!=0){c_std::io::printf(const_c_str("float32 bits=%u expected=%s actual=%s\n"),bits,@expected[0],actual.as_ptr());return 1;}
     return 0;
 }
 func check_integer(bits:u64)->i32 {
@@ -323,24 +322,24 @@ func check_integer(bits:u64)->i32 {
     val signed_value=cast<i64>(bits);
     var actual_signed=std::format!("{}",signed_value);
     var expected:[i8:32]="";
-    snprintf(@mut expected[0],cast<u64>(32),const_c_str("%llu"),bits);
-    if(strcmp(actual_unsigned.as_ptr(),@expected[0])!=0){return 2;}
-    snprintf(@mut expected[0],cast<u64>(32),const_c_str("%lld"),signed_value);
-    if(strcmp(actual_signed.as_ptr(),@expected[0])!=0){return 3;}
+    c_std::runtime::snprintf(@mut expected[0],cast<u64>(32),const_c_str("%llu"),bits);
+    if(c_std::runtime::strcmp(actual_unsigned.as_ptr(),@expected[0])!=0){return 2;}
+    c_std::runtime::snprintf(@mut expected[0],cast<u64>(32),const_c_str("%lld"),signed_value);
+    if(c_std::runtime::strcmp(actual_signed.as_ptr(),@expected[0])!=0){return 3;}
     return 0;
 }
 func special(bits:u64,expected:str)->i32 {
     var value:f64=0.0;
     val slot=cast<$mut u64>(@mut value);$slot=bits;
     var actual=std::format!("{}",value);
-    if(strcmp(actual.as_ptr(),const_c_str(expected))!=0){return 4;}
+    if(c_std::runtime::strcmp(actual.as_ptr(),const_c_str(expected))!=0){return 4;}
     return 0;
 }
 func main()->i32 {
     var integers=std::format!("{} {} {} {} {} {} {} {}",cast<i8>(128),cast<u8>(255),cast<i16>(32768),cast<u16>(65535),cast<i32>(2147483648),cast<u32>(4294967295),cast<i64>(9223372036854775808),cast<u64>(18446744073709551615));
-    if(strcmp(integers.as_ptr(),const_c_str("-128 255 -32768 65535 -2147483648 4294967295 -9223372036854775808 18446744073709551615"))!=0){return 5;}
+    if(c_std::runtime::strcmp(integers.as_ptr(),const_c_str("-128 255 -32768 65535 -2147483648 4294967295 -9223372036854775808 18446744073709551615"))!=0){return 5;}
     var escapes=std::format!("a{{b{}c}}d{{}}",42);
-    if(strcmp(escapes.as_ptr(),const_c_str("a{b42c}d{}"))!=0){return 6;}
+    if(c_std::runtime::strcmp(escapes.as_ptr(),const_c_str("a{b42c}d{}"))!=0){return 6;}
 "#,
     );
     let mut edges = vec![

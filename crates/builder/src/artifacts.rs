@@ -10,7 +10,7 @@ pub use hashes::{content_hash, semantic_hash};
 use mlc_syntax::{ImportModule, parser::out::TempModule};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
-pub use storage::{Artifact, ArtifactPaths, convert_toml, load, publish};
+pub use storage::{Artifact, ArtifactPaths, convert_c_header, convert_toml, load, publish};
 pub use symbols::Symbols;
 pub(crate) use symbols::has_templates;
 

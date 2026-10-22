@@ -1,3 +1,4 @@
+import c_std::runtime;
 import std::base;
 export using String = std::base::String;
 export using ConstStringView = std::base::ConstStringView;
@@ -142,19 +143,10 @@ func unsigned(value: u64) -> String {
 
 // The CRT supplies rounded significant digits only. Sign, punctuation, trailing
 // zero removal and the general-format exponent policy live in this library.
-#[c_abi]#
-func _ecvt_s(
-    buffer: $mut i8,
-    capacity: u64,
-    value: f64,
-    count: i32,
-    decimal: $mut i32,
-    sign: $mut i32
-) -> i32;
 
 
-#[c_abi]#
-func abort();
+
+
 
 
 func floating(value: f64) -> String {
@@ -184,7 +176,7 @@ func floating(value: f64) -> String {
     var digits: [i8: 32] = "";
     var decimal_point: i32 = 0;
     var sign: i32 = 0;
-    if (_ecvt_s(
+    if (c_std::runtime::_ecvt_s(
         @mut digits[0],
         cast<u64>(32),
         value,
@@ -192,14 +184,14 @@ func floating(value: f64) -> String {
         @mut decimal_point,
         @mut sign
     ) != 0) {
-        abort();
+        c_std::runtime::abort();
     }
     var count: u64 = 0;
     while (count < cast<u64>(17) && digits[count] != cast<i8>(0)) {
         count = count + cast<u64>(1);
     }
     if (count == cast<u64>(0)) {
-        abort();
+        c_std::runtime::abort();
     }
     while (count > cast<u64>(1) && digits[count - cast<u64>(1)] == cast<i8>(48)) {
         count = count - cast<u64>(1);
@@ -353,24 +345,17 @@ api ConstStringView::func format(self) -> String {
 
 // Use the same buffered CRT stream as C stdio, locking once per complete output.
 // Explicit byte counts preserve embedded NULs and percent signs.
-#[c_abi]#
-func __acrt_iob_func(index: u32) -> $mut i8;
 
 
-#[c_abi]#
-func fwrite(
-    buffer: $i8,
-    size: u64,
-    count: u64,
-    stream: $mut i8
-) -> u64;
+
+
 
 
 func write(text: ConstStringView) {
-    val stream = __acrt_iob_func(cast<u32>(1));
+    val stream = c_std::runtime::__acrt_iob_func(cast<u32>(1));
     var offset: u64 = 0;
     while (offset < text.length) {
-        val written = fwrite(
+        val written = c_std::runtime::fwrite(
             @text.data[offset],
             cast<u64>(1),
             text.length - offset,

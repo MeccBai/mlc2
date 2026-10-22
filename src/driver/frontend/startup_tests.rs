@@ -62,15 +62,7 @@ fn static_initializers_follow_dependencies_and_run_only_once() {
         let object = root.path().join("caller.obj");
         compiler.emit(caller, &object).unwrap();
         let executable = root.path().join("caller.exe");
-        let clang = std::env::var_os("MLC_TEST_CLANG").unwrap_or_else(|| "clang".into());
-        let output = std::process::Command::new(clang)
-            .arg("-fuse-ld=lld")
-            .arg(object)
-            .arg(archive)
-            .arg("-o")
-            .arg(&executable)
-            .output()
-            .unwrap();
+        let output = super::test_support::link(&[object, archive], &executable);
         assert!(
             output.status.success(),
             "{}",

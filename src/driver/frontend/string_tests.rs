@@ -80,14 +80,7 @@ fn const_c_str_static_utf8_empty_and_deduplicated_strings_print() {
     #[cfg(windows)]
     {
         let executable = root.path().join("main.exe");
-        let clang = std::env::var_os("MLC_TEST_CLANG").unwrap_or_else(|| "clang".into());
-        let linked = std::process::Command::new(clang)
-            .arg("-fuse-ld=lld")
-            .arg(&object)
-            .arg("-o")
-            .arg(&executable)
-            .output()
-            .unwrap();
+        let linked = super::test_support::link(std::slice::from_ref(&object), &executable);
         assert!(
             linked.status.success(),
             "{}",

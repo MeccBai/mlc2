@@ -14,7 +14,7 @@ fn generate_source(
     let plan = BuildPlan::discover(&entry, &ImportResolver { lib_dirs: vec![] }).unwrap();
     let result = generate(
         &plan,
-        mlc_builder::manifest::X86_64_PC_WINDOWS_GNU,
+        mlc_builder::manifest::X86_64_PC_WINDOWS_MSVC,
         TargetKind::Bin,
     );
     (root, result)
@@ -22,7 +22,7 @@ fn generate_source(
 
 fn verify_and_run(root: &std::path::Path, generated: Generated) {
     let compiler =
-        mlc_builder::llvm::IrCompiler::init(mlc_builder::manifest::X86_64_PC_WINDOWS_GNU).unwrap();
+        mlc_builder::llvm::IrCompiler::init(mlc_builder::manifest::X86_64_PC_WINDOWS_MSVC).unwrap();
     let mut objects = Vec::new();
     let mut modules = generated.modules;
     if let Some(ir) = generated.supplement {
@@ -36,19 +36,7 @@ fn verify_and_run(root: &std::path::Path, generated: Generated) {
     #[cfg(windows)]
     {
         let executable = root.join("main.exe");
-        let clang = std::env::var_os("MLC_TEST_CLANG")
-            .unwrap_or_else(|| mlc_builder::manifest::DEFAULT_WINDOWS_LINKER.into());
-        let linked = std::process::Command::new(clang)
-            .arg("-fuse-ld=lld")
-            .arg(format!(
-                "--target={}",
-                mlc_builder::manifest::X86_64_PC_WINDOWS_GNU
-            ))
-            .args(&objects)
-            .arg("-o")
-            .arg(&executable)
-            .output()
-            .unwrap();
+        let linked = super::test_support::link(&objects, &executable);
         assert!(
             linked.status.success(),
             "{}",

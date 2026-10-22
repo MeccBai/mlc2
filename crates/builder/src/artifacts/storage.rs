@@ -180,6 +180,61 @@ pub fn publish(
     load(&paths.manifest)
 }
 
+/// Compile a restricted C header into a target-specific declaration-only artifact.
+pub fn convert_c_header(
+    input: &Path,
+    output: &Path,
+    module: &str,
+    target: &str,
+) -> Result<(), String> {
+    if output
+        .extension()
+        .is_none_or(|extension| extension != "sym")
+    {
+        return Err("Symbol output must use the .sym extension".into());
+    }
+    if module.split("::").any(|part| {
+        part.is_empty()
+            || !part
+                .bytes()
+                .enumerate()
+                .all(|(i, c)| c.is_ascii_alphabetic() || c == b'_' || i > 0 && c.is_ascii_digit())
+    }) {
+        return Err("Invalid C declaration module name".into());
+    }
+    for part in module.split("::") {
+        let lexed = mlc_syntax::lexer::tokenize(part).map_err(|_| "Invalid C module name")?;
+        if !matches!(
+            lexed.tokens.as_slice(),
+            [(mlc_syntax::lexer::TokenPack::Ident(_), _)]
+        ) {
+            return Err("C module name is a language keyword; choose another --module name".into());
+        }
+    }
+    let text = fs::read_to_string(input).map_err(|e| format!("{}: {e}", input.display()))?;
+    let declarations = ffi_parser::parse(&text, target).map_err(|issue| {
+        let handle =
+            mlc_core::diagnostic::error::ErrorHandle::new(input.to_string_lossy().into_owned());
+        mlc_core::diagnostic::error::ErrorHandle::summarize(
+            &handle.render_error(&text, issue.span, &issue.message),
+            1,
+        )
+    })?;
+    let mut manifest = Manifest {
+        config: Metadata {
+            format_version: FORMAT_VERSION,
+            module_name: module.into(),
+            target: target.into(),
+            object: ObjectMode::None,
+            ..Metadata::default()
+        },
+        symbols: Symbols::from_module(&declarations),
+        requires: vec![],
+    };
+    manifest.config.symbols_hash = manifest.computed_symbols_hash()?;
+    write_atomic(output, &to_binary(&manifest)?)
+}
+
 /// Compile a hand-written, declaration-only TOML into a binary symbol artifact.
 pub fn convert_toml(input: &Path, output: &Path) -> Result<(), String> {
     if output

@@ -1,10 +1,7 @@
 #![cfg(windows)]
 
 mod support;
-use mlc_builder::{
-    llvm::IrCompiler,
-    manifest::{DEFAULT_WINDOWS_LINKER, X86_64_PC_WINDOWS_GNU},
-};
+use mlc_builder::{llvm::IrCompiler, manifest::X86_64_PC_WINDOWS_MSVC};
 use std::path::Path;
 use std::{fs, process::Command};
 
@@ -48,7 +45,7 @@ func main()->i32 {
         "{}",
         String::from_utf8_lossy(&output.stderr)
     );
-    let compiler = IrCompiler::init(X86_64_PC_WINDOWS_GNU).unwrap();
+    let compiler = IrCompiler::init(X86_64_PC_WINDOWS_MSVC).unwrap();
     let mut objects = Vec::new();
     for file in fs::read_dir(
         root.path()
@@ -67,13 +64,7 @@ func main()->i32 {
         }
     }
     let executable = root.path().join("self.exe");
-    let link = Command::new(DEFAULT_WINDOWS_LINKER)
-        .arg("-fuse-ld=lld")
-        .args(objects)
-        .arg("-o")
-        .arg(&executable)
-        .output()
-        .unwrap();
+    let link = support::link(&objects, &executable);
     assert!(
         link.status.success(),
         "{}",

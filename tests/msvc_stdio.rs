@@ -1,17 +1,15 @@
-//! Verify that LLVM-MinGW/UCRT supplies externally callable scanf.
+//! Verify that MSVC/UCRT supplies externally callable scanf through lld-link.
 #![cfg(windows)]
 
-use mlc_builder::{
-    llvm::IrCompiler,
-    manifest::{DEFAULT_WINDOWS_LINKER, X86_64_PC_WINDOWS_GNU},
-};
+mod support;
+use mlc_builder::{llvm::IrCompiler, manifest::X86_64_PC_WINDOWS_MSVC};
 use std::{
     io::Write,
     process::{Command, Stdio},
 };
 
 #[test]
-fn gnu_scanf_links_and_reads_stdin() {
+fn msvc_scanf_links_and_reads_stdin() {
     let root = tempfile::tempdir().unwrap();
     let object = root.path().join("scanf.obj");
     let executable = root.path().join("scanf.exe");
@@ -31,18 +29,11 @@ entry:
   ret i32 %exit
 }
 "#;
-    IrCompiler::init(X86_64_PC_WINDOWS_GNU)
+    IrCompiler::init(X86_64_PC_WINDOWS_MSVC)
         .unwrap()
         .emit(ir.into(), &object)
         .unwrap();
-    let clang = std::env::var_os("MLC_TEST_CLANG").unwrap_or_else(|| DEFAULT_WINDOWS_LINKER.into());
-    let link = Command::new(clang)
-        .args(["--target=x86_64-pc-windows-gnu", "-fuse-ld=lld"])
-        .arg(&object)
-        .arg("-o")
-        .arg(&executable)
-        .output()
-        .unwrap();
+    let link = support::link(std::slice::from_ref(&object), &executable);
     assert!(
         link.status.success(),
         "{}",

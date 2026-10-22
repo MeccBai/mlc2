@@ -55,8 +55,13 @@ pub enum Commands {
     Fmt { input: Option<PathBuf> },
     /// Generate LLVM IR (.ll) only, without object emission or linking.
     Ll { input: PathBuf },
-    /// Convert a hand-written declaration TOML to a binary .sym symbol table.
-    Symbols { input: PathBuf },
+    /// Convert a restricted C header or declaration TOML to a binary .sym table.
+    Symbols {
+        input: PathBuf,
+        /// Declaration module name; defaults to the input filename stem.
+        #[arg(long)]
+        module: Option<String>,
+    },
     /// List bundled examples or print one example's source code.
     Example { name: String },
     /// Build a .m2 entry file (ignoring Project.toml), a named target, or all targets.

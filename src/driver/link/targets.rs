@@ -1,3 +1,4 @@
+#[path = "targets/msvc.rs"]
 mod msvc;
 use mlc_builder::project::TargetKind;
 use std::{

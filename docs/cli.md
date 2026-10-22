@@ -50,6 +50,8 @@ mlc ll main.m2             # 仅生成 LLVM IR，默认 build/ll/<mode>/<triplet
 mlc ll main.m2 -o ir       # 指定 .ll 输出目录
 mlc symbols lib/universal/c_std/io.toml  # 输出同名 io.sym
 mlc symbols c_api.toml -o objects/universal/c_api.sym
+mlc symbols native.h       # 固定宽度 C 声明 → native.sym
+mlc symbols native.h --module c_std::native --triplet x86_64-pc-windows-msvc
 ```
 
 `run` 必须指定源码文件或 target；仅支持 bin，构建失败时不会运行旧产物。
@@ -62,9 +64,15 @@ mlc symbols c_api.toml -o objects/universal/c_api.sym
 源码编译时内嵌到 mlc，安装后不需要额外部署示例目录；example 命令不读取项目或全局配置。
 打印出的源码保存为 `.m2` 后可以正常编译，普通输出使用 std::print! / std::println!；标准库示例展示 String、format! 与 Display，C 互操作单独展示。
 
-`symbols` 仅转换 `Object = "None"` 的手写声明，沿用原有 TOML 字段和 `$none` 表示法。
+`symbols` 将受限 `.h` 或 `Object = "None"` 的 TOML 声明转为 `.sym`。
+头文件只接受完整具名 struct、函数原型和明确宽度类型（int32_t、uint8_t 等），
+拒绝 int/long/char/size_t、预处理、typedef、属性、函数体和 struct 按值参数/返回。
+不允许 #include，固定宽度名字由解析器直接识别。完整限制见
+[ffi_parser](../crates/ffi_parser/README.md)。源码不再允许无 body 的 C ABI 声明，
+必须 import 符号表；带 body 的 C ABI 定义仍可导出给 C 调用。
+TOML 沿用原有字段和 `$none` 表示法。
 该命令不读取项目或全局配置，不编译或链接；`-o` 在此命令中表示输出文件。
-普通 import 只读取源码和二进制 `.sym`，不直接读取声明 TOML。
+普通 import 只读取源码和二进制 `.sym`，不直接读取声明 TOML 或头文件。
 `.sym` 和泛型 `.mg` 使用带格式版本头的 MessagePack，结构变更时必须更新格式版本。
 现有旧 TOML 构建缓存需重新生成；Project.toml 和用户配置仍使用 TOML。
 
@@ -76,8 +84,9 @@ Type 仅为 bin/static/shared。project target 的 Triplet、LibDirs、LibCacheD
 
 编译使用 MLC 前端与 llvm-sys，链接直接调用 LLD，不再调用 clang 驱动。
 `src/driver/link/targets.rs` 为每个支持的 triplet 绑定 linker 和有序参数表。
-当前提供 `x86_64-pc-windows-gnu` 的 LLVM-MinGW/UCRT 配置，使用 mlc 安装目录 tools 下
-的 `ld.lld.exe`；其他 triplet 在补齐参数表及运行库前会明确报错。
+Windows 默认使用 `x86_64-pc-windows-msvc` 和安装目录 tools 下的 `lld-link.exe`。
+显式选择 GNU 目标时仍使用 `ld.lld.exe` 和匹配的 MinGW 运行库；其他 triplet
+在补齐参数表及运行库前会明确报错。
 `--linker` 覆盖链接器路径，`--link-arg` 直接传递原生链接参数（不使用 `-Wl,`）。
 静态库使用 tools/llvm-ar，支持 `--archiver`。工具通过进程参数数组调用，不经过 shell。
 
@@ -166,7 +175,7 @@ cargo test --test hello_world
 ```
 
 CLI 执行测试保留完整构建、运行与缓存断言，目前显式标为 ignored，等待
-MSVC 链接环境配置完成；独立 hello_world 测试仍验证旧的 LLVM-MinGW/UCRT 环境。
+MSVC 链接环境配置完成；Windows 运行测试也统一生成 MSVC 对象并直接调用 lld-link。
 
 ## Debug and release builds
 

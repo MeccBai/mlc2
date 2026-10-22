@@ -57,14 +57,7 @@ fn builtins_lower_without_external_language_symbols() {
     #[cfg(windows)]
     {
         let executable = root.path().join("main.exe");
-        let clang = std::env::var_os("MLC_TEST_CLANG").unwrap_or_else(|| "clang".into());
-        let output = std::process::Command::new(clang)
-            .arg("-fuse-ld=lld")
-            .arg(&object)
-            .arg("-o")
-            .arg(&executable)
-            .output()
-            .unwrap();
+        let output = super::test_support::link(std::slice::from_ref(&object), &executable);
         assert!(
             output.status.success(),
             "{}",

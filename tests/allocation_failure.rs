@@ -1,11 +1,8 @@
 #![cfg(windows)]
 
 mod support;
-use mlc_builder::{
-    llvm::IrCompiler,
-    manifest::{DEFAULT_WINDOWS_LINKER, X86_64_PC_WINDOWS_GNU},
-};
-use std::{fs, path::Path, process::Command};
+use mlc_builder::{llvm::IrCompiler, manifest::X86_64_PC_WINDOWS_MSVC};
+use std::{fs, process::Command};
 
 #[test]
 fn allocation_failure_aborts_without_resource_cleanup() {
@@ -29,7 +26,7 @@ fn allocation_failure_aborts_without_resource_cleanup() {
         String::from_utf8_lossy(&compile.stderr)
     );
 
-    let compiler = IrCompiler::init(X86_64_PC_WINDOWS_GNU).unwrap();
+    let compiler = IrCompiler::init(X86_64_PC_WINDOWS_MSVC).unwrap();
     let mut objects = Vec::new();
     for file in fs::read_dir(
         root.path()
@@ -53,14 +50,12 @@ fn allocation_failure_aborts_without_resource_cleanup() {
         objects.push(object);
     }
     let executable = root.path().join("failure.exe");
-    let link = Command::new(DEFAULT_WINDOWS_LINKER)
-        .arg("-fuse-ld=lld")
-        .args(objects)
-        .arg(Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/allocation_failure.c"))
-        .arg("-o")
-        .arg(&executable)
-        .output()
-        .unwrap();
+    objects.push(support::compile_c(
+        &std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/fixtures/allocation_failure.c"),
+        root.path(),
+    ));
+    let link = support::link(&objects, &executable);
     assert!(
         link.status.success(),
         "{}",
