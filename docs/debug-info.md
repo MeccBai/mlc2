@@ -1,10 +1,19 @@
 # Basic debugging information
 
-Use `mlc build main.m2 --debug` or `mlc run main.m2 --debug`. `--release` disables debug information. The flags are mutually exclusive; no separate -g option is exposed.
+Build modes are mutually exclusive; no separate -g option is exposed.
 
-Project builds may set `Mode = "debug"` or `Mode = "release"` in [Project] or an individual [[Project.Targets]] table. Precedence: command line, target, project, release default. A standalone .m2 entry continues to ignore Project.toml.
+| CLI | Project.toml Mode | Optimization | Debug information |
+| --- | --- | --- | --- |
+| no flag / `--default` | `default` | off | off |
+| `--debug` | `debug` | off | on |
+| `--release` | `release` | on | off |
+| `--rel-with-info` | `rel-with-info` | on | on |
 
-Debug builds disable optional AST and LLVM machine-code optimizations. CodegenConfig enables a codegen-owned DebugInfoBuilder. LLVM receives line-table metadata; Windows COFF objects carry CodeView, and the native linker emits a sibling PDB. Debug settings, generated IR and PDB contents participate in cache validation; a deleted or changed PDB forces relinking.
+For example, `mlc run main.m2 --rel-with-info`. Existing `--optimize` and `--no-optimize` explicitly override only the optimization setting, including both AST passes and LLVM machine-code optimization.
+
+Project builds may set any of the four `Mode` values above in [Project] or an individual [[Project.Targets]] table. Precedence: command line, target, project, unoptimized default. A standalone .m2 entry continues to ignore Project.toml.
+
+Optimization and debugging information are independent. Optimized builds enable all optional AST passes and LLVM machine-code optimization; optimized debug metadata is marked accordingly. In optimized builds, stepping may skip or combine source statements. CodegenConfig enables a codegen-owned DebugInfoBuilder. LLVM receives line-table metadata; Windows COFF objects carry CodeView, and the native linker emits a sibling PDB. Debug settings, generated IR and PDB contents participate in cache validation; a deleted or changed PDB forces relinking.
 
 The initial scope is source files, ordinary function definitions, statements, expressions and call sites. Local variable/type inspection is not implemented yet.
 
@@ -20,8 +29,8 @@ Validation:
 
 ```powershell
 cargo test --test debug_info -- --include-ignored
-llvm-readobj --codeview build/objects/x86_64-pc-windows-msvc/main.obj
-llvm-pdbutil dump -summary -l build/main.pdb
+llvm-readobj --codeview build/objects/debug/x86_64-pc-windows-msvc/main.obj
+llvm-pdbutil dump -summary -l build/debug/main.pdb
 ```
 
 The runtime test requires the bundled native linker and CRT libraries. The diagnostic tools are only needed for manual inspection.

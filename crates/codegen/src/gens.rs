@@ -50,7 +50,11 @@ impl IrGenerator {
         header.reserve(1024 * 10);
 
         IrGenerator {
-            debug: config.debug_info.then(debug::DebugInfoBuilder::default),
+            debug: config.debug_info.then(|| {
+                let mut debug = debug::DebugInfoBuilder::default();
+                debug.optimized = config.optimized;
+                debug
+            }),
             coff: tiplet.contains("windows"),
             used_symbols: HashSet::new(),
             symbol_order: Vec::new(),

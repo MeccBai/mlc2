@@ -13,9 +13,51 @@ pub enum TargetKind {
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum BuildMode {
-    Debug,
     #[default]
+    Default,
+    Debug,
     Release,
+    #[serde(rename = "rel-with-info", alias = "relwithdebinfo")]
+    RelWithInfo,
+}
+
+impl BuildMode {
+    pub const fn directory(self) -> &'static str {
+        match self {
+            Self::Default => "default",
+            Self::Debug => "debug",
+            Self::Release => "release",
+            Self::RelWithInfo => "rel-with-info",
+        }
+    }
+    pub const fn optimized(self) -> bool {
+        matches!(self, Self::Release | Self::RelWithInfo)
+    }
+    pub const fn debug_info(self) -> bool {
+        matches!(self, Self::Debug | Self::RelWithInfo)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum StdType {
+    Debug,
+    Release,
+}
+impl StdType {
+    pub const fn for_mode(mode: BuildMode) -> Self {
+        if mode.optimized() {
+            Self::Release
+        } else {
+            Self::Debug
+        }
+    }
+    pub const fn mode(self) -> BuildMode {
+        match self {
+            Self::Debug => BuildMode::Debug,
+            Self::Release => BuildMode::Release,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -29,6 +71,8 @@ pub struct ProjectFile {
 pub struct Project {
     #[serde(default)]
     pub mode: Option<BuildMode>,
+    #[serde(default, rename = "std_type")]
+    pub std_type: Option<StdType>,
     #[serde(default)]
     pub lib_dirs: Option<Vec<PathBuf>>,
     #[serde(default)]
@@ -46,6 +90,8 @@ pub struct Project {
 pub struct Target {
     #[serde(default)]
     pub mode: Option<BuildMode>,
+    #[serde(default, rename = "std_type")]
+    pub std_type: Option<StdType>,
     #[serde(default)]
     pub lib_dirs: Option<Vec<PathBuf>>,
     #[serde(default)]

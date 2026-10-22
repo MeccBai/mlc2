@@ -33,7 +33,7 @@ fn all_examples_link_and_run_with_msvc_ucrt() {
         );
         let executed = Command::new(
             root.path()
-                .join("build")
+                .join("build/default")
                 .join(format!("{}.exe", example.name)),
         )
         .output()

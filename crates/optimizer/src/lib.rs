@@ -39,12 +39,22 @@ impl Optimizer {
     /// Optimize the complete analyzed package together so cross-file references survive.
     pub fn optimize_all(
         &self,
+        modules: Vec<AbstractSyntaxTree>,
+        package: &mut PackageSymbolTable,
+    ) -> Vec<AbstractSyntaxTree> {
+        self.optimize_all_with_configs(modules, package, |_| self.config)
+    }
+
+    pub fn optimize_all_with_configs(
+        &self,
         mut modules: Vec<AbstractSyntaxTree>,
         package: &mut PackageSymbolTable,
+        config_for: impl Fn(ast::config::FileId) -> OptimizeConfig,
     ) -> Vec<AbstractSyntaxTree> {
         let mut globals = std::collections::HashMap::new();
         // Late cross-file instantiations may not yet be in their owner's AST body.
         for module in &mut modules {
+            let config = config_for(module.config.file_id());
             assert!(
                 module.is_analyzed() && !module.config.is_poisoned(),
                 "Optimizer requires a valid analyzed AST"
@@ -65,13 +75,13 @@ impl Optimizer {
                 }
             }
             let mut pipeline: Vec<&dyn AstPass> = vec![];
-            if self.config.constant_folding {
+            if config.constant_folding {
                 pipeline.push(&ConstantFolding);
             }
-            if self.config.dead_code_elimination {
+            if config.dead_code_elimination {
                 pipeline.push(&DeadCodeElimination);
             }
-            if self.config.unused_variable_elimination {
+            if config.unused_variable_elimination {
                 pipeline.push(&UnusedVariableElimination);
             }
             pipeline.extend(self.extra_passes.iter().map(|pass| &**pass));
@@ -80,7 +90,7 @@ impl Optimizer {
                     pass.run(body_mut(function), &mut module.config, package);
                 }
             }
-            if self.config.constant_folding {
+            if config.constant_folding {
                 let mut declarations = package
                     .file(module.config.file_id())
                     .unwrap()
@@ -126,9 +136,9 @@ impl Optimizer {
                 }
             }
         }
-        if self.config.unused_function_elimination {
-            functions::eliminate(&mut modules, package);
-        }
+        functions::eliminate(&mut modules, package, |file| {
+            config_for(file).unused_function_elimination
+        });
         // The supplement generator reads these maps, not the AST body itself.
         for module in &modules {
             let file = package.file_mut(module.config.file_id()).unwrap();

@@ -4,16 +4,22 @@ use std::path::PathBuf;
 #[derive(Debug, Parser)]
 #[command(version, about = "MLC compiler and project builder")]
 pub struct Cli {
-    /// Generate source-level debugging information.
-    #[arg(long, global = true, conflicts_with = "release")]
+    /// Build without optimization or debugging information.
+    #[arg(long = "default", global = true, conflicts_with_all = ["debug", "release", "rel_with_info"])]
+    pub default_mode: bool,
+    /// Build without optimization, with debugging information.
+    #[arg(long, global = true, conflicts_with_all = ["release", "rel_with_info"])]
     pub debug: bool,
-    /// Build without source-level debugging information.
+    /// Build with optimization, without debugging information.
     #[arg(long, global = true)]
     pub release: bool,
-    /// Enable all AST optimization passes.
+    /// Build with optimization and debugging information.
+    #[arg(long, global = true, conflicts_with = "release")]
+    pub rel_with_info: bool,
+    /// Override the mode to enable AST and LLVM code-generation optimizations.
     #[arg(long, global = true, conflicts_with = "no_optimize")]
     pub optimize: bool,
-    /// Disable optional AST optimizations (semantic const checks remain enabled).
+    /// Override the mode to disable optional AST and LLVM optimizations.
     #[arg(long, global = true)]
     pub no_optimize: bool,
     #[command(subcommand)]
@@ -72,6 +78,56 @@ impl From<Kind> for mlc_builder::project::TargetKind {
             Kind::Bin => Self::Bin,
             Kind::Static => Self::Static,
             Kind::Shared => Self::Shared,
+        }
+    }
+}
+
+impl Cli {
+    pub fn build_mode(
+        &self,
+        configured: mlc_builder::project::BuildMode,
+    ) -> mlc_builder::project::BuildMode {
+        use mlc_builder::project::BuildMode;
+        if self.default_mode {
+            BuildMode::Default
+        } else if self.debug {
+            BuildMode::Debug
+        } else if self.release {
+            BuildMode::Release
+        } else if self.rel_with_info {
+            BuildMode::RelWithInfo
+        } else {
+            configured
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use mlc_builder::project::BuildMode;
+    #[test]
+    fn four_modes_override_configuration_and_are_mutually_exclusive() {
+        let modes = [
+            ("--default", BuildMode::Default),
+            ("--debug", BuildMode::Debug),
+            ("--release", BuildMode::Release),
+            ("--rel-with-info", BuildMode::RelWithInfo),
+        ];
+        let default = Cli::try_parse_from(["mlc", "build", "main.m2"]).unwrap();
+        assert_eq!(default.build_mode(BuildMode::default()), BuildMode::Default);
+        assert_eq!(
+            default.build_mode(BuildMode::RelWithInfo),
+            BuildMode::RelWithInfo
+        );
+        for (flag, mode) in modes {
+            let cli = Cli::try_parse_from(["mlc", "build", "main.m2", flag]).unwrap();
+            assert_eq!(cli.build_mode(BuildMode::Debug), mode);
+            for (other, _) in modes {
+                if other != flag {
+                    assert!(Cli::try_parse_from(["mlc", "build", "main.m2", flag, other]).is_err());
+                }
+            }
         }
     }
 }

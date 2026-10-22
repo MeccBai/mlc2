@@ -16,6 +16,10 @@ use taskflowrs::{Executor, TaskHandle, Taskflow};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BuildOptions {
+    #[serde(default)]
+    pub module_options: std::collections::HashMap<String, ModuleOptions>,
+    #[serde(default)]
+    pub optimize: bool,
     pub output: PathBuf,
     pub target: String,
     pub compiler_id: String,
@@ -24,6 +28,12 @@ pub struct BuildOptions {
     #[serde(default)]
     pub module_fingerprints: std::collections::HashMap<String, String>,
     pub workers: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ModuleOptions {
+    pub optimize: bool,
+    pub compiler_options: Vec<String>,
 }
 
 pub struct CompileRequest<'a> {
@@ -190,6 +200,7 @@ pub fn build_with_progress(
         &serde_json::to_vec(&(
             &options.target,
             &options.compiler_id,
+            options.optimize,
             &options.compiler_options,
             link_inputs,
         ))

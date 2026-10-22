@@ -46,7 +46,7 @@ mlc build lib.m2 --type shared
 mlc example list          # 列出内嵌示例
 mlc example hello-world   # 仅打印源码，不编译或运行
 mlc example generics
-mlc ll main.m2             # 仅生成 LLVM IR，默认 build/ll
+mlc ll main.m2             # 仅生成 LLVM IR，默认 build/ll/<mode>/<triplet>
 mlc ll main.m2 -o ir       # 指定 .ll 输出目录
 mlc symbols lib/universal/c_std/io.toml  # 输出同名 io.sym
 mlc symbols c_api.toml -o objects/universal/c_api.sym
@@ -170,4 +170,8 @@ MSVC 链接环境配置完成；独立 hello_world 测试仍验证旧的 LLVM-Mi
 
 ## Debug and release builds
 
-Use `mlc run main.m2 --debug` or `mlc build main --release`. Project and target tables may set `Mode = "debug"` or `Mode = "release"`; explicit flags take precedence. Standalone source files ignore Project.toml. The default remains release. See [basic debugging information](debug-info.md) for PDB output and stepping rules.
+Use `--default` (neither optimization nor debug information), `--debug` (debug information only), `--release` (optimization only), or `--rel-with-info` (both). These flags are mutually exclusive. Project and target tables accept the matching `Mode = "default"`, `"debug"`, `"release"`, or `"rel-with-info"`; explicit flags take precedence. `--optimize` / `--no-optimize` override the optimization setting only. Standalone source files ignore Project.toml. The default is no optimization and no debug information. See [basic debugging information](debug-info.md) for PDB output and stepping rules.
+
+构建目录按模式隔离：对象为 `build/objects/<mode>/<triplet>/`，IR 为 `build/ll/<mode>/<triplet>/`，最终产物为 `build/<mode>/main.exe`（PDB 同目录）。`-o` 替换整个 build 根目录。
+
+标准库只使用 debug/release 两档。默认映射：default/debug → debug，release/rel-with-info → release。可在 Project.toml 的 `[Project]` 或 target 中写 `std_type = "debug"` 或 `std_type = "release"`，target 优先，没有对应 CLI 选项。标准库缓存为 `<安装根>/objects/<std_type>/<triplet>/`；显式 LibCacheDir 同样追加 `<std_type>/<triplet>`。纯声明 `objects/universal/` 保持共享。

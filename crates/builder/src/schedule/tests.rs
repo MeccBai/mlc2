@@ -34,6 +34,8 @@ impl Project {
     }
     fn options(&self) -> BuildOptions {
         BuildOptions {
+            optimize: false,
+            module_options: Default::default(),
             output: self.root.path().join("out"),
             target: "x86_64-pc-windows-msvc".into(),
             compiler_id: "test-compiler-1".into(),

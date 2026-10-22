@@ -31,7 +31,13 @@ fn allocation_failure_aborts_without_resource_cleanup() {
 
     let compiler = IrCompiler::init(X86_64_PC_WINDOWS_GNU).unwrap();
     let mut objects = Vec::new();
-    for file in fs::read_dir(root.path().join("build/ll")).unwrap() {
+    for file in fs::read_dir(
+        root.path()
+            .join("build/ll/default")
+            .join(mlc_builder::paths::HOST_TRIPLET),
+    )
+    .unwrap()
+    {
         let path = file.unwrap().path();
         if !path.extension().is_some_and(|extension| extension == "ll") {
             continue;

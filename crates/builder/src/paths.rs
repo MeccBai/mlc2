@@ -10,6 +10,8 @@ pub const HOST_TRIPLET: &str = env!("MLC_HOST_TRIPLET");
 #[derive(Debug, Clone)]
 pub struct PathResolver {
     pub mode: crate::project::BuildMode,
+    pub std_type: Option<crate::project::StdType>,
+    pub build_root: PathBuf,
     pub imports: ImportResolver,
     pub triplet: String,
     pub output: PathBuf,
@@ -105,19 +107,56 @@ impl PathResolver {
         let lib_cache = cache
             .map(|dir| project_root.join(dir))
             .or_else(|| global.lib_cache_dir.clone())
-            .map(|dir| dir.join(triplet));
+            .map(|dir| dir.join("debug").join(triplet));
         let mode = selected
             .and_then(|target| target.mode)
             .or_else(|| project.as_ref().and_then(|project| project.project.mode))
             .unwrap_or_default();
-        Ok(Self {
+        let mut paths = Self {
             mode,
+            std_type: selected.and_then(|target| target.std_type).or_else(|| {
+                project
+                    .as_ref()
+                    .and_then(|project| project.project.std_type)
+            }),
+            build_root: output.clone(),
             imports: ImportResolver { lib_dirs },
             triplet: triplet.into(),
             lib_cache,
             lib_fallback: output.join("objects/lib").join(triplet),
             output: output.join("objects").join(triplet),
-        })
+        };
+        paths.configure_output(output, mode);
+        Ok(paths)
+    }
+
+    pub fn std_mode(&self) -> crate::project::BuildMode {
+        self.std_type
+            .unwrap_or_else(|| crate::project::StdType::for_mode(self.mode))
+            .mode()
+    }
+
+    pub fn configure_output(&mut self, root: PathBuf, mode: crate::project::BuildMode) {
+        self.mode = mode;
+        self.build_root = root;
+        self.output = self
+            .build_root
+            .join("objects")
+            .join(mode.directory())
+            .join(&self.triplet);
+        self.lib_fallback = self.output.join("lib");
+        if let Some(cache) = self
+            .lib_cache
+            .as_ref()
+            .and_then(|path| path.parent())
+            .and_then(|path| path.parent())
+        {
+            self.lib_cache = Some(cache.join(self.std_mode().directory()).join(&self.triplet));
+        }
+    }
+
+    pub fn is_std_module(module: &str) -> bool {
+        module == "std" || module.starts_with("std::")
     }
 
     pub fn artifact_stems(&self, file: &Path, module: &str) -> Result<Vec<PathBuf>, String> {
@@ -128,17 +167,39 @@ impl PathResolver {
             .iter()
             .find(|root| root.canonicalize().is_ok_and(|root| file.starts_with(root)))
             .cloned();
+        let mode = if Self::is_std_module(module) {
+            self.std_mode()
+        } else {
+            self.mode
+        };
+        let fallback = self
+            .build_root
+            .join("objects")
+            .join(mode.directory())
+            .join(&self.triplet)
+            .join("lib");
         Ok(if let Some(root) = library {
             vec![
                 self.lib_cache
                     .as_ref()
-                    .map(|dir| dir.join(&relative))
+                    .map(|dir| {
+                        dir.parent()
+                            .unwrap()
+                            .parent()
+                            .unwrap()
+                            .join(mode.directory())
+                            .join(&self.triplet)
+                            .join(&relative)
+                    })
                     .unwrap_or_else(|| {
                         let mut objects = ImportResolver::object_root(&root);
-                        objects.set_file_name(&self.triplet);
-                        objects.join(&relative)
+                        objects.pop();
+                        objects
+                            .join(mode.directory())
+                            .join(&self.triplet)
+                            .join(&relative)
                     }),
-                self.lib_fallback.join(relative),
+                fallback.join(relative),
             ]
         } else {
             vec![self.output.join(relative)]

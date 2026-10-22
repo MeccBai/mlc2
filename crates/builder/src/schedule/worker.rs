@@ -42,10 +42,18 @@ pub(super) fn run(
         unreachable!()
     };
     let file_hash = artifacts::content_hash(text.as_bytes());
+    let module_options = options.module_options.get(&target.module_name);
+    let optimize = module_options
+        .map(|module| module.optimize)
+        .unwrap_or(options.optimize);
+    let compiler_options = module_options
+        .map(|module| &module.compiler_options)
+        .unwrap_or(&options.compiler_options);
     let build_key = artifacts::semantic_hash(&(
         &options.target,
         &options.compiler_id,
-        &options.compiler_options,
+        optimize,
+        compiler_options,
         options.module_fingerprints.get(&target.module_name),
         &file_hash,
         &hashes,
@@ -123,7 +131,7 @@ pub(super) fn run(
         let path = tempfile::NamedTempFile::new_in(root)
             .map_err(|e| e.to_string())?
             .into_temp_path();
-        crate::llvm::IrCompiler::init(&options.target)
+        crate::llvm::IrCompiler::with_optimization(&options.target, optimize)
             .map_err(|e| e.to_string())?
             .emit(ir, &path)
             .map_err(|e| e.to_string())?;

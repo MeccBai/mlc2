@@ -136,7 +136,11 @@ impl Scanner<'_> {
         });
         self.stack.push(file.clone());
         for import in imports {
-            let dependency = self.resolver.resolve(&file, &import)?;
+            let dependency = self.resolver.resolve_with_modes(
+                &file,
+                &import,
+                self.paths.map(|paths| (paths.mode, paths.std_mode())),
+            )?;
             let dependency = self.visit(dependency)?;
             if !self.targets[id.0].requires.contains(&dependency) {
                 self.targets[id.0].requires.push(dependency);

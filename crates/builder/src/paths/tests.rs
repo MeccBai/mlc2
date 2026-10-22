@@ -19,7 +19,7 @@ fn standalone_ignores_even_malformed_project_configuration() {
     assert_eq!(paths.triplet, HOST_TRIPLET);
     assert_eq!(
         paths.output,
-        root.path().join("build/objects").join(HOST_TRIPLET)
+        root.path().join("build/objects/default").join(HOST_TRIPLET)
     );
     assert_eq!(
         paths.imports.lib_dirs,
@@ -44,11 +44,11 @@ fn target_overrides_project_and_global_paths() {
     );
     assert_eq!(
         target.lib_cache,
-        Some(root.path().join("target-cache/target-triplet"))
+        Some(root.path().join("target-cache/debug/target-triplet"))
     );
     assert_eq!(
         target.output,
-        root.path().join("build/objects/target-triplet")
+        root.path().join("build/objects/default/target-triplet")
     );
     let project = PathResolver::new(&exe, root.path(), None, &global).unwrap();
     assert_eq!(project.triplet, "project-triplet");
@@ -75,7 +75,7 @@ fn global_config_paths_are_relative_to_config_file() {
     );
     assert_eq!(
         paths.lib_cache,
-        Some(root.path().join("cache").join(HOST_TRIPLET))
+        Some(root.path().join("cache/debug").join(HOST_TRIPLET))
     );
     fs::write(path, "LibDirs=42").unwrap();
     assert!(GlobalConfig::load(&root.path().join("config.toml")).is_err());
@@ -97,7 +97,10 @@ fn default_layout_and_triplet_validation() {
     );
     assert_eq!(
         paths.lib_fallback,
-        root.path().join("build/objects/lib").join(HOST_TRIPLET)
+        root.path()
+            .join("build/objects/default")
+            .join(HOST_TRIPLET)
+            .join("lib")
     );
     for value in ["", "..", "../../bad", "x\\bad", "C:bad"] {
         assert!(validate_triplet(value).is_err());
@@ -123,6 +126,8 @@ fn imports_and_cache_fallback_are_target_specific() {
     .unwrap();
     let plan = BuildPlan::discover_with_paths(&root.path().join("main.m2"), &paths).unwrap();
     let options = BuildOptions {
+        optimize: false,
+        module_options: Default::default(),
         output: paths.output.clone(),
         target: paths.triplet.clone(),
         compiler_id: "test".into(),
@@ -167,6 +172,26 @@ fn project_build_modes_follow_target_then_project_precedence() {
         PathResolver::standalone(&executable, root.path(), &global)
             .unwrap()
             .mode,
-        crate::project::BuildMode::Release
+        crate::project::BuildMode::Default
     );
+}
+
+#[test]
+fn all_four_project_modes_have_independent_optimization_and_debug_settings() {
+    use crate::project::BuildMode;
+    for (name, expected, optimized, debug) in [
+        ("default", BuildMode::Default, false, false),
+        ("debug", BuildMode::Debug, false, true),
+        ("release", BuildMode::Release, true, false),
+        ("rel-with-info", BuildMode::RelWithInfo, true, true),
+    ] {
+        let parsed: BuildMode =
+            toml::from_str::<toml::Value>(&format!("mode='{name}'")).unwrap()["mode"]
+                .clone()
+                .try_into()
+                .unwrap();
+        assert_eq!(parsed, expected);
+        assert_eq!(parsed.optimized(), optimized);
+        assert_eq!(parsed.debug_info(), debug);
+    }
 }

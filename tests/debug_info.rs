@@ -45,7 +45,11 @@ fn line_tables_share_generic_sources_hide_macros_and_mark_pipeline_calls() {
             "ir",
         ],
     );
-    let ir = fs::read_to_string(root.path().join("ir/main.ll")).unwrap();
+    let ir = fs::read_to_string(
+        root.path()
+            .join("ir/ll/debug/x86_64-pc-windows-msvc/main.ll"),
+    )
+    .unwrap();
     assert!(ir.contains("DICompileUnit"));
     assert!(ir.contains("line: 8,"));
     let normal = ir
@@ -60,7 +64,11 @@ fn line_tables_share_generic_sources_hide_macros_and_mark_pipeline_calls() {
     let pipe_id = debug_id(pipe);
     assert!(ir.contains(&format!("!{normal_id} = !DILocation(line: 8,")));
     assert!(ir.contains(&format!("!{pipe_id} = !DILocation(line: 15728639,")));
-    let supplementary = fs::read_to_string(root.path().join("ir/__mlc_instances.ll")).unwrap();
+    let supplementary = fs::read_to_string(
+        root.path()
+            .join("ir/ll/debug/x86_64-pc-windows-msvc/__mlc_instances.ll"),
+    )
+    .unwrap();
     assert_eq!(
         supplementary
             .matches("!DISubprogram(name: \"main::id\"")
@@ -101,9 +109,12 @@ fn line_tables_share_generic_sources_hide_macros_and_mark_pipeline_calls() {
         ],
     );
     assert!(
-        !fs::read_to_string(root.path().join("release/main.ll"))
-            .unwrap()
-            .contains("!dbg")
+        !fs::read_to_string(
+            root.path()
+                .join("release/ll/release/x86_64-pc-windows-msvc/main.ll")
+        )
+        .unwrap()
+        .contains("!dbg")
     );
 }
 #[test]
@@ -122,8 +133,8 @@ fn project_mode_pdb_and_cache_are_consistent() {
     let root = fixture();
     fs::write(root.path().join("Project.toml"), "[Project]\nName='debug-test'\nVersion='1'\nOutputDir='build'\nMode='release'\n[[Project.Targets]]\nName='app'\nEntry='main.m2'\nType='bin'\nMode='debug'\n").unwrap();
     invoke(root.path(), &["build", "app", "--config", "config.toml"]);
-    let pdb = root.path().join("build/app.pdb");
-    let executable = root.path().join("build/app.exe");
+    let pdb = root.path().join("build/debug/app.pdb");
+    let executable = root.path().join("build/debug/app.exe");
     let pdb_bytes = fs::read(&pdb).unwrap();
     assert!(pdb_bytes.starts_with(b"Microsoft C/C++ MSF 7.00"));
     assert!(
@@ -159,7 +170,7 @@ fn project_mode_pdb_and_cache_are_consistent() {
             "release",
         ],
     );
-    assert!(!root.path().join("release/app.pdb").exists());
+    assert!(!root.path().join("release/release/app.pdb").exists());
 }
 
 #[test]
@@ -208,7 +219,7 @@ fn lldb_steps_into_shared_generic_sources_and_skips_pipeline_stages() {
     ] {
         command.args(["-o", action]);
     }
-    let output = command.arg("build/main.exe").output().unwrap();
+    let output = command.arg("build/debug/main.exe").output().unwrap();
     let log = format!(
         "{}\n{}",
         String::from_utf8_lossy(&output.stdout),
@@ -266,10 +277,112 @@ func main()->i32 {
                 "build",
             ],
         );
-        let run = Command::new(root.path().join("build/main.exe"))
-            .output()
-            .unwrap();
+        let run = Command::new(
+            root.path()
+                .join("build")
+                .join(mode.trim_start_matches('-'))
+                .join("main.exe"),
+        )
+        .output()
+        .unwrap();
         assert!(run.status.success(), "{mode}: {:?}", run);
         assert_eq!(String::from_utf8_lossy(&run.stdout).trim(), "15");
+    }
+}
+
+#[test]
+fn four_modes_control_ast_optimization_and_debug_metadata_independently() {
+    let root = tempfile::tempdir().unwrap();
+    fs::write(root.path().join("config.toml"), "").unwrap();
+    fs::write(
+        root.path().join("main.m2"),
+        "func main()->i32 { var a=2+3; return a; }",
+    )
+    .unwrap();
+    for (flag, optimized, debug) in [
+        ("--default", false, false),
+        ("--debug", false, true),
+        ("--release", true, false),
+        ("--rel-with-info", true, true),
+    ] {
+        invoke(
+            root.path(),
+            &["ll", "main.m2", flag, "--config", "config.toml", "-o", "ir"],
+        );
+        let ir = fs::read_to_string(
+            root.path()
+                .join("ir/ll")
+                .join(flag.trim_start_matches('-'))
+                .join("x86_64-pc-windows-msvc/main.ll"),
+        )
+        .unwrap();
+        assert_eq!(ir.contains("!llvm.dbg.cu"), debug, "{flag}: {ir}");
+        assert_eq!(ir.contains(" = add i32"), !optimized, "{flag}: {ir}");
+        if debug {
+            assert!(
+                ir.contains(&format!("isOptimized: {optimized}")),
+                "{flag}: {ir}"
+            );
+        }
+    }
+    invoke(
+        root.path(),
+        &["ll", "main.m2", "--config", "config.toml", "-o", "ir"],
+    );
+    let ir = fs::read_to_string(
+        root.path()
+            .join("ir/ll/default/x86_64-pc-windows-msvc/main.ll"),
+    )
+    .unwrap();
+    assert!(!ir.contains("!dbg") && ir.contains(" = add i32"), "{ir}");
+}
+
+#[test]
+#[ignore = "Requires bundled linker and MSVC/UCRT libraries"]
+fn all_four_modes_build_run_and_invalidate_object_cache() {
+    let root = fixture();
+    let mut previous = None;
+    for (flag, debug) in [
+        ("--default", false),
+        ("--debug", true),
+        ("--release", false),
+        ("--rel-with-info", true),
+    ] {
+        let directory = flag.trim_start_matches('-');
+        invoke(
+            root.path(),
+            &[
+                "build",
+                "main.m2",
+                flag,
+                "--config",
+                "config.toml",
+                "-o",
+                directory,
+            ],
+        );
+        assert_eq!(
+            root.path()
+                .join(directory)
+                .join(directory)
+                .join("main.pdb")
+                .exists(),
+            debug
+        );
+        let run = Command::new(root.path().join(directory).join(directory).join("main.exe"))
+            .output()
+            .unwrap();
+        assert!(run.status.success(), "{flag}: {run:?}");
+        assert_eq!(String::from_utf8_lossy(&run.stdout).trim(), "4");
+        let object = root
+            .path()
+            .join(directory)
+            .join("objects")
+            .join(directory)
+            .join("x86_64-pc-windows-msvc/main.sym");
+        let manifest = mlc_builder::artifacts::load(&object).unwrap();
+        let key = manifest.manifest.config.build_key;
+        assert_ne!(previous.as_ref(), Some(&key));
+        previous = Some(key);
     }
 }

@@ -51,11 +51,11 @@ fn cli_implementation_change_rebuilds_only_its_object_and_relinks() {
     assert!(!first.stderr.contains(&b'\r'));
     let objects = root
         .path()
-        .join("out/objects")
+        .join("out/objects/default")
         .join(mlc_builder::paths::HOST_TRIPLET);
     let main = objects.join("main.obj");
     let leaf = objects.join("leaf.obj");
-    let library = root.path().join("out/main.lib");
+    let library = root.path().join("out/default/main.lib");
     let main_time = fs::metadata(&main).unwrap().modified().unwrap();
     let leaf_time = fs::metadata(&leaf).unwrap().modified().unwrap();
     let library_time = fs::metadata(&library).unwrap().modified().unwrap();
@@ -104,7 +104,7 @@ fn generic_instance_object_is_reused_until_its_ir_changes() {
     run(root.path());
     let object = root
         .path()
-        .join("out/objects")
+        .join("out/objects/default")
         .join(mlc_builder::paths::HOST_TRIPLET)
         .join("__mlc_instances.obj");
     let original = fs::metadata(&object).unwrap().modified().unwrap();

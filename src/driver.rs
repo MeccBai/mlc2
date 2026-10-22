@@ -137,19 +137,6 @@ fn build(
         for dir in &mut paths.imports.lib_dirs {
             *dir = dir.parent().ok_or("Invalid library root")?.join(triplet);
         }
-        paths.output = paths
-            .output
-            .parent()
-            .ok_or("Invalid output root")?
-            .join(triplet);
-        paths.lib_fallback = paths
-            .lib_fallback
-            .parent()
-            .ok_or("Invalid cache root")?
-            .join(triplet);
-        if let Some(dir) = &mut paths.lib_cache {
-            *dir = dir.parent().ok_or("Invalid cache root")?.join(triplet);
-        }
     }
     if !cli.lib_dirs.is_empty() {
         paths.imports.lib_dirs = cli
@@ -158,55 +145,88 @@ fn build(
             .map(|p| root.join(p).join(&paths.triplet))
             .collect();
     }
-    let output = cli
+    let output_root = cli
         .output
         .as_ref()
         .map(|p| root.join(p))
-        .unwrap_or_else(|| {
-            paths
-                .output
-                .parent()
-                .and_then(Path::parent)
-                .unwrap()
-                .to_owned()
-        });
-    if cli.output.is_some() {
-        paths.output = output.join("objects").join(&paths.triplet);
-        paths.lib_fallback = output.join("objects/lib").join(&paths.triplet);
-    }
+        .unwrap_or_else(|| paths.build_root.clone());
+    let mode = cli.build_mode(paths.mode);
+    paths.configure_output(output_root.clone(), mode);
+    let output = output_root.join(mode.directory());
     let plan = BuildPlan::discover_with_paths(entry, &paths)?;
-    let debug = if cli.debug {
-        true
-    } else if cli.release {
-        false
-    } else {
-        paths.mode == mlc_builder::project::BuildMode::Debug
-    };
+    let debug = mode.debug_info();
     if debug && !paths.triplet.contains("windows") {
         return Err("Debug line tables currently require a Windows target".into());
     }
-    let optimize = if debug || cli.no_optimize {
-        mlc_optimizer::OptimizeConfig::disabled()
-    } else if cli.optimize {
+    let optimized = if cli.no_optimize {
+        false
+    } else {
+        cli.optimize || mode.optimized()
+    };
+    let optimize = if optimized {
         mlc_optimizer::OptimizeConfig::enabled()
     } else {
-        mlc_optimizer::OptimizeConfig::default()
+        mlc_optimizer::OptimizeConfig::disabled()
     };
+    let std_mode = paths.std_mode();
+    let std_optimized = std_mode.optimized();
+    let std_debug = std_mode.debug_info() && paths.triplet.contains("windows");
+    let module_configs: HashMap<_, _> = plan
+        .targets
+        .iter()
+        .filter(|target| {
+            PathResolver::is_std_module(&target.module_name) && target.artifact_stems.len() > 1
+        })
+        .map(|target| {
+            let mut optimize = if std_optimized {
+                mlc_optimizer::OptimizeConfig::enabled()
+            } else {
+                mlc_optimizer::OptimizeConfig::disabled()
+            };
+            // A shared std object must retain helpers independently of this consumer.
+            optimize.unused_function_elimination = false;
+            (
+                target.id.0,
+                (
+                    optimize,
+                    mlc_codegen::gens::CodegenConfig {
+                        debug_info: std_debug,
+                        optimized: std_optimized,
+                    },
+                ),
+            )
+        })
+        .collect();
     progress.stage("Analyzing and generating IR", 0);
-    let generated = frontend::generate_with_config(
+    let generated = frontend::generate_with_module_configs(
         &plan,
         &paths.triplet,
         kind,
         optimize,
-        mlc_codegen::gens::CodegenConfig { debug_info: debug },
+        mlc_codegen::gens::CodegenConfig {
+            debug_info: debug,
+            optimized,
+        },
+        &module_configs,
     )?;
     if matches!(cli.command, Commands::Ll { .. }) {
-        let directory = if cli.output.is_some() {
-            output
-        } else {
-            output.join("ll")
-        };
-        ir_dump::write(&plan, generated, &directory)?;
+        let directory = output_root
+            .join("ll")
+            .join(mode.directory())
+            .join(&paths.triplet);
+        let module_directories = module_configs
+            .keys()
+            .map(|id| {
+                (
+                    *id,
+                    output_root
+                        .join("ll")
+                        .join(std_mode.directory())
+                        .join(&paths.triplet),
+                )
+            })
+            .collect();
+        ir_dump::write(&plan, generated, &directory, &module_directories)?;
         return Ok(None);
     }
     let module_fingerprints = generated
@@ -221,14 +241,32 @@ fn build(
         .collect();
     let modules: HashMap<_, _> = generated.modules.into_iter().collect();
     let global_inits: HashMap<_, _> = generated.global_inits.into_iter().collect();
+    let module_options = module_configs
+        .iter()
+        .map(|(id, (optimize, codegen))| {
+            (
+                plan.targets[*id].module_name.clone(),
+                mlc_builder::schedule::ModuleOptions {
+                    optimize: codegen.optimized,
+                    compiler_options: vec![
+                        format!("std-v1={std_mode:?}"),
+                        format!("optimizer={optimize:?}"),
+                        format!("debug-lines-v3={}", codegen.debug_info),
+                    ],
+                },
+            )
+        })
+        .collect();
     let options = BuildOptions {
+        module_options,
+        optimize: optimized,
         output: paths.output.clone(),
         target: paths.triplet.clone(),
         compiler_id: format!("mlc-{}-cli-v2", env!("CARGO_PKG_VERSION")),
         compiler_options: vec![
             format!("kind={kind:?}"),
             format!("optimizer={optimize:?}"),
-            format!("debug-lines-v2={debug}"),
+            format!("debug-lines-v3={debug}"),
         ],
         module_fingerprints,
         workers: cli.jobs.unwrap_or_else(|| {
@@ -274,10 +312,11 @@ fn build(
             &paths.triplet,
             env!("CARGO_PKG_VERSION"),
             &ir,
+            optimized,
         ))?;
         let hit = cache::matches(&object, &key);
         if !hit {
-            mlc_builder::llvm::IrCompiler::init(&paths.triplet)
+            mlc_builder::llvm::IrCompiler::with_optimization(&paths.triplet, optimized)
                 .map_err(|e| e.to_string())?
                 .emit(ir, &object)
                 .map_err(|e| e.to_string())?;

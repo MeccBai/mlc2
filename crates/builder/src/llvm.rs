@@ -27,10 +27,18 @@ impl IrCompiler {
     }
 
     pub fn with_config(triplet: &str, config: BackendConfig) -> Result<Self, BackendError> {
+        Self::with_level(triplet, config, LLVMCodeGenOptLevel::LLVMCodeGenLevelNone)
+    }
+
+    pub fn with_optimization(triplet: &str, optimize: bool) -> Result<Self, BackendError> {
         Self::with_level(
             triplet,
-            config,
-            LLVMCodeGenOptLevel::LLVMCodeGenLevelDefault,
+            BackendConfig::current()?,
+            if optimize {
+                LLVMCodeGenOptLevel::LLVMCodeGenLevelDefault
+            } else {
+                LLVMCodeGenOptLevel::LLVMCodeGenLevelNone
+            },
         )
     }
 
@@ -74,27 +82,17 @@ impl IrCompiler {
     }
 
     pub fn emit(&self, ir: String, output: &Path) -> Result<(), BackendError> {
-        if ir.contains("!llvm.dbg.cu") {
-            let debug = Self::with_level(
-                self.triplet
-                    .to_str()
-                    .map_err(|e| BackendError::Config(e.to_string()))?,
-                self.config.clone(),
-                LLVMCodeGenOptLevel::LLVMCodeGenLevelNone,
-            )?;
-            emit::object(debug.machine, &debug.triplet, &ir, output)?;
-            if self
+        emit::object(self.machine, &self.triplet, &ir, output)?;
+        if ir.contains("!llvm.dbg.cu")
+            && self
                 .triplet
                 .to_bytes()
                 .windows(7)
                 .any(|bytes| bytes == b"windows")
-            {
-                codeview::preserve_step_over(output).map_err(BackendError::Codegen)?;
-            }
-            Ok(())
-        } else {
-            emit::object(self.machine, &self.triplet, &ir, output)
+        {
+            codeview::preserve_step_over(output).map_err(BackendError::Codegen)?;
         }
+        Ok(())
     }
 
     /// Arguments include objects, output path, SDK libraries and any linker script.

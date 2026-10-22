@@ -14,10 +14,12 @@ pub const NEVER_STEP_INTO: usize = 0xefffff;
 #[derive(Debug, Clone, Copy, Default)]
 pub struct CodegenConfig {
     pub debug_info: bool,
+    pub optimized: bool,
 }
 
 #[derive(Default)]
 pub(super) struct DebugInfoBuilder {
+    pub(super) optimized: bool,
     nodes: Vec<String>,
     files: HashMap<FileId, (usize, usize)>,
     units: Vec<usize>,
@@ -55,7 +57,7 @@ impl DebugInfoBuilder {
             quoted(&path.file_name().unwrap_or_default().to_string_lossy()),
             quoted(&path.parent().unwrap_or(Path::new("")).to_string_lossy())
         ));
-        let unit = self.node(format!("distinct !DICompileUnit(language: DW_LANG_C, file: !{file}, producer: \"mlc\", isOptimized: false, runtimeVersion: 0, emissionKind: LineTablesOnly)"));
+        let unit = self.node(format!("distinct !DICompileUnit(language: DW_LANG_C, file: !{file}, producer: \"mlc\", isOptimized: {}, runtimeVersion: 0, emissionKind: LineTablesOnly)", self.optimized));
         self.units.push(unit);
         self.files.insert(config.file_id(), (file, unit));
         (file, unit)
@@ -133,7 +135,12 @@ impl DebugInfoBuilder {
             String::new()
         };
         let name = quoted(name);
-        let scope = self.node(format!("distinct !DISubprogram(name: \"{name}\", linkageName: \"{name}\", scope: !{file}, file: !{file}, line: {line}, type: !{signature}, scopeLine: {line}, spFlags: DISPFlagDefinition, unit: !{unit}{declaration})"));
+        let flags = if self.optimized {
+            "DISPFlagDefinition | DISPFlagOptimized"
+        } else {
+            "DISPFlagDefinition"
+        };
+        let scope = self.node(format!("distinct !DISubprogram(name: \"{name}\", linkageName: \"{name}\", scope: !{file}, file: !{file}, line: {line}, type: !{signature}, scopeLine: {line}, spFlags: {flags}, unit: !{unit}{declaration})"));
         let positions: HashMap<_, _> = locations
             .iter()
             .map(|(line, span, step)| (*line, (*span, *step)))

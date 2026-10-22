@@ -105,7 +105,13 @@ func main()->i32{
         false,
     );
     success(&result);
-    let ir = fs::read_to_string(root.path().join("build/ll/std/fmt.ll")).unwrap();
+    let ir = fs::read_to_string(
+        root.path()
+            .join("build/ll/debug")
+            .join(mlc_builder::paths::HOST_TRIPLET)
+            .join("std/fmt.ll"),
+    )
+    .unwrap();
     assert!(!ir.contains("snprintf"), "{ir}");
     assert!(ir.contains("_ecvt_s"), "{ir}");
     assert!(ir.contains("fwrite"), "{ir}");

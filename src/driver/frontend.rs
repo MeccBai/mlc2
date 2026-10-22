@@ -69,12 +69,30 @@ pub fn generate_with_options(
     )
 }
 
+#[cfg(test)]
 pub fn generate_with_config(
     plan: &BuildPlan,
     triplet: &str,
     kind: TargetKind,
     optimize: mlc_optimizer::OptimizeConfig,
     codegen: mlc_codegen::gens::CodegenConfig,
+) -> Result<Generated, String> {
+    generate_with_module_configs(plan, triplet, kind, optimize, codegen, &HashMap::new())
+}
+
+pub fn generate_with_module_configs(
+    plan: &BuildPlan,
+    triplet: &str,
+    kind: TargetKind,
+    optimize: mlc_optimizer::OptimizeConfig,
+    codegen: mlc_codegen::gens::CodegenConfig,
+    module_configs: &HashMap<
+        usize,
+        (
+            mlc_optimizer::OptimizeConfig,
+            mlc_codegen::gens::CodegenConfig,
+        ),
+    >,
 ) -> Result<Generated, String> {
     let mut package = PackageSymbolTable::new();
     let mut asts = vec![];
@@ -97,6 +115,10 @@ pub fn generate_with_config(
     for id in &plan.order {
         let target = &plan.targets[id.0];
         let module = parsed_modules.remove(&id.0).unwrap();
+        let codegen = module_configs
+            .get(&id.0)
+            .map(|config| config.1)
+            .unwrap_or(codegen);
         let file = match &target.input {
             TargetInput::Declaration(manifest)
                 if codegen.debug_info && !manifest.config.source_file.is_empty() =>
@@ -140,7 +162,16 @@ pub fn generate_with_config(
         .into_iter()
         .filter(|(id, _)| matches!(plan.targets[id.0].input, TargetInput::Source { .. }))
         .unzip();
-    let optimized = mlc_optimizer::Optimizer::new(optimize).optimize_all(source_asts, &mut package);
+    let optimized = mlc_optimizer::Optimizer::new(optimize).optimize_all_with_configs(
+        source_asts,
+        &mut package,
+        |file| {
+            module_configs
+                .get(&file.index())
+                .map(|config| config.0)
+                .unwrap_or(optimize)
+        },
+    );
     let asts = source_ids.into_iter().zip(optimized);
     names::qualify(&mut package, plan);
     let mut modules = vec![];
@@ -164,6 +195,10 @@ pub fn generate_with_config(
         if !matches!(plan.targets[id.0].input, TargetInput::Source { .. }) {
             continue;
         }
+        let codegen = module_configs
+            .get(&id.0)
+            .map(|config| config.1)
+            .unwrap_or(codegen);
         let mut generator = IrGenerator::with_config(triplet.into(), codegen);
         generator.generate_globals(ast.config.file_id(), &package);
         let file_initializers = generator.global_initializers().to_vec();

@@ -127,7 +127,7 @@ fn library_source_beats_local_binary_and_uses_separate_cache() {
     assert_eq!(
         plan.targets[1].artifact_stems[0],
         root.path()
-            .join("objects")
+            .join("objects/default")
             .join(HOST_TRIPLET)
             .join("c_std/io")
     );
@@ -153,5 +153,11 @@ fn universal_source_precedes_target_binary_and_caches_for_target() {
     let plan = BuildPlan::discover_with_paths(&entry, &paths).unwrap();
     assert_eq!(plan.targets[1].file, source.canonicalize().unwrap());
     assert_eq!(plan.targets[1].module_name, "c_std::io");
-    assert_eq!(plan.targets[1].artifact_stems[0], target.with_extension(""));
+    assert_eq!(
+        plan.targets[1].artifact_stems[0],
+        root.path()
+            .join("objects/default")
+            .join(HOST_TRIPLET)
+            .join("c_std/io")
+    );
 }

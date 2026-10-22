@@ -9,7 +9,11 @@ use crate::{
 };
 use std::collections::HashSet;
 
-pub(crate) fn eliminate(modules: &mut [AbstractSyntaxTree], package: &mut PackageSymbolTable) {
+pub(crate) fn eliminate(
+    modules: &mut [AbstractSyntaxTree],
+    package: &mut PackageSymbolTable,
+    enabled: impl Fn(crate::ast::config::FileId) -> bool,
+) {
     let mut functions = HashSet::new();
     let mut interfaces = HashSet::new();
     let mut reference = |value: &mut Expression| match value {
@@ -44,6 +48,9 @@ pub(crate) fn eliminate(modules: &mut [AbstractSyntaxTree], package: &mut Packag
         }
     }
     for module in modules.iter_mut() {
+        if !enabled(module.config.file_id()) {
+            continue;
+        }
         module.body.retain(|function| match function {
             Function::Func(body) => {
                 let symbol = package.get_function(body.symbol, false);

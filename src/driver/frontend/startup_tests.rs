@@ -117,6 +117,8 @@ fn prebuilt_imports_keep_global_init_metadata_and_startup_calls() {
     let report = schedule::build(
         plan,
         BuildOptions {
+            optimize: false,
+            module_options: Default::default(),
             output: output.clone(),
             target: "x86_64-pc-windows-msvc".into(),
             compiler_id: "startup-test".into(),

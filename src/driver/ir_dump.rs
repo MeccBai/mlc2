@@ -12,6 +12,7 @@ pub(super) fn write(
     plan: &BuildPlan,
     generated: Generated,
     directory: &Path,
+    module_directories: &std::collections::HashMap<usize, PathBuf>,
 ) -> Result<(), String> {
     let mut files = Vec::new();
     let mut names = HashSet::new();
@@ -34,7 +35,14 @@ pub(super) fn write(
         if !names.insert(relative.clone()) {
             return Err(format!("Duplicate IR output: {}", relative.display()));
         }
-        files.push((directory.join(relative), ir));
+        files.push((
+            module_directories
+                .get(&id)
+                .map(PathBuf::as_path)
+                .unwrap_or(directory)
+                .join(relative),
+            ir,
+        ));
     }
     if let Some(ir) = generated.supplement {
         let relative = PathBuf::from("__mlc_instances.ll");

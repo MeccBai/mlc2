@@ -57,9 +57,9 @@ fn build_and_run_sources_named_targets_and_all_targets() {
         let result = invoke(root.path(), &args);
         assert!(result.status.success(), "{result:?}");
     }
-    assert!(root.path().join("build/main.exe").is_file());
-    assert!(root.path().join("project-out/main.exe").is_file());
-    assert!(root.path().join("project-out/other.exe").is_file());
+    assert!(root.path().join("build/default/main.exe").is_file());
+    assert!(root.path().join("project-out/default/main.exe").is_file());
+    assert!(root.path().join("project-out/default/other.exe").is_file());
     for target in ["main.m2", "main"] {
         let result = invoke(root.path(), &["run", target]);
         assert_eq!(result.status.code(), Some(7), "{result:?}");

@@ -18,7 +18,8 @@ installation/
         io.m2
   objects/
     universal/              # Object=None 的声明
-    <triplet>/              # .sym、.obj/.o、.mg
+    debug/<triplet>/        # debug 标准库 .sym、.obj/.o、.mg
+    release/<triplet>/      # release 标准库 .sym、.obj/.o、.mg
 ```
 
 `BackendConfig.tools` 指向安装根目录下的 `tools/` 子目录。
@@ -29,7 +30,7 @@ installation/
 
 1. 当前导入文件所在目录的 `std/io.m2`。
 2. 各目标专用库目录的 `std/io.m2`，然后对应 universal 源码。
-3. 无源码时，查本地 `std/io.sym`，然后 objects/<triplet> 和 objects/universal。
+3. 无源码时，查本地 `std/io.sym`，然后 objects/<mode>/<triplet>、兼容的 objects/<triplet> 和 objects/universal。
 
 源码优先于任何位置的 `.sym`。完整布局和打包方法见 [安装分发](distribution.md)。
 所有存在的文件路径规范化后去重；重复 import 只产生一条依赖边。
@@ -60,9 +61,9 @@ taskflowrs 的任务没有业务返回值，因此这里使用每节点一个
 ## 产物与缓存
 
 通过 `PathResolver` 构建时，项目模块 `std::io` 位于
-`build/objects/<triplet>/std/io.*`；库默认在安装目录 `objects/<triplet>/std/io.*` 缓存。
+`build/objects/<mode>/<triplet>/std/io.*`；库默认在安装目录 `objects/<mode>/<triplet>/std/io.*` 缓存。
 显式库缓存目录或原目录写入失败时，回退到
-`build/objects/lib/<triplet>/std/io.*`，并收集警告。
+`build/objects/<mode>/<triplet>/lib/std/io.*`，并收集警告。
 低层 `BuildPlan::discover()` 仍保留调用方直接指定输出目录的接口。
 
 - `.sym`：MessagePack 二进制，保存版本、模块名、源文件路径、目标、构建键、依赖指纹和声明。
@@ -193,3 +194,5 @@ cargo build --bin mlc
 ```
 
 标准库 `.m2` 的对象文件与模板缓存由正常构建按需生成。
+
+标准库只提供 debug/release 两档，Project.toml 的 `[Project]` 或 target 可设置 `std_type = "debug"` / `"release"`；target 优先。省略时 default/debug 使用 debug，release/rel-with-info 使用 release。该设置没有 CLI 选项，单文件入口继续忽略 Project.toml。

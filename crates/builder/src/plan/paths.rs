@@ -45,6 +45,15 @@ impl ImportResolver {
     }
 
     pub fn resolve(&self, importer: &Path, import: &ImportModule) -> Result<PathBuf, String> {
+        self.resolve_with_modes(importer, import, None)
+    }
+
+    pub(super) fn resolve_with_modes(
+        &self,
+        importer: &Path,
+        import: &ImportModule,
+        modes: Option<(crate::project::BuildMode, crate::project::BuildMode)>,
+    ) -> Result<PathBuf, String> {
         if import.path().is_empty() {
             return Err("Empty import path".into());
         }
@@ -70,7 +79,25 @@ impl ImportResolver {
                 return candidate.canonicalize().map_err(|e| e.to_string());
             }
         }
-        let objects: Vec<_> = sources.iter().map(|root| Self::object_root(root)).collect();
+        let mut objects = Vec::new();
+        if let Some((mode, std_mode)) = modes {
+            let mode = if import.path().first().is_some_and(|s| s == "std") {
+                std_mode
+            } else {
+                mode
+            };
+            for root in &self.lib_dirs {
+                let objects_root = Self::object_root(root);
+                objects.push(
+                    objects_root
+                        .parent()
+                        .unwrap()
+                        .join(mode.directory())
+                        .join(root.file_name().unwrap()),
+                );
+            }
+        }
+        objects.extend(sources.iter().map(|root| Self::object_root(root)));
         for root in std::iter::once(local).chain(objects.iter().map(PathBuf::as_path)) {
             let candidate = root.join(&relative).with_extension("sym");
             if candidate.is_file() {

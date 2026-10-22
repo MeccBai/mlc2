@@ -36,15 +36,31 @@ fn ll_exports_source_modules_and_generic_instances_without_linking() {
         String::from_utf8_lossy(&output.stderr)
     );
     assert!(
-        fs::read_to_string(root.path().join("ir/main.ll"))
-            .unwrap()
-            .contains("define")
+        fs::read_to_string(
+            root.path()
+                .join("ir/ll/default")
+                .join(mlc_builder::paths::HOST_TRIPLET)
+                .join("main.ll")
+        )
+        .unwrap()
+        .contains("define")
     );
-    assert!(root.path().join("ir/leaf.ll").is_file());
     assert!(
-        fs::read_to_string(root.path().join("ir/__mlc_instances.ll"))
-            .unwrap()
-            .contains("leaf::id<i32>")
+        root.path()
+            .join("ir/ll/default")
+            .join(mlc_builder::paths::HOST_TRIPLET)
+            .join("leaf.ll")
+            .is_file()
+    );
+    assert!(
+        fs::read_to_string(
+            root.path()
+                .join("ir/ll/default")
+                .join(mlc_builder::paths::HOST_TRIPLET)
+                .join("__mlc_instances.ll")
+        )
+        .unwrap()
+        .contains("leaf::id<i32>")
     );
     assert!(!root.path().join("ir/objects").exists());
     assert!(!root.path().join("build").exists());
@@ -73,7 +89,13 @@ fn ll_defaults_to_build_ll_and_emits_nothing_on_frontend_failure() {
         "{}",
         String::from_utf8_lossy(&output.stderr)
     );
-    assert!(root.path().join("build/ll/main.ll").is_file());
+    assert!(
+        root.path()
+            .join("build/ll/default")
+            .join(mlc_builder::paths::HOST_TRIPLET)
+            .join("main.ll")
+            .is_file()
+    );
     fs::write(root.path().join("main.m2"), "func main() { missing(); }").unwrap();
     assert!(!run(&["-o", "invalid-ir"]).status.success());
     assert!(!root.path().join("invalid-ir").exists());

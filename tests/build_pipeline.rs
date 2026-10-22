@@ -58,6 +58,8 @@ fn text_to_ast_to_ir_to_object_and_incremental_cache() {
     .unwrap();
     let resolver = ImportResolver { lib_dirs: vec![] };
     let options = BuildOptions {
+        optimize: false,
+        module_options: Default::default(),
         output: root.path().join("out"),
         target: "x86_64-pc-windows-msvc".into(),
         compiler_id: "integration-test".into(),
@@ -91,6 +93,8 @@ fn semantic_error_is_a_node_result_and_publishes_no_manifest() {
     std::fs::write(&entry, "func main() -> i32 { return unknown; }").unwrap();
     let plan = BuildPlan::discover(&entry, &ImportResolver { lib_dirs: vec![] }).unwrap();
     let options = BuildOptions {
+        optimize: false,
+        module_options: Default::default(),
         output: root.path().join("out"),
         target: "x86_64-pc-windows-msvc".into(),
         compiler_id: "integration-test".into(),

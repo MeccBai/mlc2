@@ -39,14 +39,14 @@ fn cli_hello_world_builds_runs_and_reuses_objects() {
         destination,
     ];
     success(&mlc(&root, &args));
-    let executable = output.path().join("hello_world.exe");
+    let executable = output.path().join("default/hello_world.exe");
     let run = Command::new(&executable).output().unwrap();
     success(&run);
     assert_eq!(run.stdout, b"Hello World!\r\n");
     assert!(run.stderr.is_empty());
     let object = output
         .path()
-        .join("objects")
+        .join("objects/default")
         .join(mlc_builder::paths::HOST_TRIPLET)
         .join("hello_world.obj");
     let before = fs::metadata(&object).unwrap().modified().unwrap();
@@ -70,7 +70,7 @@ fn project_build_supports_normal_main_globals_imports_and_generics() {
     )
     .unwrap();
     success(&mlc(root.path(), &["build", "app"]));
-    let run = Command::new(root.path().join("build/app.exe"))
+    let run = Command::new(root.path().join("build/default/app.exe"))
         .output()
         .unwrap();
     assert_eq!(run.status.code(), Some(7), "{run:?}");
@@ -89,8 +89,8 @@ fn cli_library_kinds_and_bad_arguments() {
     for kind in ["static", "shared"] {
         success(&mlc(root.path(), &["build", "library.m2", "--type", kind]));
     }
-    assert!(root.path().join("build/library.lib").is_file());
-    assert!(root.path().join("build/library.dll").is_file());
+    assert!(root.path().join("build/default/library.lib").is_file());
+    assert!(root.path().join("build/default/library.dll").is_file());
     assert!(
         !mlc(root.path(), &["build", "library.m2", "--type", "lib"])
             .status
@@ -125,7 +125,7 @@ fn native_linkage_names_are_distinct_between_modules() {
     )
     .unwrap();
     success(&mlc(root.path(), &["build", "main.m2"]));
-    let run = Command::new(root.path().join("build/main.exe"))
+    let run = Command::new(root.path().join("build/default/main.exe"))
         .output()
         .unwrap();
     assert_eq!(run.status.code(), Some(5));
