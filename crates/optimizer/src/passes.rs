@@ -27,16 +27,21 @@ impl AstPass for ConstantFolding {
         walk::expressions(body, &mut |value| {
             *value = value.clone().const_fold(config, &context);
         });
+        let mut replacements = walk::Replacements::new();
         walk::statements(body, &mut |statement| {
             if let Statement::VariableDecl(variable) = statement {
                 let init = (*variable.init_val)
                     .clone()
                     .normalize_initializer(variable.var_type, &context);
                 if init != *variable.init_val {
+                    let previous = variable.clone();
+                    let identity = std::rc::Rc::as_ptr(&previous) as usize;
                     std::rc::Rc::make_mut(variable).init_val = Box::new(init);
+                    replacements.insert(identity, (previous, variable.clone()));
                 }
             }
         });
+        walk::expressions(body, &mut |value| walk::rebind(value, &replacements));
     }
 }
 
@@ -83,24 +88,32 @@ impl AstPass for UnusedVariableElimination {
         "unused-variable-elimination"
     }
     fn run(&self, body: &mut [Statement], _: &mut Config, symbols: &mut PackageSymbolTable) {
-        walk::statements(body, &mut |statement| {
-            let Statement::VariableDecl(variable) = statement else {
-                return;
-            };
-            // Aliases and uses are counted by semantic analysis. Never discard an owner:
-            // it still needs storage and an exactly-once scope cleanup.
-            if variable.read_count.get() != 0
-                || variable.var_type.has_res(symbols)
-                || matches!(&*variable.init_val, Expression::InitListE(_, ..))
-            {
-                return;
+        // Dropping an unused declaration releases its initializer's references.
+        // Repeat so bindings retained only by that initializer can also disappear.
+        loop {
+            let mut changed = false;
+            walk::statements(body, &mut |statement| {
+                let Statement::VariableDecl(variable) = statement else {
+                    return;
+                };
+                // Remaining expression references hold an Rc. Owners and aggregates
+                // retain storage because their cleanup or address may be observable.
+                if std::rc::Rc::strong_count(variable) != 1
+                    || variable.var_type.has_res(symbols)
+                    || matches!(&*variable.init_val, Expression::InitListE(_, ..))
+                {
+                    return;
+                }
+                *statement = if constant::value(&variable.init_val, symbols).is_some() {
+                    Statement::AnonymousBlock(AnonymousBlock { statements: vec![] })
+                } else {
+                    Statement::Expression((*variable.init_val).clone())
+                };
+                changed = true;
+            });
+            if !changed {
+                break;
             }
-            *statement = if constant::value(&variable.init_val, symbols).is_some() {
-                Statement::AnonymousBlock(AnonymousBlock { statements: vec![] })
-            } else {
-                // Preserve calls, pointer reads and any other initializer effects.
-                Statement::Expression((*variable.init_val).clone())
-            };
-        });
+        }
     }
 }

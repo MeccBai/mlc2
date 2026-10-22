@@ -190,3 +190,64 @@ fn source_ranges_survive_folding_and_atom_rewrites() {
     assert_eq!(&source[composite.members[0].span().into_range()], "first");
     assert_eq!(&source[composite.members[1].span().into_range()], "(4*5)");
 }
+
+#[test]
+fn dead_constant_bindings_are_removed_after_folding_and_pruning() {
+    for source in [
+        "func main(){const a=10;var b=a+100;}",
+        "func main(){var a=10;if(false){var b=a;}}",
+    ] {
+        let (mut ast, _) = optimize(source, OptimizeConfig::enabled());
+        let mut declarations = 0;
+        walk::statements(body_mut(&mut ast.body[0]), &mut |statement| {
+            declarations += usize::from(matches!(statement, Statement::VariableDecl(_)));
+        });
+        assert_eq!(declarations, 0, "{source}");
+    }
+}
+
+#[test]
+fn elimination_preserves_effects_addresses_and_mutation() {
+    let source = "func effect()->i32{return 7;}func use(p:$i32){}func main(){var x=effect();var y=1;use(@y);var z=2;z=3;}";
+    let (mut ast, _) = optimize(source, OptimizeConfig::enabled());
+    let main = ast.body.last_mut().unwrap();
+    let mut calls = 0;
+    let mut references = 0;
+    walk::expressions(body_mut(main), &mut |value| {
+        calls += usize::from(matches!(value, Expression::FuncCallE(_, ..)));
+        references += usize::from(matches!(value, Expression::VarValueE(_, ..)));
+    });
+    assert!(calls >= 2);
+    assert!(references >= 2);
+}
+
+#[test]
+fn folding_rebinds_local_declarations_before_rc_based_elimination() {
+    let (mut ast, _) = optimize(
+        "func main()->i32{const a=10;var b=a+100;var c=b;return c;}",
+        OptimizeConfig::enabled(),
+    );
+    let body = body_mut(&mut ast.body[0]);
+    let mut bindings = std::collections::HashMap::new();
+    walk::statements(body, &mut |statement| {
+        if let Statement::VariableDecl(variable) = statement {
+            bindings.insert(variable.name.clone(), variable.clone());
+        }
+    });
+    assert!(!bindings.contains_key("a"));
+    assert!(
+        matches!(&*bindings["b"].init_val, Expression::ConstValueE(value, ..) if value.value == "110")
+    );
+    let mut uses = 0;
+    walk::expressions(body, &mut |value| {
+        if let Expression::VarValueE(variable, ..) = value {
+            assert!(
+                std::rc::Rc::ptr_eq(variable, &bindings[&variable.name]),
+                "{}",
+                variable.name
+            );
+            uses += 1;
+        }
+    });
+    assert_eq!(uses, 2);
+}

@@ -54,43 +54,68 @@ fn atom_expression(atom: &mut CompAtom, visit: &mut impl FnMut(&mut Expression))
 }
 
 pub(crate) fn expressions(scope: &mut [Statement], visit: &mut impl FnMut(&mut Expression)) {
-    statements(scope, &mut |statement| match statement {
-        Statement::VariableDecl(variable) => {
-            let mut init = (*variable.init_val).clone();
-            expression(&mut init, visit);
-            if init != *variable.init_val {
-                Rc::make_mut(variable).init_val = Box::new(init);
-            }
-        }
-        Statement::Expression(value) => expression(value, visit),
-        Statement::FuncCall(call) => {
-            let mut value = Expression::FuncCallE(call.clone(), (0..0).into());
-            expression(&mut value, visit);
-            *statement = Statement::Expression(value);
-        }
-        Statement::Assignment(assignment) => {
-            expression(&mut assignment.variable, visit);
-            expression(&mut assignment.value, visit);
-        }
-        Statement::ReturnBlock(ret) => {
-            if let Some(value) = &mut ret.value {
-                expression(value, visit);
-            }
-        }
-        Statement::IfBlock(block) => expression(&mut block.condition, visit),
-        Statement::WhileBlock(block) => expression(&mut block.condition, visit),
-        Statement::ForBlock(block) => expression(&mut block.condition, visit),
-        Statement::MatchBlock(block) => {
-            expression(&mut block.value, visit);
-            for (pattern, _) in &mut block.branches {
-                if let crate::ast::statement::MatchPattern::Value(value) = pattern {
-                    expression(value, visit);
+    let mut replacements = std::collections::HashMap::new();
+    statements(scope, &mut |statement| {
+        let mut rewrite = |value: &mut Expression| {
+            rebind(value, &replacements);
+            visit(value);
+        };
+        match statement {
+            Statement::VariableDecl(variable) => {
+                let mut init = (*variable.init_val).clone();
+                expression(&mut init, &mut rewrite);
+                if init != *variable.init_val {
+                    let previous = variable.clone();
+                    let identity = Rc::as_ptr(&previous) as usize;
+                    Rc::make_mut(variable).init_val = Box::new(init);
+                    replacements.insert(identity, (previous, variable.clone()));
                 }
             }
+            Statement::Expression(value) => expression(value, &mut rewrite),
+            Statement::FuncCall(call) => {
+                let mut value = Expression::FuncCallE(call.clone(), (0..0).into());
+                expression(&mut value, &mut rewrite);
+                *statement = Statement::Expression(value);
+            }
+            Statement::Assignment(assignment) => {
+                expression(&mut assignment.variable, &mut rewrite);
+                expression(&mut assignment.value, &mut rewrite);
+            }
+            Statement::ReturnBlock(ret) => {
+                if let Some(value) = &mut ret.value {
+                    expression(value, &mut rewrite);
+                }
+            }
+            Statement::IfBlock(block) => expression(&mut block.condition, &mut rewrite),
+            Statement::WhileBlock(block) => expression(&mut block.condition, &mut rewrite),
+            Statement::ForBlock(block) => expression(&mut block.condition, &mut rewrite),
+            Statement::MatchBlock(block) => {
+                expression(&mut block.value, &mut rewrite);
+                for (pattern, _) in &mut block.branches {
+                    if let crate::ast::statement::MatchPattern::Value(value) = pattern {
+                        expression(value, &mut rewrite);
+                    }
+                }
+            }
+            Statement::VariantMatch(block) => expression(&mut block.value, &mut rewrite),
+            _ => {}
         }
-        Statement::VariantMatch(block) => expression(&mut block.value, visit),
-        _ => {}
     });
+}
+
+pub(crate) type Replacements = std::collections::HashMap<
+    usize,
+    (
+        Rc<crate::ast::statement::Variable>,
+        Rc<crate::ast::statement::Variable>,
+    ),
+>;
+pub(crate) fn rebind(value: &mut Expression, replacements: &Replacements) {
+    if let Expression::VarValueE(variable, ..) = value {
+        while let Some((_, replacement)) = replacements.get(&(Rc::as_ptr(variable) as usize)) {
+            *variable = replacement.clone();
+        }
+    }
 }
 
 pub(crate) fn statements(scope: &mut [Statement], visit: &mut impl FnMut(&mut Statement)) {
