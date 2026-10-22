@@ -9,10 +9,9 @@ use crate::ast::{Function, GlobalStatement, symbols::PackageSymbolTable, types::
 pub mod func;
 pub mod value;
 pub use value::LlvmValue;
-mod deconstruct;
 mod debug;
+mod deconstruct;
 pub use debug::CodegenConfig;
-mod union;
 pub mod error;
 pub mod expr;
 pub mod function;
@@ -20,6 +19,7 @@ pub mod globals;
 pub mod instruction;
 pub mod lowering;
 mod memory;
+mod union;
 pub mod variable_stack;
 
 pub struct IrGenerator {
@@ -38,7 +38,9 @@ pub struct IrGenerator {
 use crate::manifest::IR_RESERVE_SIZE;
 
 impl IrGenerator {
-    pub fn new(tiplet: String) -> IrGenerator { Self::with_config(tiplet, CodegenConfig::default()) }
+    pub fn new(tiplet: String) -> IrGenerator {
+        Self::with_config(tiplet, CodegenConfig::default())
+    }
 
     pub fn with_config(tiplet: String, config: CodegenConfig) -> IrGenerator {
         let mut header = format!("target triple =  \"{}\"\n", tiplet);
@@ -112,7 +114,9 @@ impl IrGenerator {
             }
         }
         self.header.push_str(&self.bodys);
-        if let Some(debug) = self.debug { self.header.push_str(&debug.finish()); }
+        if let Some(debug) = self.debug {
+            self.header.push_str(&debug.finish());
+        }
         self.errors.finish(self.header)
     }
 
@@ -124,12 +128,19 @@ impl IrGenerator {
 
         let members = if let Some(variant) = &unit.variant {
             let align = variant.align(symbols);
-            vec![instruction::LlvmType::Int(32), instruction::LlvmType::Array { element: Box::new(instruction::LlvmType::Int((align * 8) as u32)), length: variant.payload_size(symbols) / align }]
-        } else { unit
-            .members
-            .iter()
-            .map(|member| Self::type_lowering(member.member_type.clone(), symbols))
-            .collect::<Vec<_>>() };
+            vec![
+                instruction::LlvmType::Int(32),
+                instruction::LlvmType::Array {
+                    element: Box::new(instruction::LlvmType::Int((align * 8) as u32)),
+                    length: variant.payload_size(symbols) / align,
+                },
+            ]
+        } else {
+            unit.members
+                .iter()
+                .map(|member| Self::type_lowering(member.member_type.clone(), symbols))
+                .collect::<Vec<_>>()
+        };
 
         let struct_def = format!(
             "{} = type {{ {} }}\n",
@@ -181,7 +192,11 @@ impl IrGenerator {
             if !generator.remember_symbol(format!("definition::{}", abi.name())) {
                 return;
             }
-            let generated = function::FunctionGenerator::generate(&func, package);
+            let generated = function::FunctionGenerator::generate_for_debug(
+                &func,
+                package,
+                generator.debug.is_some(),
+            );
             generator.add_resources(&generated.resources, &generated.intrinsics);
             let mut visited = HashSet::new();
             if let Some(ty) = abi.result().source {
@@ -203,10 +218,17 @@ impl IrGenerator {
                 generator.add_declaration(call);
             }
             let ir = match &mut generator.debug {
-                Some(debug) => debug.function(&func, abi.name(), &generated.ir, &generated.locations, package),
+                Some(debug) => debug.function(
+                    &func,
+                    abi.name(),
+                    &generated.ir,
+                    &generated.locations,
+                    package,
+                ),
                 None => generated.ir.clone(),
             };
             generator.bodys.push_str(&ir);
+            generator.bodys.push_str(&generated.debug_helpers);
         });
     }
 

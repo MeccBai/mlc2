@@ -26,10 +26,13 @@ where
             (CompileType::Base(ty), _) if ty.data_type() == DataType::Integer => {
                 let value = match &folded {
                     Expression::ConstValueE(value, ..) => value.value.parse::<i128>().ok(),
-                    Expression::UnaryExprE(UnaryExpr::Operator {
-                        op: Operator::Negate,
-                        value,
-                    }, ..) => match value.as_ref() {
+                    Expression::UnaryExprE(
+                        UnaryExpr::Operator {
+                            op: Operator::Negate,
+                            value,
+                        },
+                        ..,
+                    ) => match value.as_ref() {
                         crate::ast::expression::CompAtom::ConstValueA(value, ..) => {
                             value.value.parse::<i128>().ok().and_then(i128::checked_neg)
                         }
@@ -55,12 +58,18 @@ where
                     }
                 }
             }
-            (CompileType::List(list), Expression::InitListE(InitialList::Array { values, .. }, ..)) => {
+            (
+                CompileType::List(list),
+                Expression::InitListE(InitialList::Array { values, .. }, ..),
+            ) => {
                 for value in values {
                     value.check_constant_range(list.element_type, config, symbols, span);
                 }
             }
-            (CompileType::Unit(unit), Expression::InitListE(InitialList::List { values, .. }, ..)) => {
+            (
+                CompileType::Unit(unit),
+                Expression::InitListE(InitialList::List { values, .. }, ..),
+            ) => {
                 for (value, member) in values.iter().zip(&unit.members) {
                     value.check_constant_range(member.member_type, config, symbols, span);
                 }

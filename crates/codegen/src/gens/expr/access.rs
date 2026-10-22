@@ -24,7 +24,9 @@ impl Expander<'_> {
             CompAtom::ConstValueA(v, ..) => Some(v.ty),
             CompAtom::VarValueA(v, ..) => Some(v.var_type),
             CompAtom::CompositeA(c, ..) => self.composite_type(c),
-            CompAtom::FuncCallA(c, span) => self.expression_type(&Expression::FuncCallE(c.clone(), *span)),
+            CompAtom::FuncCallA(c, span) => {
+                self.expression_type(&Expression::FuncCallE(c.clone(), *span))
+            }
             CompAtom::UnaryExprA(u, ..) => self.unary_type(u),
             CompAtom::Poison(..) => None,
         }

@@ -129,12 +129,15 @@ impl Expression {
                 exported: false,
             },
         );
-        Self::FuncCallE(FuncCall {
-            pipeline: false,
-            callee: None,
-            func: EnumBool::False(index),
-            args,
-        }, span)
+        Self::FuncCallE(
+            FuncCall {
+                pipeline: false,
+                callee: None,
+                func: EnumBool::False(index),
+                args,
+            },
+            span,
+        )
     }
 
     fn invalid_builtin(config: &mut Config, name: &str, span: Span) -> Self {

@@ -72,7 +72,11 @@ fn build_and_run_sources_named_targets_and_all_targets() {
         Some(7)
     );
     // A failed rebuild must not execute the existing program returning 7.
-    fs::write(root.path().join("main.m2"), "func main()->i32 { return missing; }").unwrap();
+    fs::write(
+        root.path().join("main.m2"),
+        "func main()->i32 { return missing; }",
+    )
+    .unwrap();
     let result = invoke(root.path(), &["run", "main.m2"]);
     assert_eq!(result.status.code(), Some(1));
     assert!(!result.stderr.is_empty());

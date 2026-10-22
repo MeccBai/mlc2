@@ -108,17 +108,38 @@ where
             .map(|(value, branches)| Statement::Match { value, branches });
 
         let variant_match = keyword(Token::Match)
-            .ignore_then(spanned_ident().then_ignore(operator(Token::Assign)).then(expression.clone())
-                .delimited_by(keyword(Token::LParen), keyword(Token::RParen)))
-            .then(type_parser().then_ignore(keyword(Token::FatArrow)).then(scope.clone())
-                .separated_by(operator(Token::Comma)).allow_trailing().collect::<Vec<_>>()
-                .delimited_by(keyword(Token::LBrace), keyword(Token::RBrace)))
-            .map(|((binding, value), branches)| Statement::VariantMatch { binding, value, branches });
+            .ignore_then(
+                spanned_ident()
+                    .then_ignore(operator(Token::Assign))
+                    .then(expression.clone())
+                    .delimited_by(keyword(Token::LParen), keyword(Token::RParen)),
+            )
+            .then(
+                type_parser()
+                    .then_ignore(keyword(Token::FatArrow))
+                    .then(scope.clone())
+                    .separated_by(operator(Token::Comma))
+                    .allow_trailing()
+                    .collect::<Vec<_>>()
+                    .delimited_by(keyword(Token::LBrace), keyword(Token::RBrace)),
+            )
+            .map(|((binding, value), branches)| Statement::VariantMatch {
+                binding,
+                value,
+                branches,
+            });
 
-        let macro_for = keyword(Token::Macro).ignore_then(keyword(Token::For))
-            .ignore_then(spanned_ident()).then_ignore(keyword(Token::In))
-            .then(spanned_ident()).then(scope.clone())
-            .map(|((binding, pack), scope)| Statement::MacroFor { binding, pack, scope });
+        let macro_for = keyword(Token::Macro)
+            .ignore_then(keyword(Token::For))
+            .ignore_then(spanned_ident())
+            .then_ignore(keyword(Token::In))
+            .then(spanned_ident())
+            .then(scope.clone())
+            .map(|((binding, pack), scope)| Statement::MacroFor {
+                binding,
+                pack,
+                scope,
+            });
 
         let for_bounds = expression
             .clone()

@@ -90,7 +90,9 @@ impl SymbolTable {
                 } else {
                     target
                 };
-                if using.visibility == crate::parser::out::TempVisibility::Export { self.exported_usings.insert(name.clone()); }
+                if using.visibility == crate::parser::out::TempVisibility::Export {
+                    self.exported_usings.insert(name.clone());
+                }
                 self.usings.insert(name, target);
             }
         }

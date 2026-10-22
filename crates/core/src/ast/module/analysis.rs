@@ -33,7 +33,9 @@ pub(super) fn parse(
         if config.is_poisoned() {
             return;
         }
-        if temp_body.is_none() { return; }
+        if temp_body.is_none() {
+            return;
+        }
         match index {
             EnumBool::True(func_index) => {
                 let func_body = FuncBody::new(&mut config, func_index, temp_body, &mut symbols);
@@ -47,7 +49,9 @@ pub(super) fn parse(
         if config.is_poisoned() {
             return;
         }
-        if temp_body.is_none() { return; }
+        if temp_body.is_none() {
+            return;
+        }
         match index {
             EnumBool::True(interface_index) => {
                 let interface_body =

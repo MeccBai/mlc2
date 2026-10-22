@@ -22,7 +22,9 @@ impl TypeInfer<'_> {
             CompAtom::VarValueA(var, ..) => var.var_type,
             CompAtom::CompositeA(composite, ..) => composite.type_inference(config, symbols),
             CompAtom::FuncCallA(func_call, ..) => func_call.type_inference(symbols),
-            CompAtom::ConstValueA(const_value, ..) => const_value.ty.into(ValueType::Constant, symbols),
+            CompAtom::ConstValueA(const_value, ..) => {
+                const_value.ty.into(ValueType::Constant, symbols)
+            }
             CompAtom::UnaryExprA(unary, ..) => unary.type_inference(config, symbols),
         }
     }

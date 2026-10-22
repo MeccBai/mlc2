@@ -60,7 +60,9 @@ impl UnitType {
     ) -> (Self, Span) {
         let name_span = prototype.name_span;
         let mut this = UnitType {
-            variant: prototype.is_union.then(|| super::UnionType { candidates: Vec::new() }),
+            variant: prototype.is_union.then(|| super::UnionType {
+                candidates: Vec::new(),
+            }),
             deconstruct: None,
             application: None,
             name: prototype.name,
@@ -103,10 +105,19 @@ impl UnitType {
             .collect::<Vec<_>>();
 
         if let Some(variant) = &mut this.variant {
-            variant.candidates = this.members.iter().map(|member| member.member_type).collect();
+            variant.candidates = this
+                .members
+                .iter()
+                .map(|member| member.member_type)
+                .collect();
             variant.validate(config, symbols, name_span);
             if this.attributes.contains(&UnitAttribute::Cabi) {
-                config.submit_error(CompileError::IllegalUse(IllegalUseError::InvalidUnion { reason: "Union cannot use C ABI".into() }), name_span);
+                config.submit_error(
+                    CompileError::IllegalUse(IllegalUseError::InvalidUnion {
+                        reason: "Union cannot use C ABI".into(),
+                    }),
+                    name_span,
+                );
             }
         }
         (this, name_span)
@@ -131,7 +142,9 @@ impl UnitType {
     }
 
     pub fn size(&self, arena: &(impl crate::ast::types::TypeLookup + ?Sized)) -> usize {
-        if let Some(variant) = &self.variant { return variant.size(arena); }
+        if let Some(variant) = &self.variant {
+            return variant.size(arena);
+        }
         let mut current_offset = 0;
         let mut max_align = 1;
 
@@ -148,7 +161,9 @@ impl UnitType {
     }
 
     pub fn align(&self, arena: &(impl crate::ast::types::TypeLookup + ?Sized)) -> usize {
-        if let Some(variant) = &self.variant { return variant.align(arena); }
+        if let Some(variant) = &self.variant {
+            return variant.align(arena);
+        }
         let mut max_align = 1;
 
         self.members.iter().for_each(|member| {
@@ -326,7 +341,12 @@ impl UnitType {
                     .insert(self.name.clone(), self.clone())
             });
         let mut instance = UnitType {
-            variant: self.variant.as_ref().map(|_| super::UnionType { candidates: new_members.iter().map(|member| member.member_type).collect() }),
+            variant: self.variant.as_ref().map(|_| super::UnionType {
+                candidates: new_members
+                    .iter()
+                    .map(|member| member.member_type)
+                    .collect(),
+            }),
             deconstruct: None,
             application: Some(UnitApplication {
                 template,

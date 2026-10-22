@@ -23,27 +23,44 @@ impl LineTable {
             match bytes[offset] {
                 b'\r' => {
                     offset += 1;
-                    if bytes.get(offset) == Some(&b'\n') { offset += 1; }
+                    if bytes.get(offset) == Some(&b'\n') {
+                        offset += 1;
+                    }
                     line_starts.push(offset);
                 }
-                b'\n' => { offset += 1; line_starts.push(offset); }
+                b'\n' => {
+                    offset += 1;
+                    line_starts.push(offset);
+                }
                 _ => offset += 1,
             }
         }
-        Self { line_starts, source_len: bytes.len() }
+        Self {
+            line_starts,
+            source_len: bytes.len(),
+        }
     }
 
-    pub fn line_starts(&self) -> &[usize] { &self.line_starts }
+    pub fn line_starts(&self) -> &[usize] {
+        &self.line_starts
+    }
 
     /// EOF is a valid position; offsets outside this source are not.
     pub fn position(&self, offset: usize) -> Option<SourcePosition> {
-        if offset > self.source_len { return None; }
+        if offset > self.source_len {
+            return None;
+        }
         let index = self.line_starts.partition_point(|start| *start <= offset) - 1;
-        Some(SourcePosition { line: index + 1, column: offset - self.line_starts[index] + 1 })
+        Some(SourcePosition {
+            line: index + 1,
+            column: offset - self.line_starts[index] + 1,
+        })
     }
 
     pub fn span_start(&self, span: Span) -> Option<SourcePosition> {
-        if span.start > span.end || span.end > self.source_len { return None; }
+        if span.start > span.end || span.end > self.source_len {
+            return None;
+        }
         self.position(span.start)
     }
 }
@@ -57,15 +74,27 @@ mod tests {
         let source = "中\r\nabc\nx\ry\n";
         let table = LineTable::new(source);
         assert_eq!(table.line_starts(), &[0, 5, 9, 11, 13]);
-        assert_eq!(table.position(6), Some(SourcePosition { line: 2, column: 2 }));
-        assert_eq!(table.position(13), Some(SourcePosition { line: 5, column: 1 }));
+        assert_eq!(
+            table.position(6),
+            Some(SourcePosition { line: 2, column: 2 })
+        );
+        assert_eq!(
+            table.position(13),
+            Some(SourcePosition { line: 5, column: 1 })
+        );
         assert!(table.position(14).is_none());
         assert!(table.span_start((2..14).into()).is_none());
     }
 
     #[test]
     fn empty_and_single_line_sources_have_a_first_line() {
-        assert_eq!(LineTable::new("").position(0), Some(SourcePosition { line: 1, column: 1 }));
-        assert_eq!(LineTable::new("abc").position(3), Some(SourcePosition { line: 1, column: 4 }));
+        assert_eq!(
+            LineTable::new("").position(0),
+            Some(SourcePosition { line: 1, column: 1 })
+        );
+        assert_eq!(
+            LineTable::new("abc").position(3),
+            Some(SourcePosition { line: 1, column: 4 })
+        );
     }
 }

@@ -58,12 +58,15 @@ impl Expression {
         else {
             return Self::Poison(span);
         };
-        Self::FuncCallE(FuncCall {
-            pipeline: false,
-            callee: None,
-            func: EnumBool::True(index),
-            args,
-        }, span)
+        Self::FuncCallE(
+            FuncCall {
+                pipeline: false,
+                callee: None,
+                func: EnumBool::True(index),
+                args,
+            },
+            span,
+        )
     }
 
     pub(super) fn new_inferred_call(
@@ -107,11 +110,14 @@ impl Expression {
         if config.is_poisoned() || !Self::check_function_args(config, index, &args, symbols, span) {
             return Self::Poison(span);
         }
-        Self::FuncCallE(FuncCall {
-            pipeline: false,
-            callee: None,
-            func: EnumBool::False(index),
-            args,
-        }, span)
+        Self::FuncCallE(
+            FuncCall {
+                pipeline: false,
+                callee: None,
+                func: EnumBool::False(index),
+                args,
+            },
+            span,
+        )
     }
 }

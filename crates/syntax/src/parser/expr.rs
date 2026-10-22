@@ -150,7 +150,10 @@ where
 
         let macro_call = path()
             .then_ignore(operator(Token::LogicalNot))
-            .then(list.clone().delimited_by(keyword(Token::LParen), keyword(Token::RParen)))
+            .then(
+                list.clone()
+                    .delimited_by(keyword(Token::LParen), keyword(Token::RParen)),
+            )
             .map(|(path, args)| Expr::MacroCall { path, args })
             .map_with(|expr, extra| (expr, extra.span()));
 

@@ -97,27 +97,29 @@ impl IrGenerator {
         let mut next = 1;
         if unit.variant.is_some() {
             Self::variant_deconstruct(unit, &mut next, &mut code, package);
-        } else { for member in &body.members {
-            let slot = next;
-            next += 1;
-            code.push(Instruction::Gep {
-                target: slot,
-                ty: Self::unit_lowering(unit, package),
-                pointer: IrValue::Reg(0),
-                indices: vec![
-                    TypedValue {
-                        ty: LlvmType::Int(32),
-                        value: IrValue::Integer(0),
-                    },
-                    TypedValue {
-                        ty: LlvmType::Int(32),
-                        value: IrValue::Integer(member.index as i128),
-                    },
-                ],
-                inbounds: false,
-            });
-            Self::append_drop(member.ty, slot, &mut next, &mut code, package);
-        } }
+        } else {
+            for member in &body.members {
+                let slot = next;
+                next += 1;
+                code.push(Instruction::Gep {
+                    target: slot,
+                    ty: Self::unit_lowering(unit, package),
+                    pointer: IrValue::Reg(0),
+                    indices: vec![
+                        TypedValue {
+                            ty: LlvmType::Int(32),
+                            value: IrValue::Integer(0),
+                        },
+                        TypedValue {
+                            ty: LlvmType::Int(32),
+                            value: IrValue::Integer(member.index as i128),
+                        },
+                    ],
+                    inbounds: false,
+                });
+                Self::append_drop(member.ty, slot, &mut next, &mut code, package);
+            }
+        }
         code.push(Instruction::Return { value: None });
         self.add_resources(&[], &["free".into()]);
         // pub 不等于 export；合并同一具体类型在不同 OBJ 中的内部生成实现。

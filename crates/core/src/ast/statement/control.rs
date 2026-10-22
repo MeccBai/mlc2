@@ -280,23 +280,32 @@ impl Statement {
         if !child.declare(config, variable.clone(), binding.1) {
             return Self::Poison;
         }
-        let condition = Expression::CompositeE(Composite {
-            members: vec![
-                CompAtom::VarValueA(variable.clone(), (0..0).into()),
-                CompAtom::from_expr(end),
-            ],
-            operators: vec![Operator::Less],
-        }, (0..0).into());
-        let increment = Expression::CompositeE(Composite {
-            members: vec![
-                CompAtom::VarValueA(variable.clone(), (0..0).into()),
-                CompAtom::ConstValueA(ConstValue {
-                    value: "1".into(),
-                    ty: var_type,
-                }, (0..0).into()),
-            ],
-            operators: vec![Operator::Add],
-        }, (0..0).into());
+        let condition = Expression::CompositeE(
+            Composite {
+                members: vec![
+                    CompAtom::VarValueA(variable.clone(), (0..0).into()),
+                    CompAtom::from_expr(end),
+                ],
+                operators: vec![Operator::Less],
+            },
+            (0..0).into(),
+        );
+        let increment = Expression::CompositeE(
+            Composite {
+                members: vec![
+                    CompAtom::VarValueA(variable.clone(), (0..0).into()),
+                    CompAtom::ConstValueA(
+                        ConstValue {
+                            value: "1".into(),
+                            ty: var_type,
+                        },
+                        (0..0).into(),
+                    ),
+                ],
+                operators: vec![Operator::Add],
+            },
+            (0..0).into(),
+        );
         let execution = Statement::Assignment(Assignment {
             variable: Box::new(Expression::VarValueE(variable.clone(), (0..0).into())),
             value: Box::new(increment),

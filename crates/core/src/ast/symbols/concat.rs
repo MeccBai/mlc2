@@ -48,7 +48,15 @@ impl PackageSymbolTable {
                 return Err(ConcatError::DuplicateSymbol(name.clone()));
             }
         }
-        let aliases: Vec<_> = file.exported_usings.iter().filter_map(|name| file.usings.get(name).map(|target| (name.clone(), (target.clone(), id)))).collect();
+        let aliases: Vec<_> = file
+            .exported_usings
+            .iter()
+            .filter_map(|name| {
+                file.usings
+                    .get(name)
+                    .map(|target| (name.clone(), (target.clone(), id)))
+            })
+            .collect();
         self.aliases.retain(|_, (_, owner)| *owner != id);
         self.aliases.extend(aliases);
         self.searchable.retain(|_, symbol| symbol.file_id() != id);

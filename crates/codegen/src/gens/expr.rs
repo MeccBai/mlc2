@@ -215,10 +215,15 @@ impl Expander<'_> {
             CompAtom::ConstValueA(v, ..) => self.constant(v),
             CompAtom::CompositeA(c, ..) => self.composite(c),
             CompAtom::FuncCallA(c, span) => {
-                let previous = self.current_span; self.current_span = *span;
-                let result = self.call(c); self.current_span = previous; result
-            },
-            CompAtom::VarValueA(v, span) => self.expression(&Expression::VarValueE(v.clone(), *span)),
+                let previous = self.current_span;
+                self.current_span = *span;
+                let result = self.call(c);
+                self.current_span = previous;
+                result
+            }
+            CompAtom::VarValueA(v, span) => {
+                self.expression(&Expression::VarValueE(v.clone(), *span))
+            }
             CompAtom::UnaryExprA(UnaryExpr::Operator { op, value }, ..) => self.unary(op, value),
             CompAtom::UnaryExprA(UnaryExpr::Access(access), ..) => self.access(access),
             CompAtom::UnaryExprA(function @ UnaryExpr::Function { .. }, span) => {

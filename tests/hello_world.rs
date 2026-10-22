@@ -23,8 +23,13 @@ use std::{path::PathBuf, process::Command};
 #[test]
 fn hello_world_array_printf_compiles_links_runs_and_matches_stdout() {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let paths =
-        PathResolver::new(&support::library().parent().unwrap().join("mlc.exe"), &root, None, &GlobalConfig::default()).unwrap();
+    let paths = PathResolver::new(
+        &support::library().parent().unwrap().join("mlc.exe"),
+        &root,
+        None,
+        &GlobalConfig::default(),
+    )
+    .unwrap();
     let plan = BuildPlan::discover_with_paths(&root.join("tests/fixtures/hello_world.m2"), &paths)
         .unwrap();
     let mut package = PackageSymbolTable::new();

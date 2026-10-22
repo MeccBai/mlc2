@@ -61,10 +61,32 @@ impl Expression {
                 }
                 let owner_type = owner_type.into(crate::ast::types::ValueType::Flex, symbols);
                 let interface_name = SymbolName::callable(Some(&owner_type.format(symbols)), &name);
-                let candidate = symbols.associated_interface(owner_type, &interface_name).map(|index| (index, false))
-                    .or_else(|| symbols.local().generics.interfaces.get_by_name(&interface_name).map(|index| (index, true)))
-                    .or_else(|| symbols.table(owner_type.file_id()).generics.interfaces.get_by_name(&interface_name).map(|index| (index, true)))
-                    .or_else(|| match symbols.lookup_export(&interface_name) { Some(crate::ast::symbols::ExportSymbol::Interface { index, generic: true }) => Some((index, true)), _ => None });
+                let candidate = symbols
+                    .associated_interface(owner_type, &interface_name)
+                    .map(|index| (index, false))
+                    .or_else(|| {
+                        symbols
+                            .local()
+                            .generics
+                            .interfaces
+                            .get_by_name(&interface_name)
+                            .map(|index| (index, true))
+                    })
+                    .or_else(|| {
+                        symbols
+                            .table(owner_type.file_id())
+                            .generics
+                            .interfaces
+                            .get_by_name(&interface_name)
+                            .map(|index| (index, true))
+                    })
+                    .or_else(|| match symbols.lookup_export(&interface_name) {
+                        Some(crate::ast::symbols::ExportSymbol::Interface {
+                            index,
+                            generic: true,
+                        }) => Some((index, true)),
+                        _ => None,
+                    });
                 let Some((index, generic)) = candidate else {
                     config
                         .submit_error(CompileError::Resolve(ResolveError::UnknownInterface), span);

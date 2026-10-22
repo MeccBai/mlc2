@@ -63,17 +63,24 @@ impl Expression {
             source_span,
             symbols,
             None,
-        ).with_span(source_span);
-        Self::InitListE(InitialList::List {
-            onwer: Some(target),
-            values: vec![
-                pointer,
-                Self::ConstValueE(ConstValue {
-                    value: length.to_string(),
-                    ty: fields[1],
-                }, source_span),
-            ],
-        }, source_span)
+        )
+        .with_span(source_span);
+        Self::InitListE(
+            InitialList::List {
+                onwer: Some(target),
+                values: vec![
+                    pointer,
+                    Self::ConstValueE(
+                        ConstValue {
+                            value: length.to_string(),
+                            ty: fields[1],
+                        },
+                        source_span,
+                    ),
+                ],
+            },
+            source_span,
+        )
     }
     pub(crate) fn coerce_arguments(
         args: Vec<Self>,

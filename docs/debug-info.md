@@ -9,12 +9,12 @@ Debug builds disable optional AST and LLVM machine-code optimizations. CodegenCo
 The initial scope is source files, ordinary function definitions, statements, expressions and call sites. Local variable/type inspection is not implemented yet.
 
 - Ordinary functions have source line tables and can be stepped into.
-- Each generic template has one shared declaration node. Instantiated bodies have no source line tables, and calls to instances are marked NeverStepInto.
+- Each generic template has one shared declaration node and source location. Each machine-code instance has its own definition and line table referencing that declaration, so all instances can be stepped into at the template source.
 - Macro helper bodies have no debug declarations or expansion line tables. Macro calls are marked NeverStepInto; explicit argument calls retain their own source locations.
 - Pipeline stage calls are marked NeverStepInto. Explicit function calls inside their arguments keep normal locations, so stepping into those arguments is possible.
 - Generated entry, initialization and destruction helpers have no user line tables.
 
-Native CodeView reserves line number 0xf00f00 for NeverStepInto. LLVM filters that number when reading DILocation, so codegen uses the reserved placeholder 0xefffff and the COFF writer restores only those line-number fields inside validated C13 DEBUG_S_LINES records. Addresses, relocations and instruction bytes remain unchanged. This policy targets source-level CodeView-aware debuggers; instruction/assembly stepping remains a debugger operation.
+Native CodeView reserves line number 0xf00f00 for NeverStepInto. LLVM filters that number when reading DILocation, so codegen uses the reserved placeholder 0xefffff and the COFF writer restores only those line-number fields inside validated C13 DEBUG_S_LINES records. Addresses, relocations and instruction bytes remain unchanged. LLDB NativePDB currently discards these special rows ([upstream reader](https://github.com/llvm/llvm-project/blob/main/lldb/source/Plugins/SymbolFile/NativePDB/SymbolFileNativePDB.cpp)). Debug builds therefore also route these calls through internal forwarding functions with no source locations, noinline, optnone and disabled tail calls. Under default LLDB source stepping, the opaque frame is stepped over as a whole; explicit argument calls execute before that frame and remain debuggable. Direct calls to the same target retain normal debug information. Release builds do not emit forwarding functions. Explicit breakpoints inside the target and instruction stepping remain available. Debug builds can show an extra forwarding frame when stopped inside the target.
 
 Validation:
 

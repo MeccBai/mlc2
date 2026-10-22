@@ -15,17 +15,23 @@ fn config() -> Config {
 }
 
 fn literal(text: &str, symbols: &SymbolTable) -> CompAtom {
-    CompAtom::ConstValueA(ConstValue {
-        value: text.into(),
-        ty: symbols.get_base(DataType::Integer, 32, true),
-    }, (0..0).into())
+    CompAtom::ConstValueA(
+        ConstValue {
+            value: text.into(),
+            ty: symbols.get_base(DataType::Integer, 32, true),
+        },
+        (0..0).into(),
+    )
 }
 
 fn expression(values: &[&str], operators: Vec<Operator>, symbols: &SymbolTable) -> Expression {
-    Expression::CompositeE(Composite {
-        members: values.iter().map(|v| literal(v, symbols)).collect(),
-        operators,
-    }, (0..0).into())
+    Expression::CompositeE(
+        Composite {
+            members: values.iter().map(|v| literal(v, symbols)).collect(),
+            operators,
+        },
+        (0..0).into(),
+    )
 }
 
 fn assert_value(expr: Expression, expected: &str, symbols: &SymbolTable) {
@@ -72,10 +78,13 @@ fn recursively_folds_groups() {
     let symbols = SymbolTable::new();
     let group = CompAtom::from_expr(expression(&["1", "2"], vec![Operator::Add], &symbols));
     assert_value(
-        Expression::CompositeE(Composite {
-            members: vec![group, literal("3", &symbols)],
-            operators: vec![Operator::Multiply],
-        }, (0..0).into()),
+        Expression::CompositeE(
+            Composite {
+                members: vec![group, literal("3", &symbols)],
+                operators: vec![Operator::Multiply],
+            },
+            (0..0).into(),
+        ),
         "9",
         &symbols,
     );
@@ -121,17 +130,23 @@ fn float_arithmetic_retains_type() {
     let symbols = SymbolTable::new();
     for bits in [32, 64] {
         let ty = symbols.get_base(DataType::Float, bits, true);
-        let expr = Expression::CompositeE(Composite {
-            members: ["5.5", "2.0"]
-                .map(|v| {
-                    CompAtom::ConstValueA(ConstValue {
-                        value: v.into(),
-                        ty,
-                    }, (0..0).into())
-                })
-                .to_vec(),
-            operators: vec![Operator::Remainder],
-        }, (0..0).into());
+        let expr = Expression::CompositeE(
+            Composite {
+                members: ["5.5", "2.0"]
+                    .map(|v| {
+                        CompAtom::ConstValueA(
+                            ConstValue {
+                                value: v.into(),
+                                ty,
+                            },
+                            (0..0).into(),
+                        )
+                    })
+                    .to_vec(),
+                operators: vec![Operator::Remainder],
+            },
+            (0..0).into(),
+        );
         let Expression::ConstValueE(value, ..) = expr.const_fold(&mut config(), &symbols) else {
             panic!()
         };

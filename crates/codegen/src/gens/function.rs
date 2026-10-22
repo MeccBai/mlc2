@@ -23,6 +23,7 @@ mod tests;
 mod variant;
 
 pub struct GeneratedFunction {
+    pub debug_helpers: String,
     pub locations: Vec<(usize, mlc_core::parser::out::Span, bool)>,
     pub name: String,
     pub ir: String,
@@ -58,6 +59,14 @@ pub struct FunctionGenerator<'a> {
 
 impl<'a> FunctionGenerator<'a> {
     pub fn generate(function: &Function, package: &'a PackageSymbolTable) -> GeneratedFunction {
+        Self::generate_for_debug(function, package, false)
+    }
+
+    pub(super) fn generate_for_debug(
+        function: &Function,
+        package: &'a PackageSymbolTable,
+        debug: bool,
+    ) -> GeneratedFunction {
         let (abi, params, body) = match function {
             Function::Func(function) => {
                 let symbol = package.get_function(function.symbol, false);
@@ -69,7 +78,7 @@ impl<'a> FunctionGenerator<'a> {
             }
         };
         let abi = abi.unwrap_or_else(|error| error.abort_generation());
-        Self::generate_parts(abi, params, body, package)
+        Self::generate_parts(abi, params, body, package, debug)
     }
 
     /// The caller supplies the immutable ABI classification used for this definition.
@@ -82,7 +91,7 @@ impl<'a> FunctionGenerator<'a> {
             Function::Func(f) => (&package.get_function(f.symbol, false).params, &f.body),
             Function::Interface(f) => (&package.get_interface(f.symbol, false).params, &f.body),
         };
-        Self::generate_parts(abi, params, body, package)
+        Self::generate_parts(abi, params, body, package, false)
     }
 
     fn generate_parts(
@@ -90,6 +99,7 @@ impl<'a> FunctionGenerator<'a> {
         params: &[(TypeIndex, String)],
         body: &[Statement],
         package: &'a PackageSymbolTable,
+        debug: bool,
     ) -> GeneratedFunction {
         let mut generator = Self::new(abi, package);
         generator.parameters(params);
@@ -107,7 +117,7 @@ impl<'a> FunctionGenerator<'a> {
                 );
             }
         }
-        generator.finish()
+        generator.finish(debug)
     }
 
     fn new(abi: LlvmFunc, package: &'a PackageSymbolTable) -> Self {
@@ -207,7 +217,10 @@ impl<'a> FunctionGenerator<'a> {
     }
 
     fn expression_expected(&mut self, expr: &Expression, expected: Option<TypeIndex>) -> LlvmValue {
-        self.code.push(Instruction::Location { span: expr.span(), step_into: true });
+        self.code.push(Instruction::Location {
+            span: expr.span(),
+            step_into: true,
+        });
         let (next, mut value) = IrGenerator::expression_expand_expected(
             self.next_reg,
             expr,
@@ -375,7 +388,7 @@ impl<'a> FunctionGenerator<'a> {
         }
     }
 
-    fn finish(mut self) -> GeneratedFunction {
+    fn finish(mut self, debug: bool) -> GeneratedFunction {
         self.block("function.return".into());
         let result = if self.abi.result().ty == LlvmType::Void {
             None
@@ -442,6 +455,11 @@ impl<'a> FunctionGenerator<'a> {
                 _ => None,
             })
             .collect();
+        let debug_helpers = if debug {
+            super::debug::step_over_calls(&mut self.code, self.abi.name())
+        } else {
+            String::new()
+        };
         let mut locations = Vec::new();
         InstructionBuffer {
             instructions: self.entry,
@@ -453,6 +471,7 @@ impl<'a> FunctionGenerator<'a> {
         .write_with_locations(&mut ir, &mut locations);
         ir.push_str("}\n");
         GeneratedFunction {
+            debug_helpers,
             locations,
             name: self.abi.name().into(),
             ir,

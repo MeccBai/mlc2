@@ -3,9 +3,14 @@
 // Expected output: running
 import std;
 using println=std::println;
-enum State { Waiting,Running,Stopped };
+enum State {
+    Waiting,
+    Running,
+    Stopped
+};
+
 func main()->i32 {
-    val state=State::Running;
+    val state = State::Running;
     match (state) {
         State::Waiting => { println!("waiting"); },
         State::Running => { println!("running"); },

@@ -31,7 +31,13 @@ fn all_examples_link_and_run_with_msvc_ucrt() {
             example.name,
             String::from_utf8_lossy(&result.stderr)
         );
-        let executed = Command::new(root.path().join("build").join(format!("{}.exe", example.name))).output().unwrap();
+        let executed = Command::new(
+            root.path()
+                .join("build")
+                .join(format!("{}.exe", example.name)),
+        )
+        .output()
+        .unwrap();
         assert!(executed.status.success(), "{}", example.name);
         assert_eq!(
             String::from_utf8(executed.stdout)

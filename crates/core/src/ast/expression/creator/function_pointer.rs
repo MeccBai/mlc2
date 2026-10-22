@@ -131,10 +131,13 @@ impl Expression {
             .local_mut()
             .types
             .insert(name, CompileType::Function(signature));
-        Self::UnaryExprE(UnaryExpr::Function {
-            function: index,
-            ty,
-        }, span)
+        Self::UnaryExprE(
+            UnaryExpr::Function {
+                function: index,
+                ty,
+            },
+            span,
+        )
     }
 
     pub(super) fn new_indirect_call(
@@ -166,17 +169,20 @@ impl Expression {
             .into_iter()
             .map(|arg| Self::new(config, arg, symbols, context))
             .collect::<Vec<_>>();
-        let parameters=symbols.get_function_regular(signature).params.clone();
-        let args=Self::coerce_arguments(args,&parameters,config,symbols,span);
+        let parameters = symbols.get_function_regular(signature).params.clone();
+        let args = Self::coerce_arguments(args, &parameters, config, symbols, span);
         if !Self::check_function_args(config, signature, &args, symbols, span) {
             return Self::Poison(span);
         }
-        Self::FuncCallE(FuncCall {
-            pipeline: false,
-            callee: Some(Box::new(callee)),
-            func: EnumBool::False(signature),
-            args,
-        }, span)
+        Self::FuncCallE(
+            FuncCall {
+                pipeline: false,
+                callee: Some(Box::new(callee)),
+                func: EnumBool::False(signature),
+                args,
+            },
+            span,
+        )
     }
 
     pub(super) fn is_function_builtin(path: &TempPath) -> bool {

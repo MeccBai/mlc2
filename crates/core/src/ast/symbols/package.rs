@@ -61,8 +61,15 @@ impl PackageSymbolTable {
     pub fn lookup_in(&self, name: &str, scope: &super::ResolveScope) -> Option<ExportSymbol> {
         self.lookup_alias(name, scope, 0)
     }
-    fn lookup_alias(&self, name: &str, scope: &super::ResolveScope, depth: usize) -> Option<ExportSymbol> {
-        if depth > 64 { return None; }
+    fn lookup_alias(
+        &self,
+        name: &str,
+        scope: &super::ResolveScope,
+        depth: usize,
+    ) -> Option<ExportSymbol> {
+        if depth > 64 {
+            return None;
+        }
         self.searchable
             .get(name)
             .copied()
@@ -80,7 +87,9 @@ impl PackageSymbolTable {
             })
             .or_else(|| {
                 let (target, owner) = self.aliases.get(name)?;
-                if *owner != scope.current && !scope.imports.contains(owner) { return None; }
+                if *owner != scope.current && !scope.imports.contains(owner) {
+                    return None;
+                }
                 self.lookup_alias(target, &self.resolve_scope(*owner), depth + 1)
             })
     }

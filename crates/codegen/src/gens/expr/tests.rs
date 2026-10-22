@@ -18,10 +18,13 @@ fn setup(signed: bool) -> (PackageSymbolTable, TypeIndex) {
     (package, ty)
 }
 fn literal(ty: TypeIndex, text: &str) -> CompAtom {
-    CompAtom::ConstValueA(ConstValue {
-        value: text.into(),
-        ty,
-    }, (0..0).into())
+    CompAtom::ConstValueA(
+        ConstValue {
+            value: text.into(),
+            ty,
+        },
+        (0..0).into(),
+    )
 }
 
 #[test]
@@ -49,10 +52,13 @@ fn reference_index_loads_pointer_and_uses_single_gep_index() {
             in_reg: false,
         },
     )]);
-    let expr = Expression::UnaryExprE(UnaryExpr::Access(crate::ast::expression::Access::Index {
-        base: Box::new(Expression::VarValueE(variable, (0..0).into())),
-        index: Box::new(literal(element, "2").to_expression()),
-    }), (0..0).into());
+    let expr = Expression::UnaryExprE(
+        UnaryExpr::Access(crate::ast::expression::Access::Index {
+            base: Box::new(Expression::VarValueE(variable, (0..0).into())),
+            index: Box::new(literal(element, "2").to_expression()),
+        }),
+        (0..0).into(),
+    );
     let (_, value) = IrGenerator::expression_expand(1, &expr, &package, &bindings);
     assert!(matches!(
         value.code.first(),
@@ -65,10 +71,13 @@ fn reference_index_loads_pointer_and_uses_single_gep_index() {
         Instruction::Gep { ty: LlvmType::Int(32), indices, .. } if indices.len() == 1)));
 }
 fn expr(ty: TypeIndex, ops: Vec<AstOp>) -> Expression {
-    Expression::CompositeE(Composite {
-        members: ["20", "3", "2"].map(|v| literal(ty, v)).to_vec(),
-        operators: ops,
-    }, (0..0).into())
+    Expression::CompositeE(
+        Composite {
+            members: ["20", "3", "2"].map(|v| literal(ty, v)).to_vec(),
+            operators: ops,
+        },
+        (0..0).into(),
+    )
 }
 fn operations(value: &LlvmValue) -> Vec<Operator> {
     value
@@ -123,14 +132,20 @@ fn precedence_climbing_and_associativity() {
 #[test]
 fn grouping_and_unsigned_operations() {
     let (package, ty) = setup(false);
-    let group = CompAtom::CompositeA(Composite {
-        members: vec![literal(ty, "20"), literal(ty, "3")],
-        operators: vec![AstOp::Add],
-    }, (0..0).into());
-    let expression = Expression::CompositeE(Composite {
-        members: vec![group, literal(ty, "2")],
-        operators: vec![AstOp::Divide],
-    }, (0..0).into());
+    let group = CompAtom::CompositeA(
+        Composite {
+            members: vec![literal(ty, "20"), literal(ty, "3")],
+            operators: vec![AstOp::Add],
+        },
+        (0..0).into(),
+    );
+    let expression = Expression::CompositeE(
+        Composite {
+            members: vec![group, literal(ty, "2")],
+            operators: vec![AstOp::Divide],
+        },
+        (0..0).into(),
+    );
     let (_, value) = IrGenerator::expression_expand(0, &expression, &package, &HashMap::new());
     assert_eq!(operations(&value), vec![Operator::Add, Operator::UDiv]);
 }
@@ -155,10 +170,16 @@ fn variable_binding_is_loaded_without_replaying_initialization() {
             in_reg: false,
         },
     );
-    let expression = Expression::CompositeE(Composite {
-        members: vec![CompAtom::VarValueA(variable, (0..0).into()), literal(ty, "2")],
-        operators: vec![AstOp::Add],
-    }, (0..0).into());
+    let expression = Expression::CompositeE(
+        Composite {
+            members: vec![
+                CompAtom::VarValueA(variable, (0..0).into()),
+                literal(ty, "2"),
+            ],
+            operators: vec![AstOp::Add],
+        },
+        (0..0).into(),
+    );
     let (_, value) = IrGenerator::expression_expand(2, &expression, &package, &bindings);
     assert!(matches!(
         value.code[0],
@@ -174,10 +195,13 @@ fn variable_binding_is_loaded_without_replaying_initialization() {
 fn malformed_operands_and_overflow_are_collected() {
     let (package, ty) = setup(true);
     let bindings = HashMap::new();
-    let malformed = Expression::CompositeE(Composite {
-        members: vec![],
-        operators: vec![],
-    }, (0..0).into());
+    let malformed = Expression::CompositeE(
+        Composite {
+            members: vec![],
+            operators: vec![],
+        },
+        (0..0).into(),
+    );
     let invalid_operands = expr(ty, vec![AstOp::LogicalAnd, AstOp::LogicalOr]);
     let literal = literal(ty, "1").to_expression();
     let mut handle = crate::gens::error::GenerationErrorHandle::default();
@@ -211,14 +235,20 @@ fn nested_short_circuit_and_float_pass_llvm_verification() {
         .file_mut(FileId::new(0))
         .unwrap()
         .get_base(DataType::Boolean, 8, false);
-    let nested = CompAtom::CompositeA(Composite {
-        members: vec![literal(bool_ty, "true"), literal(bool_ty, "false")],
-        operators: vec![AstOp::LogicalOr],
-    }, (0..0).into());
-    let expression = Expression::CompositeE(Composite {
-        members: vec![literal(bool_ty, "false"), nested],
-        operators: vec![AstOp::LogicalAnd],
-    }, (0..0).into());
+    let nested = CompAtom::CompositeA(
+        Composite {
+            members: vec![literal(bool_ty, "true"), literal(bool_ty, "false")],
+            operators: vec![AstOp::LogicalOr],
+        },
+        (0..0).into(),
+    );
+    let expression = Expression::CompositeE(
+        Composite {
+            members: vec![literal(bool_ty, "false"), nested],
+            operators: vec![AstOp::LogicalAnd],
+        },
+        (0..0).into(),
+    );
     let (_, value) = IrGenerator::expression_expand(0, &expression, &package, &HashMap::new());
     assert_eq!(
         value
@@ -243,10 +273,13 @@ fn nested_short_circuit_and_float_pass_llvm_verification() {
         .file_mut(FileId::new(0))
         .unwrap()
         .get_base(DataType::Float, 32, true);
-    let float_expr = Expression::CompositeE(Composite {
-        members: vec![literal(float_ty, "1.25"), literal(float_ty, "2.5")],
-        operators: vec![AstOp::Add],
-    }, (0..0).into());
+    let float_expr = Expression::CompositeE(
+        Composite {
+            members: vec![literal(float_ty, "1.25"), literal(float_ty, "2.5")],
+            operators: vec![AstOp::Add],
+        },
+        (0..0).into(),
+    );
     let (_, value) = IrGenerator::expression_expand(0, &float_expr, &package, &HashMap::new());
     assert_eq!(operations(&value), vec![Operator::FAdd]);
     let mut buffer = InstructionBuffer {
@@ -318,26 +351,38 @@ fn array_index_and_call_pass_llvm_verification() {
         exported: false,
     };
     let func = symbols.functions.insert("f".into(), symbol);
-    let array = Expression::InitListE(InitialList::Array {
-        ty: array_ty,
-        values: vec![
-            literal(ty, "3").to_expression(),
-            literal(ty, "7").to_expression(),
-        ],
-    }, (0..0).into());
-    let argument = Expression::UnaryExprE(UnaryExpr::Access(Access::Index {
-        base: Box::new(array),
-        index: Box::new(literal(ty, "1").to_expression()),
-    }), (0..0).into());
-    let expression = Expression::FuncCallE(FuncCall {
+    let array = Expression::InitListE(
+        InitialList::Array {
+            ty: array_ty,
+            values: vec![
+                literal(ty, "3").to_expression(),
+                literal(ty, "7").to_expression(),
+            ],
+        },
+        (0..0).into(),
+    );
+    let argument = Expression::UnaryExprE(
+        UnaryExpr::Access(Access::Index {
+            base: Box::new(array),
+            index: Box::new(literal(ty, "1").to_expression()),
+        }),
+        (0..0).into(),
+    );
+    let expression = Expression::FuncCallE(
+        FuncCall {
             pipeline: false,
-        callee: None,
-        func: EnumBool::False(func),
-        args: vec![argument],
-    }, (0..0).into());
+            callee: None,
+            func: EnumBool::False(func),
+            args: vec![argument],
+        },
+        (0..0).into(),
+    );
     let (_, value) = IrGenerator::expression_expand(0, &expression, &package, &HashMap::new());
     assert!(matches!(
-        value.code.iter().rfind(|instruction| !matches!(instruction, Instruction::Location { .. })),
+        value
+            .code
+            .iter()
+            .rfind(|instruction| !matches!(instruction, Instruction::Location { .. })),
         Some(Instruction::MappedCall { .. })
     ));
     let mut buffer = InstructionBuffer {

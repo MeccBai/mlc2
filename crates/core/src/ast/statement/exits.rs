@@ -34,7 +34,11 @@ impl Statement {
         let value_span = value.as_ref().map_or(span, |value| value.1);
         let value = value.map(|value| {
             let value = Expression::new(config, value, symbols, context);
-            if let Some(target) = expected { value.coerce_string_view(target, config, symbols, value_span) } else { value }
+            if let Some(target) = expected {
+                value.coerce_string_view(target, config, symbols, value_span)
+            } else {
+                value
+            }
         });
         if config.is_poisoned() {
             return Self::Poison;

@@ -135,10 +135,31 @@ mod visibility;
 fn poisoned_expressions_retain_the_input_span() {
     let (mut config, mut symbols) = setup();
     let span = (8..15).into();
-    let expression = Expression::new(&mut config, (Path(crate::parser::out::TempPath { segments: vec!["missing".into()] }), span), &mut symbols, None);
+    let expression = Expression::new(
+        &mut config,
+        (
+            Path(crate::parser::out::TempPath {
+                segments: vec!["missing".into()],
+            }),
+            span,
+        ),
+        &mut symbols,
+        None,
+    );
     assert!(expression.is_poisoned());
     assert_eq!(expression.span(), span);
-    let next = Expression::new(&mut config, (Literal { kind: TempLiteralKind::Integer, text: "1".into() }, (16..17).into()), &mut symbols, None);
+    let next = Expression::new(
+        &mut config,
+        (
+            Literal {
+                kind: TempLiteralKind::Integer,
+                text: "1".into(),
+            },
+            (16..17).into(),
+        ),
+        &mut symbols,
+        None,
+    );
     assert!(next.is_poisoned());
     assert_eq!(next.span(), (16..17).into());
 }

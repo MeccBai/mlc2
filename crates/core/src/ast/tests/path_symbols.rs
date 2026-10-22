@@ -72,7 +72,8 @@ fn enum_values_preserve_type_and_ordinal_and_precede_globals() {
     let super::super::statement::Statement::VariableDecl(variable) = &main_body(&ast)[0] else {
         panic!("variable expected");
     };
-    let super::super::expression::Expression::ConstValueE(initializer, ..) = &*variable.init_val else {
+    let super::super::expression::Expression::ConstValueE(initializer, ..) = &*variable.init_val
+    else {
         panic!("enum initializer must be a typed constant");
     };
     assert_eq!(initializer.value, "1");

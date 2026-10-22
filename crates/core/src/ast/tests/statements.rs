@@ -32,10 +32,13 @@ fn assignment_left_sides_retain_variables_members_indices_and_dereferences() {
     ));
     assert!(matches!(
         &*assignments[3].variable,
-        Expression::UnaryExprE(UnaryExpr::Operator {
-            op: Operator::Dereference,
+        Expression::UnaryExprE(
+            UnaryExpr::Operator {
+                op: Operator::Dereference,
+                ..
+            },
             ..
-        }, ..)
+        )
     ));
     assert!(
         assignments

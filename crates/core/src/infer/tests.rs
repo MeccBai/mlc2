@@ -29,20 +29,26 @@ fn config() -> Config {
 }
 
 fn literal(value: &str, symbols: &SymbolTable) -> Expression {
-    Expression::ConstValueE(ConstValue {
-        value: value.into(),
-        ty: symbols.get_base(DataType::Integer, 32, true),
-    }, (0..0).into())
+    Expression::ConstValueE(
+        ConstValue {
+            value: value.into(),
+            ty: symbols.get_base(DataType::Integer, 32, true),
+        },
+        (0..0).into(),
+    )
 }
 
 fn variable(ty: TypeIndex) -> Expression {
-    Expression::VarValueE(Rc::new(Variable {
-        read_count: Default::default(),
-        declaration_span: (0..1).into(),
-        name: "value".into(),
-        var_type: ty,
-        init_val: Box::new(Expression::null()),
-    }), (0..0).into())
+    Expression::VarValueE(
+        Rc::new(Variable {
+            read_count: Default::default(),
+            declaration_span: (0..1).into(),
+            name: "value".into(),
+            var_type: ty,
+            init_val: Box::new(Expression::null()),
+        }),
+        (0..0).into(),
+    )
 }
 
 #[test]
@@ -53,10 +59,13 @@ fn expression_inference_reports_value_place_and_reference_mutability() {
     for mutable in [false, true] {
         let reference = ty.make_ref(&mut symbols, mutable);
         let pointer = variable(reference.into_value_type(ValueType::Final, &mut symbols));
-        let dereference = Expression::UnaryExprE(UnaryExpr::Operator {
-            op: Operator::Dereference,
-            value: Box::new(CompAtom::from_expr(pointer)),
-        }, (0..0).into());
+        let dereference = Expression::UnaryExprE(
+            UnaryExpr::Operator {
+                op: Operator::Dereference,
+                value: Box::new(CompAtom::from_expr(pointer)),
+            },
+            (0..0).into(),
+        );
         let Inference::Value(result) =
             TypeInfer::new(&mut config, &mut symbols).infer(&dereference)
         else {
@@ -85,13 +94,16 @@ fn readonly_constant_session_handles_folding_normalization_and_range_diagnostics
     let mut config = config();
     let symbols = SymbolTable::new();
     let ty = symbols.get_base(DataType::Integer, 8, false);
-    let expression = Expression::CompositeE(Composite {
-        members: vec![
-            CompAtom::from_expr(literal("100", &symbols)),
-            CompAtom::from_expr(literal("200", &symbols)),
-        ],
-        operators: vec![Operator::Add],
-    }, (0..0).into());
+    let expression = Expression::CompositeE(
+        Composite {
+            members: vec![
+                CompAtom::from_expr(literal("100", &symbols)),
+                CompAtom::from_expr(literal("200", &symbols)),
+            ],
+            operators: vec![Operator::Add],
+        },
+        (0..0).into(),
+    );
     let mut infer = TypeInfer::read_only(&mut config, &symbols);
     assert!(infer.is_const(&expression));
     assert!(
@@ -145,19 +157,29 @@ fn void_poison_and_target_typed_initializers_are_distinct() {
     else {
         panic!()
     };
-    let call = Expression::FuncCallE(FuncCall { pipeline: false,
-        callee: None,
-        func: EnumBool::False(function.signature),
-        args: vec![],
-    }, (0..0).into());
+    let call = Expression::FuncCallE(
+        FuncCall {
+            pipeline: false,
+            callee: None,
+            func: EnumBool::False(function.signature),
+            args: vec![],
+        },
+        (0..0).into(),
+    );
     let mut infer = TypeInfer::new(&mut config, &mut symbols);
     assert_eq!(infer.infer(&call), Inference::Void);
-    assert_eq!(infer.infer(&Expression::Poison((0..0).into())), Inference::Poison);
     assert_eq!(
-        infer.infer(&Expression::InitListE(InitialList::List {
-            onwer: None,
-            values: vec![]
-        }, (0..0).into())),
+        infer.infer(&Expression::Poison((0..0).into())),
+        Inference::Poison
+    );
+    assert_eq!(
+        infer.infer(&Expression::InitListE(
+            InitialList::List {
+                onwer: None,
+                values: vec![]
+            },
+            (0..0).into()
+        )),
         Inference::NeedsExpectedType
     );
 }

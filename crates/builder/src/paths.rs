@@ -106,7 +106,10 @@ impl PathResolver {
             .map(|dir| project_root.join(dir))
             .or_else(|| global.lib_cache_dir.clone())
             .map(|dir| dir.join(triplet));
-        let mode = selected.and_then(|target| target.mode).or_else(|| project.as_ref().and_then(|project| project.project.mode)).unwrap_or_default();
+        let mode = selected
+            .and_then(|target| target.mode)
+            .or_else(|| project.as_ref().and_then(|project| project.project.mode))
+            .unwrap_or_default();
         Ok(Self {
             mode,
             imports: ImportResolver { lib_dirs },

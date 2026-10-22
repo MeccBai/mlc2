@@ -1,8 +1,8 @@
-use std::rc::Rc;
 use crate::ast::symbol_name::SymbolName;
 use crate::diagnostic::error::ErrorHandle;
 use crate::diagnostic::warning::WarningHandle;
 use crate::parser::out::Span;
+use std::rc::Rc;
 
 /// Assigned by the entry unit; also identifies the file's future arena.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -103,9 +103,13 @@ impl Config {
         self.source_lines = Some(std::rc::Rc::new(lines));
     }
 
-    pub fn set_statement_locations(&mut self, enabled: bool) { self.statement_locations = enabled; }
+    pub fn set_statement_locations(&mut self, enabled: bool) {
+        self.statement_locations = enabled;
+    }
 
-    pub fn statement_locations(&self) -> bool { self.statement_locations }
+    pub fn statement_locations(&self) -> bool {
+        self.statement_locations
+    }
 
     pub fn source_lines(&self) -> Option<&mlc_syntax::lexer::LineTable> {
         self.source_lines.as_deref()

@@ -18,13 +18,15 @@ impl Expression {
         context: Option<&StatementContext>,
     ) -> Self {
         let indirect = matches!(&callee.0, TempExpr::Member { indirect: true, .. });
-        let (owner, mut interface, generic) = match Self::search_interface(config, callee, symbols, context) {
-            Some((owner, interface, generic)) => (owner, interface, generic),
-            None => {
-                config.submit_error(CompileError::Resolve(ResolveError::UnknownInterface), span);
-                return Self::null();
-            }
-        };
+        let (owner, mut interface, generic) =
+            match Self::search_interface(config, callee, symbols, context) {
+                Some((owner, interface, generic)) => (owner, interface, generic),
+                None => {
+                    config
+                        .submit_error(CompileError::Resolve(ResolveError::UnknownInterface), span);
+                    return Self::null();
+                }
+            };
         let symbol = symbols.get_interface(interface, generic).clone();
         let mut params = Vec::new();
         if let Some(receiver_type) = symbol.receiver_type {
@@ -39,14 +41,17 @@ impl Expression {
             let receiver = if indirect {
                 owner
             } else {
-                Self::UnaryExprE(crate::ast::expression::UnaryExpr::Operator {
-                    op: if symbol.mutable {
-                        crate::ast::expression::Operator::MutOf
-                    } else {
-                        crate::ast::expression::Operator::AddressOf
+                Self::UnaryExprE(
+                    crate::ast::expression::UnaryExpr::Operator {
+                        op: if symbol.mutable {
+                            crate::ast::expression::Operator::MutOf
+                        } else {
+                            crate::ast::expression::Operator::AddressOf
+                        },
+                        value: Box::new(crate::ast::expression::CompAtom::from_expr(owner)),
                     },
-                    value: Box::new(crate::ast::expression::CompAtom::from_expr(owner)),
-                }, owner_span)
+                    owner_span,
+                )
             };
             if !crate::TypeInfer::new(config, symbols).check(
                 &receiver,
@@ -67,20 +72,29 @@ impl Expression {
         let fixed = Self::coerce_arguments(fixed, &symbol.params, config, symbols, span);
         params.extend(fixed);
         if generic {
-            let Some(index) = Self::infer_interface(config, interface, &params[offset..], span, symbols, context) else { return Self::Poison(span); };
+            let Some(index) =
+                Self::infer_interface(config, interface, &params[offset..], span, symbols, context)
+            else {
+                return Self::Poison(span);
+            };
             interface = index;
         } else if !crate::TypeInfer::new(config, symbols).check_arguments(
-            &symbol.params, &params[offset..], span,
+            &symbol.params,
+            &params[offset..],
+            span,
         ) {
             return Self::Poison(span);
         }
 
-        Self::FuncCallE(FuncCall {
-            pipeline: false,
-            callee: None,
-            func: EnumBool::True(interface),
-            args: params,
-        }, span)
+        Self::FuncCallE(
+            FuncCall {
+                pipeline: false,
+                callee: None,
+                func: EnumBool::True(interface),
+                args: params,
+            },
+            span,
+        )
     }
 
     pub(super) fn new_function_call(
@@ -114,7 +128,7 @@ impl Expression {
             return Self::new_indirect_call(config, callee, args, span, symbols, context);
         }
         if let TempExpr::Path(path) = &callee.0 {
-            if path.segments.len() == 1 || path.segments.join("::")=="str::len" {
+            if path.segments.len() == 1 || path.segments.join("::") == "str::len" {
                 if let Some(definition) = crate::ast::builtins::lookup(&path.segments.join("::")) {
                     if definition.type_arguments != 0 {
                         config.submit_error(
@@ -168,18 +182,24 @@ impl Expression {
             .into_iter()
             .map(|arg| Expression::new(config, arg, symbols, context))
             .collect::<Vec<_>>();
-        let parameters = match function { EnumBool::False(index) => symbols.get_function_regular(index).params.clone(), EnumBool::True(index) => symbols.get_interface_regular(index).params.clone() };
+        let parameters = match function {
+            EnumBool::False(index) => symbols.get_function_regular(index).params.clone(),
+            EnumBool::True(index) => symbols.get_interface_regular(index).params.clone(),
+        };
         let args = Self::coerce_arguments(args, &parameters, config, symbols, span);
         if let EnumBool::False(index) = function {
             if !Self::check_function_args(config, index, &args, symbols, span) {
                 return Self::Poison(span);
             }
         }
-        Self::FuncCallE(FuncCall {
-            pipeline: false,
-            callee: None,
-            func: function,
-            args,
-        }, span)
+        Self::FuncCallE(
+            FuncCall {
+                pipeline: false,
+                callee: None,
+                func: function,
+                args,
+            },
+            span,
+        )
     }
 }

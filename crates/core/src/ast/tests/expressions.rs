@@ -145,10 +145,13 @@ fn typed_initializer_preserves_resolved_target() {
     let Statement::VariableDecl(variable) = &main_body(&ast)[0] else {
         panic!("variable expected");
     };
-    let Expression::InitListE(InitialList::List {
-        onwer: Some(owner),
-        values,
-    }, ..) = &*variable.init_val
+    let Expression::InitListE(
+        InitialList::List {
+            onwer: Some(owner),
+            values,
+        },
+        ..,
+    ) = &*variable.init_val
     else {
         panic!("typed initializer expected");
     };

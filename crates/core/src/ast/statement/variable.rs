@@ -110,13 +110,16 @@ impl Variable {
                         var_span,
                     );
                 }
-                Expression::InitListE(crate::ast::expression::InitialList::Array {
-                    ty: declared.expect("declared array"),
-                    values: values
-                        .into_iter()
-                        .map(|value| Expression::new(config, value, symbols, ctxt))
-                        .collect(),
-                }, var_span)
+                Expression::InitListE(
+                    crate::ast::expression::InitialList::Array {
+                        ty: declared.expect("declared array"),
+                        values: values
+                            .into_iter()
+                            .map(|value| Expression::new(config, value, symbols, ctxt))
+                            .collect(),
+                    },
+                    var_span,
+                )
             }
             (_, expr) => Expression::new(config, (expr, var_span), symbols, ctxt),
         };

@@ -1,5 +1,4 @@
 //! Package analysis stays local; only finished IR crosses build worker boundaries.
-use std::collections::HashMap;
 use mlc_builder::{
     artifacts,
     plan::{BuildPlan, TargetInput},
@@ -18,15 +17,13 @@ use mlc_core::{
     },
     diagnostic::{error::ErrorHandle, warning::WarningHandle},
 };
-#[cfg(test)]
-#[path = "../../tests/support/mod.rs"]
-mod test_support;
+use std::collections::HashMap;
 #[cfg(test)]
 mod enum_tests;
 #[cfg(test)]
 mod examples_tests;
-mod names;
 mod macros;
+mod names;
 #[cfg(test)]
 mod optimization_tests;
 mod startup;
@@ -34,6 +31,9 @@ mod startup;
 mod startup_tests;
 #[cfg(test)]
 mod string_tests;
+#[cfg(test)]
+#[path = "../../tests/support/mod.rs"]
+mod test_support;
 #[cfg(test)]
 mod tests;
 
@@ -60,12 +60,21 @@ pub fn generate_with_options(
     kind: TargetKind,
     optimize: mlc_optimizer::OptimizeConfig,
 ) -> Result<Generated, String> {
-    generate_with_config(plan, triplet, kind, optimize, mlc_codegen::gens::CodegenConfig::default())
+    generate_with_config(
+        plan,
+        triplet,
+        kind,
+        optimize,
+        mlc_codegen::gens::CodegenConfig::default(),
+    )
 }
 
 pub fn generate_with_config(
-    plan: &BuildPlan, triplet: &str, kind: TargetKind,
-    optimize: mlc_optimizer::OptimizeConfig, codegen: mlc_codegen::gens::CodegenConfig,
+    plan: &BuildPlan,
+    triplet: &str,
+    kind: TargetKind,
+    optimize: mlc_optimizer::OptimizeConfig,
+    codegen: mlc_codegen::gens::CodegenConfig,
 ) -> Result<Generated, String> {
     let mut package = PackageSymbolTable::new();
     let mut asts = vec![];
@@ -89,7 +98,11 @@ pub fn generate_with_config(
         let target = &plan.targets[id.0];
         let module = parsed_modules.remove(&id.0).unwrap();
         let file = match &target.input {
-            TargetInput::Declaration(manifest) if codegen.debug_info && !manifest.config.source_file.is_empty() => manifest.config.source_file.clone(),
+            TargetInput::Declaration(manifest)
+                if codegen.debug_info && !manifest.config.source_file.is_empty() =>
+            {
+                manifest.config.source_file.clone()
+            }
             _ => target.file.to_string_lossy().into_owned(),
         };
         let mut config = Config::new(
@@ -104,7 +117,9 @@ pub fn generate_with_config(
         if let TargetInput::Source { lines, .. } = &target.input {
             config.set_source_lines(lines.clone());
         } else if codegen.debug_info {
-            if let Ok(text) = std::fs::read_to_string(config.current_file()) { config.set_source_lines(mlc_syntax::lexer::LineTable::new(&text)); }
+            if let Ok(text) = std::fs::read_to_string(config.current_file()) {
+                config.set_source_lines(mlc_syntax::lexer::LineTable::new(&text));
+            }
         }
         package.set_imports(
             FileId::new(id.0),

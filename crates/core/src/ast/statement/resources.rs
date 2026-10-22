@@ -138,14 +138,29 @@ impl ResourceState {
                 if ty.has_res(symbols) {
                     // Replacing an owned field does not move it out: codegen drops the
                     // previous value before storing the independently owned replacement.
-                    if matches!(&*assign.variable, Expression::UnaryExprE(UnaryExpr::Access(Access::Member { .. }), ..)) {
+                    if matches!(
+                        &*assign.variable,
+                        Expression::UnaryExprE(UnaryExpr::Access(Access::Member { .. }), ..)
+                    ) {
                         let owners = self.owner_names(&assign.variable);
-                        if self.borrows.values().any(|borrowed| !borrowed.is_disjoint(&owners)) {
-                            Self::error(config, IllegalUseError::UnsupportedResourceOperation, span);
+                        if self
+                            .borrows
+                            .values()
+                            .any(|borrowed| !borrowed.is_disjoint(&owners))
+                        {
+                            Self::error(
+                                config,
+                                IllegalUseError::UnsupportedResourceOperation,
+                                span,
+                            );
                             return;
                         }
                         if !self.owner_names(&assign.value).is_disjoint(&owners) {
-                            Self::error(config, IllegalUseError::UnsupportedResourceOperation, span);
+                            Self::error(
+                                config,
+                                IllegalUseError::UnsupportedResourceOperation,
+                                span,
+                            );
                             return;
                         }
                         self.expression(&assign.variable, None, config, symbols, span);
@@ -291,7 +306,12 @@ impl ResourceState {
             return;
         }
         let transfer = expected.is_some_and(|ty| ty.has_res(symbols));
-        if transfer && matches!(expr, Expression::UnaryExprE(_, ..) | Expression::CompositeE(_, ..)) {
+        if transfer
+            && matches!(
+                expr,
+                Expression::UnaryExprE(_, ..) | Expression::CompositeE(_, ..)
+            )
+        {
             Self::error(config, IllegalUseError::UnsupportedResourceOperation, span);
             return;
         }

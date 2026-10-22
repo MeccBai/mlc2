@@ -42,7 +42,11 @@ pub fn path<'tokens, I>() -> impl Parser<'tokens, I, Path, extra::Err<ParseError
 where
     I: ValueInput<'tokens, Token = TokenPack, Span = Span>,
 {
-    let segment = choice((ident(), keyword(Token::Generic).to("generic".to_owned()), keyword(Token::Macro).to("macro".to_owned())));
+    let segment = choice((
+        ident(),
+        keyword(Token::Generic).to("generic".to_owned()),
+        keyword(Token::Macro).to("macro".to_owned()),
+    ));
 
     segment
         .separated_by(operator(Token::ColonColon))
@@ -157,10 +161,14 @@ where
                 inner: Box::new(inner),
             });
 
-        let const_reference = keyword(Token::Constant).ignore_then(reference.clone())
+        let const_reference = keyword(Token::Constant)
+            .ignore_then(reference.clone())
             .try_map(|ty, span| match ty {
                 TypeExpr::Reference { mutable: false, .. } => Ok(ty),
-                _ => Err(Rich::custom(span, "const reference must be read-only; use const $T")),
+                _ => Err(Rich::custom(
+                    span,
+                    "const reference must be read-only; use const $T",
+                )),
             });
         let inferred_resource = keyword(Token::Resource).to(TypeExpr::InferredResource);
         let function = keyword(Token::Function)

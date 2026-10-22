@@ -90,34 +90,38 @@ fn evaluate(
         return None;
     }
     match expression {
-        Expression::ConstValueE(constant, ..) => match package.get_type(constant.ty).unqualified() {
-            CompileType::Base(base) => match base.data_type() {
-                DataType::Integer => integer(constant.value.parse().ok()?, constant.ty, package),
-                DataType::Float => {
-                    let number: f64 = constant.value.parse().ok()?;
-                    if !number.is_finite() {
-                        return None;
+        Expression::ConstValueE(constant, ..) => {
+            match package.get_type(constant.ty).unqualified() {
+                CompileType::Base(base) => match base.data_type() {
+                    DataType::Integer => {
+                        integer(constant.value.parse().ok()?, constant.ty, package)
                     }
-                    Some(Scalar::Float(
-                        if base.bits() == 32 {
-                            number as f32 as f64
-                        } else {
-                            number
-                        },
-                        constant.ty,
-                    ))
+                    DataType::Float => {
+                        let number: f64 = constant.value.parse().ok()?;
+                        if !number.is_finite() {
+                            return None;
+                        }
+                        Some(Scalar::Float(
+                            if base.bits() == 32 {
+                                number as f32 as f64
+                            } else {
+                                number
+                            },
+                            constant.ty,
+                        ))
+                    }
+                    DataType::Boolean => Some(Scalar::Bool(match constant.value.as_str() {
+                        "true" | "1" => true,
+                        "false" | "0" => false,
+                        _ => return None,
+                    })),
+                },
+                CompileType::Enum(_) => {
+                    Some(Scalar::Integer(constant.value.parse().ok()?, constant.ty))
                 }
-                DataType::Boolean => Some(Scalar::Bool(match constant.value.as_str() {
-                    "true" | "1" => true,
-                    "false" | "0" => false,
-                    _ => return None,
-                })),
-            },
-            CompileType::Enum(_) => {
-                Some(Scalar::Integer(constant.value.parse().ok()?, constant.ty))
+                _ => None,
             }
-            _ => None,
-        },
+        }
         Expression::VarValueE(variable, ..) => {
             if let Some((target, initial)) = binding {
                 if variable.name == target.name

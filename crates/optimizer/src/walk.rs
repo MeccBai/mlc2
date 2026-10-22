@@ -12,7 +12,9 @@ pub(crate) fn expression(value: &mut Expression, visit: &mut impl FnMut(&mut Exp
                 atom_expression(atom, visit);
             }
         }
-        Expression::UnaryExprE(UnaryExpr::Operator { value, .. }, ..) => atom_expression(value, visit),
+        Expression::UnaryExprE(UnaryExpr::Operator { value, .. }, ..) => {
+            atom_expression(value, visit)
+        }
         Expression::UnaryExprE(UnaryExpr::Access(Access::Member { base, .. }), ..) => {
             atom_expression(base, visit)
         }
@@ -30,7 +32,8 @@ pub(crate) fn expression(value: &mut Expression, visit: &mut impl FnMut(&mut Exp
         }
         Expression::InitListE(
             InitialList::List { values, .. } | InitialList::Array { values, .. },
-         ..) => {
+            ..,
+        ) => {
             for value in values {
                 expression(value, visit);
             }

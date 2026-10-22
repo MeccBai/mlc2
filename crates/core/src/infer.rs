@@ -84,10 +84,13 @@ impl<'a> TypeInfer<'a> {
             expression,
             Expression::VarValueE(_, ..)
                 | Expression::UnaryExprE(crate::ast::expression::UnaryExpr::Access(_), ..)
-                | Expression::UnaryExprE(crate::ast::expression::UnaryExpr::Operator {
-                    op: crate::ast::expression::operators::Operator::Dereference,
+                | Expression::UnaryExprE(
+                    crate::ast::expression::UnaryExpr::Operator {
+                        op: crate::ast::expression::operators::Operator::Dereference,
+                        ..
+                    },
                     ..
-                }, ..)
+                )
         ) {
             ValueCategory::Place {
                 mutable: self.assignable(expression),

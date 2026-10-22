@@ -14,9 +14,7 @@ fn type_name_calls_are_not_builtin_conversions() {
         let plan = BuildPlan::discover(
             &entry,
             &ImportResolver {
-                lib_dirs: vec![
-                    super::test_support::library().join("universal"),
-                ],
+                lib_dirs: vec![super::test_support::library().join("universal")],
             },
         )
         .unwrap();
@@ -41,9 +39,7 @@ fn builtins_lower_without_external_language_symbols() {
     let plan = BuildPlan::discover(
         &entry,
         &ImportResolver {
-            lib_dirs: vec![
-                super::test_support::library().join("universal"),
-            ],
+            lib_dirs: vec![super::test_support::library().join("universal")],
         },
     )
     .unwrap();
@@ -105,9 +101,7 @@ fn builtin_arguments_are_validated_before_generation() {
         let plan = BuildPlan::discover(
             &entry,
             &ImportResolver {
-                lib_dirs: vec![
-                    super::test_support::library().join("universal"),
-                ],
+                lib_dirs: vec![super::test_support::library().join("universal")],
             },
         )
         .unwrap();
@@ -135,9 +129,7 @@ fn builtin_casts_and_generic_allocations_pass_llvm_verification() {
     let plan = BuildPlan::discover(
         &entry,
         &ImportResolver {
-            lib_dirs: vec![
-                super::test_support::library().join("universal"),
-            ],
+            lib_dirs: vec![super::test_support::library().join("universal")],
         },
     )
     .unwrap();
@@ -173,9 +165,7 @@ fn multilevel_reference_reads_and_writes_generate_valid_ir() {
     let plan = BuildPlan::discover(
         &entry,
         &ImportResolver {
-            lib_dirs: vec![
-                super::test_support::library().join("universal"),
-            ],
+            lib_dirs: vec![super::test_support::library().join("universal")],
         },
     )
     .unwrap();
@@ -214,9 +204,7 @@ fn constant_integer_narrowing_reports_out_of_range() {
         let plan = BuildPlan::discover(
             &entry,
             &ImportResolver {
-                lib_dirs: vec![
-                    super::test_support::library().join("universal"),
-                ],
+                lib_dirs: vec![super::test_support::library().join("universal")],
             },
         )
         .unwrap();
@@ -249,9 +237,7 @@ fn array_initializers_allow_missing_elements_and_reject_braces_and_excess() {
         let plan = BuildPlan::discover(
             &entry,
             &ImportResolver {
-                lib_dirs: vec![
-                    super::test_support::library().join("universal"),
-                ],
+                lib_dirs: vec![super::test_support::library().join("universal")],
             },
         )
         .unwrap();
@@ -283,9 +269,7 @@ fn local_generic_instance_is_defined_only_in_supplement() {
     let plan = BuildPlan::discover(
         &entry,
         &ImportResolver {
-            lib_dirs: vec![
-                super::test_support::library().join("universal"),
-            ],
+            lib_dirs: vec![super::test_support::library().join("universal")],
         },
     )
     .unwrap();

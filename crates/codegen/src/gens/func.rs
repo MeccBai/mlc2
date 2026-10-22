@@ -1,6 +1,6 @@
 use super::{
     IrGenerator,
-    instruction::{IrValue, LlvmType},
+    instruction::{IrValue, LlvmType, TypedValue},
 };
 use crate::{
     ast::{
@@ -295,6 +295,24 @@ pub struct ReturnMapping {
 }
 
 impl LlvmFunc {
+    /// Concrete ABI of a debug-only forwarding call, including variadic operands.
+    pub(super) fn forwarding_abi(&self, name: String, args: &[TypedValue]) -> Self {
+        let mut result = self.clone();
+        result.name = name;
+        result.variadic = false;
+        for arg in args.iter().skip(self.parameters().count()) {
+            result.params.push(ParamMapping {
+                source: TypeIndex::empty(),
+                lowered: vec![AbiParameter {
+                    ty: arg.ty.clone(),
+                    mode: ParameterMode::Direct,
+                    align: 1,
+                }],
+            });
+        }
+        result
+    }
+
     pub fn name(&self) -> &str {
         &self.name
     }

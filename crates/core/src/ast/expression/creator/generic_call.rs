@@ -173,18 +173,24 @@ impl Expression {
             .map(|arg| Expression::new(config, arg, symbols, context))
             .collect::<Vec<_>>();
 
-        let parameters = match func { EnumBool::False(index) => symbols.get_function_regular(index).params.clone(), EnumBool::True(index) => symbols.get_interface_regular(index).params.clone() };
+        let parameters = match func {
+            EnumBool::False(index) => symbols.get_function_regular(index).params.clone(),
+            EnumBool::True(index) => symbols.get_interface_regular(index).params.clone(),
+        };
         let args = Self::coerce_arguments(args, &parameters, config, symbols, span);
         if let EnumBool::False(index) = func {
             if !Self::check_function_args(config, index, &args, symbols, span) {
                 return Self::Poison(span);
             }
         }
-        Self::FuncCallE(FuncCall {
-            pipeline: false,
-            callee: None,
-            func,
-            args,
-        }, span)
+        Self::FuncCallE(
+            FuncCall {
+                pipeline: false,
+                callee: None,
+                func,
+                args,
+            },
+            span,
+        )
     }
 }

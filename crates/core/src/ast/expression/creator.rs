@@ -82,10 +82,13 @@ impl Expression {
             Path(path) => {
                 if path.segments.len() > 1 {
                     return match symbols.enum_value(config, &path) {
-                        Ok(value) => Self::ConstValueE(ConstValue {
-                            value: value.value.to_string(),
-                            ty: value.enum_type,
-                        }, span),
+                        Ok(value) => Self::ConstValueE(
+                            ConstValue {
+                                value: value.value.to_string(),
+                                ty: value.enum_type,
+                            },
+                            span,
+                        ),
                         Err(error) => {
                             config.submit_error(CompileError::Resolve(error), span);
                             Self::Poison(span)
@@ -169,10 +172,13 @@ impl Expression {
                 }
                 let value = CompAtom::from_expr(expr);
 
-                Expression::UnaryExprE(UnaryExpr::Operator {
-                    op,
-                    value: Box::new(value),
-                }, span)
+                Expression::UnaryExprE(
+                    UnaryExpr::Operator {
+                        op,
+                        value: Box::new(value),
+                    },
+                    span,
+                )
             }
             Binary {
                 mut operands,
@@ -195,10 +201,13 @@ impl Expression {
                             span,
                         );
                     }
-                    return Self::UnaryExprE(UnaryExpr::Access(Access::Index {
-                        base: Box::new(base),
-                        index: Box::new(index),
-                    }), span);
+                    return Self::UnaryExprE(
+                        UnaryExpr::Access(Access::Index {
+                            base: Box::new(base),
+                            index: Box::new(index),
+                        }),
+                        span,
+                    );
                 }
                 let expressions = operands
                     .into_iter()
@@ -241,10 +250,13 @@ impl Expression {
                     }
                 });
 
-                Expression::CompositeE(Composite {
-                    members: expressions,
-                    operators,
-                }, span)
+                Expression::CompositeE(
+                    Composite {
+                        members: expressions,
+                        operators,
+                    },
+                    span,
+                )
             }
             MacroCall { .. } => {
                 config.submit_error(
@@ -255,25 +267,34 @@ impl Expression {
             }
             Group(inner) => Expression::new(config, *inner, symbols, context),
             Call { callee, args } => {
-                let pipeline = matches!(&callee, TempCallee::Expr(callee) if callee.1.start > span.start);
+                let pipeline =
+                    matches!(&callee, TempCallee::Expr(callee) if callee.1.start > span.start);
                 let mut expression = match callee {
-                TempCallee::GenericPath {
-                    path,
-                    args: generic_args,
-                } => {
-                    Self::new_generic_call(config, path, generic_args, args, span, symbols, context)
-                }
-                TempCallee::Expr(callee) => {
-                    if matches!(callee.0, Member { .. }) {
-                        Self::new_member_callable(config, *callee, args, span, symbols, context)
-                    } else {
-                        Self::new_function_call(config, *callee, args, span, symbols, context)
+                    TempCallee::GenericPath {
+                        path,
+                        args: generic_args,
+                    } => Self::new_generic_call(
+                        config,
+                        path,
+                        generic_args,
+                        args,
+                        span,
+                        symbols,
+                        context,
+                    ),
+                    TempCallee::Expr(callee) => {
+                        if matches!(callee.0, Member { .. }) {
+                            Self::new_member_callable(config, *callee, args, span, symbols, context)
+                        } else {
+                            Self::new_function_call(config, *callee, args, span, symbols, context)
+                        }
                     }
-                }
                 };
-                if let Self::FuncCallE(call, _) = &mut expression { call.pipeline = pipeline; }
+                if let Self::FuncCallE(call, _) = &mut expression {
+                    call.pipeline = pipeline;
+                }
                 expression
-            },
+            }
             Member {
                 base,
                 indirect,
@@ -308,11 +329,14 @@ impl Expression {
                     );
                     return Self::null();
                 }
-                Self::UnaryExprE(UnaryExpr::Access(Access::Member {
-                    base: Box::new(CompAtom::from_expr(owner)),
-                    indirect,
-                    name,
-                }), span)
+                Self::UnaryExprE(
+                    UnaryExpr::Access(Access::Member {
+                        base: Box::new(CompAtom::from_expr(owner)),
+                        indirect,
+                        name,
+                    }),
+                    span,
+                )
             }
             Init { target, values } => {
                 let values = values
@@ -400,10 +424,13 @@ impl Expression {
                     }
                 }
 
-                InitListE(InitialList::List {
-                    onwer: ty,
-                    values: values,
-                }, span)
+                InitListE(
+                    InitialList::List {
+                        onwer: ty,
+                        values: values,
+                    },
+                    span,
+                )
             }
             Array(values) => {
                 let values = values
@@ -433,10 +460,13 @@ impl Expression {
                     TypeIndex::empty()
                 };
 
-                InitListE(InitialList::Array {
-                    ty: ty,
-                    values: values,
-                }, span)
+                InitListE(
+                    InitialList::Array {
+                        ty: ty,
+                        values: values,
+                    },
+                    span,
+                )
             }
         }
     }

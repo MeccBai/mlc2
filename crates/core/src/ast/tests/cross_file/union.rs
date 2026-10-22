@@ -1,6 +1,5 @@
 use super::*;
 
-
 #[test]
 fn exported_union_candidates_survive_cross_file_instantiation() {
     let mut package = PackageSymbolTable::new();

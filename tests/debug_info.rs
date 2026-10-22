@@ -31,7 +31,7 @@ fn debug_id(line: &str) -> &str {
     line.rsplit("!dbg !").next().unwrap().trim()
 }
 #[test]
-fn line_tables_hide_expansions_and_mark_pipeline_calls() {
+fn line_tables_share_generic_sources_hide_macros_and_mark_pipeline_calls() {
     let root = fixture();
     invoke(
         root.path(),
@@ -54,7 +54,7 @@ fn line_tables_hide_expansions_and_mark_pipeline_calls() {
         .unwrap();
     let pipe = ir
         .lines()
-        .find(|line| line.contains("call i32 @\"main::add\""))
+        .find(|line| line.contains("call i32 @\"main::main::__mlc_step_over_"))
         .unwrap();
     let normal_id = debug_id(normal);
     let pipe_id = debug_id(pipe);
@@ -68,16 +68,26 @@ fn line_tables_hide_expansions_and_mark_pipeline_calls() {
         1
     );
     assert!(supplementary.contains("!mlc.generic.templates"));
+    assert!(supplementary.contains("linkageName: \"main::id<i32>\""));
+    assert!(supplementary.contains("linkageName: \"main::id<f64>\""));
+    assert_eq!(
+        supplementary
+            .lines()
+            .filter(
+                |line| line.contains("linkageName: \"main::id<") && line.contains("declaration: !")
+            )
+            .count(),
+        2
+    );
     assert!(
         !supplementary
             .lines()
             .any(|line| line.contains("DISubprogram") && line.contains("__mlc_macro_"))
     );
-    assert!(
-        !supplementary
-            .lines()
-            .any(|line| line.starts_with("define ") && line.contains("!dbg"))
-    );
+    assert!(supplementary.lines().any(|line| line.starts_with("define ")
+        && line.contains("main::id<i32>")
+        && line.contains("!dbg")));
+    assert!(ir.contains("noinline optnone \"disable-tail-calls\"=\"true\""));
     invoke(
         root.path(),
         &[
@@ -150,4 +160,116 @@ fn project_mode_pdb_and_cache_are_consistent() {
         ],
     );
     assert!(!root.path().join("release/app.pdb").exists());
+}
+
+#[test]
+#[ignore = "Requires Scoop LLDB, bundled linker and MSVC/UCRT libraries"]
+fn lldb_steps_into_shared_generic_sources_and_skips_pipeline_stages() {
+    let root = tempfile::tempdir().unwrap();
+    fs::write(root.path().join("config.toml"), "").unwrap();
+    fs::write(root.path().join("main.m2"), "import std; func<T> id(x:T)->T {\n    return x;\n}\nfunc value()->i32 { return 3; }\nfunc add(a:i32,b:i32)->i32 { return a+b; }\nfunc main()->i32 {\n    var a=id(1);\n    var b=id(1.5);\n    var c=a |> add(value());\n    var d=add(c,0);\n    std::println!(\"{}\",d);\n    return d-4;\n}\n").unwrap();
+    invoke(
+        root.path(),
+        &[
+            "build",
+            "main.m2",
+            "--debug",
+            "--config",
+            "config.toml",
+            "-o",
+            "build",
+        ],
+    );
+    let mut command = Command::new("lldb");
+    command.current_dir(root.path()).arg("--batch");
+    for action in [
+        "breakpoint set --file main.m2 --line 7",
+        "run",
+        "step",
+        "thread backtrace",
+        "finish",
+        "next",
+        "step",
+        "thread backtrace",
+        "finish",
+        "next",
+        "step",
+        "thread backtrace",
+        "finish",
+        "step",
+        "thread backtrace",
+        "step",
+        "thread backtrace",
+        "finish",
+        "next",
+        "step",
+        "thread backtrace",
+        "continue",
+    ] {
+        command.args(["-o", action]);
+    }
+    let output = command.arg("build/main.exe").output().unwrap();
+    let log = format!(
+        "{}\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(output.status.success(), "{log}");
+    assert!(log.contains("main::id<i32> at main.m2:2"), "{log}");
+    assert!(log.contains("main::id<f64> at main.m2:2"), "{log}");
+    assert!(log.contains("main::value at main.m2:4"), "{log}");
+    // Only the final direct add is entered; the preceding pipeline add is skipped.
+    let stops: Vec<_> = log.split("(lldb) step").collect();
+    assert!(stops[4].contains("main::main at main.m2:10"), "{log}");
+    assert!(!stops[4].contains("main::add at"), "{log}");
+    assert!(stops[5].contains("main::add at main.m2:5"), "{log}");
+    assert!(stops[6].contains("main::main at main.m2:12"), "{log}");
+    assert!(!stops[6].contains("__mlc_macro_"), "{log}");
+    assert!(log.contains("exited with status = 0"), "{log}");
+}
+
+#[test]
+#[ignore = "Requires bundled linker and MSVC/UCRT libraries"]
+fn debug_forwarding_preserves_indirect_aggregate_void_and_variadic_calls() {
+    let root = tempfile::tempdir().unwrap();
+    fs::write(root.path().join("config.toml"), "").unwrap();
+    fs::write(
+        root.path().join("main.m2"),
+        r#"
+import std;
+import c_std::io;
+unit Pair {pub x:i32; pub y:i32; pub z:i32;};
+func identity(p:Pair)->Pair {return p;}
+func twice(x:i32)->i32 {return x*2;}
+func consume(x:i32) {}
+func main()->i32 {
+    val callback=std::function(twice);
+    var a=3 |> callback;
+    var p=Pair{a,4,5} |> identity;
+    a |> consume;
+    const_c_str("%d\n") |> c_std::io::printf(p.x+p.y+p.z);
+    return p.x+p.y+p.z-15;
+}
+"#,
+    )
+    .unwrap();
+    for mode in ["--debug", "--release"] {
+        invoke(
+            root.path(),
+            &[
+                "build",
+                "main.m2",
+                mode,
+                "--config",
+                "config.toml",
+                "-o",
+                "build",
+            ],
+        );
+        let run = Command::new(root.path().join("build/main.exe"))
+            .output()
+            .unwrap();
+        assert!(run.status.success(), "{mode}: {:?}", run);
+        assert_eq!(String::from_utf8_lossy(&run.stdout).trim(), "15");
+    }
 }

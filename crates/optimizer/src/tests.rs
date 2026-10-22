@@ -175,12 +175,18 @@ fn source_ranges_survive_folding_and_atom_rewrites() {
     let (mut ast, _) = optimize(source, OptimizeConfig::default());
     assert_eq!(&source[ast.body[0].span().into_range()], source);
     let body = body_mut(&mut ast.body[0]);
-    let Statement::VariableDecl(first) = &body[0] else { panic!() };
+    let Statement::VariableDecl(first) = &body[0] else {
+        panic!()
+    };
     assert!(matches!(&*first.init_val, Expression::ConstValueE(value, _) if value.value == "7"));
     assert_eq!(&source[first.init_val.span().into_range()], "1+2*3");
-    let Statement::VariableDecl(second) = &body[1] else { panic!() };
+    let Statement::VariableDecl(second) = &body[1] else {
+        panic!()
+    };
     assert_eq!(&source[second.init_val.span().into_range()], "first+(4*5)");
-    let Expression::CompositeE(composite, _) = &*second.init_val else { panic!() };
+    let Expression::CompositeE(composite, _) = &*second.init_val else {
+        panic!()
+    };
     assert_eq!(&source[composite.members[0].span().into_range()], "first");
     assert_eq!(&source[composite.members[1].span().into_range()], "(4*5)");
 }

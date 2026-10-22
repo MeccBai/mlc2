@@ -72,8 +72,14 @@ impl Statement {
             }
         }
         if config.statement_locations() {
-            statements.into_iter().zip(spans).flat_map(|(statement, span)| [Self::SourcePosition(span), statement]).collect()
-        } else { statements }
+            statements
+                .into_iter()
+                .zip(spans)
+                .flat_map(|(statement, span)| [Self::SourcePosition(span), statement])
+                .collect()
+        } else {
+            statements
+        }
     }
 
     fn create(
@@ -85,7 +91,18 @@ impl Statement {
         let (stmt, span) = prototype;
 
         match stmt {
-            TempStmt::VariantMatch { binding, value, branches } => Self::create_variant_match(config, binding, value, branches, symbols, context.as_deref()),
+            TempStmt::VariantMatch {
+                binding,
+                value,
+                branches,
+            } => Self::create_variant_match(
+                config,
+                binding,
+                value,
+                branches,
+                symbols,
+                context.as_deref(),
+            ),
             TempStmt::Variable(temp_var) => {
                 let span = temp_var.name_span;
                 let variable = Variable::new(config, temp_var, symbols, context.as_deref_mut());
@@ -100,7 +117,10 @@ impl Statement {
                 Statement::VariableDecl(variable)
             }
             TempStmt::MacroFor { .. } => {
-                config.submit_error(CompileError::IllegalUse(IllegalUseError::MacroExpansionRequired), span);
+                config.submit_error(
+                    CompileError::IllegalUse(IllegalUseError::MacroExpansionRequired),
+                    span,
+                );
                 Self::Poison
             }
             TempStmt::Assignment { target, value } => {
@@ -140,15 +160,30 @@ impl Statement {
                     );
                     return Self::Poison;
                 }
-                let float_narrowing = !target_type.is_empty() && !source_type.is_empty() && match (symbols.get_type(target_type).unqualified(), symbols.get_type(source_type).unqualified()) {
-                    (crate::ast::types::CompileType::Base(to), crate::ast::types::CompileType::Base(from)) =>
-                        to.data_type() == crate::ast::types::base_type::DataType::Float && from.data_type() == crate::ast::types::base_type::DataType::Float && to.bits() < from.bits(),
-                    _ => false,
-                };
+                let float_narrowing = !target_type.is_empty()
+                    && !source_type.is_empty()
+                    && match (
+                        symbols.get_type(target_type).unqualified(),
+                        symbols.get_type(source_type).unqualified(),
+                    ) {
+                        (
+                            crate::ast::types::CompileType::Base(to),
+                            crate::ast::types::CompileType::Base(from),
+                        ) => {
+                            to.data_type() == crate::ast::types::base_type::DataType::Float
+                                && from.data_type() == crate::ast::types::base_type::DataType::Float
+                                && to.bits() < from.bits()
+                        }
+                        _ => false,
+                    };
                 if float_narrowing {
-                    config.submit_error(CompileError::IllegalUse(IllegalUseError::TypeMismatched {
-                        expected: target_type.format(symbols), found: source_type.format(symbols),
-                    }), span);
+                    config.submit_error(
+                        CompileError::IllegalUse(IllegalUseError::TypeMismatched {
+                            expected: target_type.format(symbols),
+                            found: source_type.format(symbols),
+                        }),
+                        span,
+                    );
                     return Self::Poison;
                 }
                 right_expr.check_constant_range(target_type, config, symbols, span);

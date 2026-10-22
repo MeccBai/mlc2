@@ -17,7 +17,10 @@ impl FunctionGenerator<'_> {
 
     fn statement(&mut self, statement: &Statement) {
         match statement {
-            Statement::SourcePosition(span) => self.code.push(Instruction::Location { span: *span, step_into: true }),
+            Statement::SourcePosition(span) => self.code.push(Instruction::Location {
+                span: *span,
+                step_into: true,
+            }),
             Statement::VariantMatch(statement) => self.variant_match(statement),
             Statement::Poison => fail("Poison statement reached function generation"),
             Statement::VariableDecl(variable) => {

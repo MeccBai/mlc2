@@ -380,8 +380,16 @@ fn foreign_generic_spans_belong_to_the_definition_file() {
     let file = package.file(FileId::new(1)).unwrap();
     let instance = file.function_instances.values().next().unwrap();
     assert_eq!(instance.symbol.file_id(), FileId::new(1));
-    assert_eq!(&source[instance.span.into_range()], "export func<T> id(x:T)->T{return x;}");
+    assert_eq!(
+        &source[instance.span.into_range()],
+        "export func<T> id(x:T)->T{return x;}"
+    );
     assert_eq!(file.functions.get(instance.symbol).span, instance.span);
-    let crate::ast::statement::Statement::ReturnBlock(returned) = &instance.body[0] else { panic!() };
-    assert_eq!(&source[returned.value.as_ref().unwrap().span().into_range()], "x");
+    let crate::ast::statement::Statement::ReturnBlock(returned) = &instance.body[0] else {
+        panic!()
+    };
+    assert_eq!(
+        &source[returned.value.as_ref().unwrap().span().into_range()],
+        "x"
+    );
 }

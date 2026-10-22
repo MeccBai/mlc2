@@ -15,7 +15,11 @@ pub struct TempScope {
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(tag = "kind", content = "data")]
 pub enum TempStmt {
-    MacroFor { binding: Spanned<String>, pack: Spanned<String>, scope: TempScope },
+    MacroFor {
+        binding: Spanned<String>,
+        pack: Spanned<String>,
+        scope: TempScope,
+    },
     VariantMatch {
         binding: Spanned<String>,
         value: Spanned<TempExpr>,

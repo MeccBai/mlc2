@@ -62,7 +62,7 @@ pub(super) fn split(
 
     temp_ast.into_iter().for_each(|(stmt, _span)| match stmt {
         TempGlobalStmt::Unit(temp_unit) => units.push(temp_unit),
-        TempGlobalStmt::MacroFunc(_) => {},
+        TempGlobalStmt::MacroFunc(_) => {}
         TempGlobalStmt::Func(temp_func) => funcs.push(temp_func),
         TempGlobalStmt::Using(temp_using) => usings.push(temp_using),
         TempGlobalStmt::Generic(temp_generic) => generics.push(temp_generic),

@@ -12,6 +12,6 @@ fn parse_ok(source: &str) -> TempModule {
 mod arrays;
 mod declarations;
 mod expressions;
+mod function_types;
 mod statements;
 mod union;
-mod function_types;

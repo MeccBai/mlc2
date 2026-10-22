@@ -82,7 +82,9 @@ func main()->i32 {
     let link = Command::new(DEFAULT_WINDOWS_LINKER)
         .arg("-fuse-ld=lld")
         .args(objects)
-        .arg(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/union_runtime.c"))
+        .arg(
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/union_runtime.c"),
+        )
         .arg("-o")
         .arg(&executable)
         .output()

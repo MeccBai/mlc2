@@ -1,4 +1,4 @@
-//! Line tables only. Generic instances share a declaration and have no body locations.
+//! Line tables only. Generic instances share a template declaration and source positions.
 use crate::ast::{
     Function,
     config::{Config, FileId},
@@ -125,10 +125,15 @@ impl DebugInfoBuilder {
                 let id = self.node(format!("!DISubprogram(name: \"{name}\", scope: !{file}, file: !{file}, line: {line}, type: !{signature}, spFlags: 0)"));
                 self.templates.insert(key, id);
             }
-            return ir.to_owned();
         }
+        let declaration = if instance {
+            let id = self.templates[&(file_id, function.span().start, function.span().end)];
+            format!(", declaration: !{id}")
+        } else {
+            String::new()
+        };
         let name = quoted(name);
-        let scope = self.node(format!("distinct !DISubprogram(name: \"{name}\", linkageName: \"{name}\", scope: !{file}, file: !{file}, line: {line}, type: !{signature}, scopeLine: {line}, spFlags: DISPFlagDefinition, unit: !{unit})"));
+        let scope = self.node(format!("distinct !DISubprogram(name: \"{name}\", linkageName: \"{name}\", scope: !{file}, file: !{file}, line: {line}, type: !{signature}, scopeLine: {line}, spFlags: DISPFlagDefinition, unit: !{unit}{declaration})"));
         let positions: HashMap<_, _> = locations
             .iter()
             .map(|(line, span, step)| (*line, (*span, *step)))
@@ -184,4 +189,88 @@ impl DebugInfoBuilder {
         }
         result
     }
+}
+
+/// NativePDB discards special CodeView rows instead of treating them as a call-site
+/// stepping policy. An opaque, non-inlined forwarding frame gives default source
+/// stepping the same boundary while leaving direct calls to the target debuggable.
+pub(super) fn step_over_calls(code: &mut [super::instruction::Instruction], owner: &str) -> String {
+    use super::instruction::{Instruction, IrValue, LlvmType, TypedValue};
+    use std::fmt::Write;
+    let mut helpers = String::new();
+    let mut step_into = true;
+    for (index, instruction) in code.iter_mut().enumerate() {
+        if let Instruction::Location {
+            step_into: step, ..
+        } = instruction
+        {
+            step_into = *step;
+            continue;
+        }
+        if step_into {
+            continue;
+        }
+        let (func, target, args, callee) = match instruction {
+            Instruction::MappedCall { func, target, args } => {
+                (func.clone(), *target, args.clone(), None)
+            }
+            Instruction::IndirectCall {
+                func,
+                target,
+                args,
+                callee,
+            } => (func.clone(), *target, args.clone(), Some(callee.clone())),
+            _ => continue,
+        };
+        let name = format!("{owner}::__mlc_step_over_{index}");
+        let mut forwarded = args.clone();
+        if let Some(callee) = &callee {
+            forwarded.push(TypedValue {
+                ty: LlvmType::Ptr,
+                value: callee.clone(),
+            });
+        }
+        let abi = func.forwarding_abi(name.clone(), &forwarded);
+        write!(
+            helpers,
+            "define internal {} {}(",
+            abi.result().ty,
+            IrValue::Global(name)
+        )
+        .unwrap();
+        for (i, param) in abi.parameters().enumerate() {
+            if i != 0 {
+                helpers.push_str(", ");
+            }
+            write!(helpers, "{param} %r{i}").unwrap();
+        }
+        helpers.push_str(") noinline optnone \"disable-tail-calls\"=\"true\" {\nentry:\n  ");
+        let values: Vec<_> = args
+            .iter()
+            .enumerate()
+            .map(|(i, arg)| TypedValue {
+                ty: arg.ty.clone(),
+                value: IrValue::Reg(i),
+            })
+            .collect();
+        let result = (func.result().ty != LlvmType::Void).then_some(forwarded.len());
+        let destination = callee
+            .as_ref()
+            .map(|_| IrValue::Reg(args.len()))
+            .unwrap_or_else(|| IrValue::Global(func.name().into()));
+        func.write_call_to(&mut helpers, result, &values, &destination)
+            .expect("validated forwarding call");
+        if let Some(reg) = result {
+            writeln!(helpers, "\n  ret {} %r{reg}\n}}", func.result().ty).unwrap();
+        } else {
+            helpers.push_str("\n  ret void\n}\n");
+        }
+        *instruction = Instruction::MappedCall {
+            func: Box::new(abi),
+            target,
+            args: forwarded,
+        };
+        step_into = true;
+    }
+    helpers
 }

@@ -120,13 +120,16 @@ impl FunctionGenerator<'_> {
             };
             let yes = self.label("match.arm");
             let no = self.label("match.next");
-            let comparison = Expression::CompositeE(Composite {
-                members: vec![
-                    CompAtom::VarValueA(variable.clone(), (0..0).into()),
-                    CompAtom::from_expr(pattern.clone()),
-                ],
-                operators: vec![Operator::Equal],
-            }, (0..0).into());
+            let comparison = Expression::CompositeE(
+                Composite {
+                    members: vec![
+                        CompAtom::VarValueA(variable.clone(), (0..0).into()),
+                        CompAtom::from_expr(pattern.clone()),
+                    ],
+                    operators: vec![Operator::Equal],
+                },
+                (0..0).into(),
+            );
             self.condition(&comparison, yes.clone(), no.clone());
             self.block(yes);
             falls |= self.scope(body, end.clone());
