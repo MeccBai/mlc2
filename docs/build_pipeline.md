@@ -196,7 +196,7 @@ Git 只保存标准库的 `.m2` 和声明 `.toml` 源文件；`.sym`、`.obj`、
 ```powershell
 cargo build --bin mlc
 .\target\debug\mlc.exe symbols lib/universal/std/mem.toml -o objects/universal/std/mem.sym
-.\target\debug\mlc.exe symbols lib/universal/c_std/io.toml -o objects/universal/c_std/io.sym
+.\target\debug\mlc.exe symbols lib/universal/c_std/io.h --module c_std::io --triplet universal -o objects/universal/c_std/io.sym
 ```
 
 标准库 `.m2` 的对象文件与模板缓存由正常构建按需生成。

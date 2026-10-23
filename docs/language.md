@@ -19,7 +19,7 @@ func main() -> i32 {
 }
 ```
 
-这里的 c_std::io 是已提供的 C 声明模块，不是完整的 MLC 标准库。
+这里的 c_std::io 是 C 声明模块；常用 C API 模块见 [c_std](c_std.md)，MLC 自身标准库使用 std。
 可以用 `mlc build main.m2` 构建、`mlc run main.m2` 构建并运行，或 `mlc ll main.m2` 只生成 LLVM IR。
 
 AST 优化由独立的 `mlc_optimizer` pass 管线控制：常量折叠、死代码消除、未使用局部变量存储消除、零引用函数消除。
@@ -612,7 +612,7 @@ func main() -> i32 {
 }
 ```
 
-当前 c_std::io 提供 printf、scanf、puts、putchar、getchar；
+当前 c_std::io 保留 printf、scanf、puts、putchar、getchar；更多内存、字符串、数学、文件和时间函数见 [c_std](c_std.md)。
 格式字符串、可变参数正确性及目标 CRT 的可用性由调用者负责，不能代替类型安全的格式化库。
 GNU Windows 后端可调用对应 scanf；MSVC CRT 的符号可用性需另行确认。
 

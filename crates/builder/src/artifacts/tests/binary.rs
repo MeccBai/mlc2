@@ -40,7 +40,7 @@ fn toml_conversion_requires_declaration_only_and_preserves_existing_output_on_er
     let root = tempfile::tempdir().unwrap();
     let input = root.path().join("io.toml");
     let output = root.path().join("io.sym");
-    let text = include_str!("../../../../../lib/universal/c_std/io.toml");
+    let text = include_str!("../../../../../tests/fixtures/c_declarations.toml");
     fs::write(&input, text).unwrap();
     convert_toml(&input, &output).unwrap();
     let expected = fs::read(&output).unwrap();

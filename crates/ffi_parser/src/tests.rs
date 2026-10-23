@@ -93,3 +93,18 @@ fn comments_unnamed_parameters_and_truncated_inputs() {
         let _ = parse(&source[..end], TARGET);
     }
 }
+
+#[test]
+fn universal_keeps_explicit_width_rules_and_matches_supported_64_bit_models() {
+    let source = "struct Value { int64_t integer; double real; void *pointer; }; int32_t inspect(const struct Value *value);";
+    let universal = parse(source, "universal").unwrap();
+    for target in [
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu",
+        "aarch64-apple-darwin",
+    ] {
+        assert_eq!(universal, parse(source, target).unwrap());
+    }
+    assert!(parse("long f(void);", "universal").is_err());
+    assert!(parse("int32_t f(void);", "i686-pc-windows-msvc").is_err());
+}

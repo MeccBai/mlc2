@@ -34,3 +34,5 @@ inline/static/extern、属性、volatile/restrict、指针本身的 const、cons
 现有语义层固定 64 位引用大小不一致。产物记录 triplet，不能跨目标误用。
 这不是系统头文件兼容层，也不会静默忽略不支持的 C 语法。
 当前没有符号重命名机制，因此导出的 C 名字和成员名不能与 MLC 关键字冲突。
+
+共享声明可用 `--triplet universal` 转换，生成的 Object=None 符号表不绑定具体 triplet。仅适用于所有已支持 64 位目标上 ABI 一致的显式宽度接口；不会推断 size_t、long、wchar_t、time_t 或系统结构布局。类型限制仍然适用。有 ABI 差异的接口继续使用目标专用头文件，不能因其属于 C 标准就视为 universal。

@@ -4,7 +4,7 @@ use std::{fs, process::Command};
 fn converts_handwritten_c_declarations_without_building() {
     let root = tempfile::tempdir().unwrap();
     let input = root.path().join("io.toml");
-    fs::write(&input, include_str!("../lib/universal/c_std/io.toml")).unwrap();
+    fs::write(&input, include_str!("fixtures/c_declarations.toml")).unwrap();
     let run = |extra: &[&str]| {
         Command::new(env!("CARGO_BIN_EXE_mlc"))
             .current_dir(root.path())

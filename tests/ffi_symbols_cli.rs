@@ -108,3 +108,35 @@ fn declarations_cannot_be_used_for_another_target() {
     assert!(!output.status.success());
     assert!(String::from_utf8_lossy(&output.stderr).contains("declaration target"));
 }
+
+#[test]
+fn universal_fixed_width_headers_import_across_supported_targets() {
+    let root = tempfile::tempdir().unwrap();
+    fs::write(
+        root.path().join("native.h"),
+        "int32_t atoi(const int8_t *text);",
+    )
+    .unwrap();
+    success(&invoke(
+        root.path(),
+        &["symbols", "native.h", "--triplet", "universal"],
+    ));
+    let artifact = artifacts::load(&root.path().join("native.sym")).unwrap();
+    assert!(artifact.manifest.config.target.is_empty());
+    fs::write(
+        root.path().join("main.m2"),
+        "import native;func main()->i32{return native::atoi(const_c_str(\"42\"));}",
+    )
+    .unwrap();
+    for target in [
+        "x86_64-pc-windows-msvc",
+        "x86_64-pc-windows-gnu",
+        "x86_64-unknown-linux-gnu",
+        "aarch64-apple-darwin",
+    ] {
+        success(&invoke(
+            root.path(),
+            &["ll", "main.m2", "--triplet", target],
+        ));
+    }
+}

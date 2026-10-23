@@ -1,4 +1,6 @@
 import c_std::runtime;
+import c_std::lib;
+import c_std::io;
 import std::base;
 export using String = std::base::String;
 export using ConstStringView = std::base::ConstStringView;
@@ -184,14 +186,14 @@ func floating(value: f64) -> String {
         @mut decimal_point,
         @mut sign
     ) != 0) {
-        c_std::runtime::abort();
+        c_std::lib::abort();
     }
     var count: u64 = 0;
     while (count < cast<u64>(17) && digits[count] != cast<i8>(0)) {
         count = count + cast<u64>(1);
     }
     if (count == cast<u64>(0)) {
-        c_std::runtime::abort();
+        c_std::lib::abort();
     }
     while (count > cast<u64>(1) && digits[count - cast<u64>(1)] == cast<i8>(48)) {
         count = count - cast<u64>(1);
@@ -355,7 +357,7 @@ func write(text: ConstStringView) {
     val stream = c_std::runtime::__acrt_iob_func(cast<u32>(1));
     var offset: u64 = 0;
     while (offset < text.length) {
-        val written = c_std::runtime::fwrite(
+        val written = c_std::io::fwrite(
             @text.data[offset],
             cast<u64>(1),
             text.length - offset,

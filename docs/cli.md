@@ -48,7 +48,7 @@ mlc example hello-world   # 仅打印源码，不编译或运行
 mlc example generics
 mlc ll main.m2             # 仅生成 LLVM IR，默认 build/ll/<mode>/<triplet>
 mlc ll main.m2 -o ir       # 指定 .ll 输出目录
-mlc symbols lib/universal/c_std/io.toml  # 输出同名 io.sym
+mlc symbols lib/universal/c_std/io.h --module c_std::io --triplet universal  # 输出同名 io.sym
 mlc symbols c_api.toml -o objects/universal/c_api.sym
 mlc symbols native.h       # 固定宽度 C 声明 → native.sym
 mlc symbols native.h --module c_std::native --triplet x86_64-pc-windows-msvc
@@ -184,3 +184,5 @@ Use `--default` (neither optimization nor debug information), `--debug` (debug i
 构建目录按模式隔离：对象为 `build/objects/<mode>/<triplet>/`，IR 为 `build/ll/<mode>/<triplet>/`，最终产物为 `build/<mode>/main.exe`（PDB 同目录）。`-o` 替换整个 build 根目录。
 
 标准库只使用 debug/release 两档。默认映射：default/debug → debug，release/rel-with-info → release。可在 Project.toml 的 `[Project]` 或 target 中写 `std_type = "debug"` 或 `std_type = "release"`，target 优先，没有对应 CLI 选项。标准库缓存为 `<安装根>/objects/<std_type>/<triplet>/`；显式 LibCacheDir 同样追加 `<std_type>/<triplet>`。纯声明 `objects/universal/` 保持共享。
+
+通用固定宽度 C 声明可使用 `mlc symbols portable.h --triplet universal --module c_std::portable`，安装到 `objects/universal/`。这不会放宽头文件语法限制；ABI 不同的接口仍必须绑定具体 triplet。新增常用 C API 的模块和限制见 [c_std](c_std.md)。

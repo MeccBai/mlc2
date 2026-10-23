@@ -9,7 +9,7 @@ use mlc_core::{
     diagnostic::{error::ErrorHandle, warning::WarningHandle},
 };
 
-const IO: &str = include_str!("../../../../../lib/universal/c_std/io.toml");
+const IO: &str = include_str!("../../../../../lib/universal/c_std/io.h");
 
 fn fixture() -> (tempfile::TempDir, PathResolver, PathBuf) {
     let root = tempfile::tempdir().unwrap();
@@ -24,9 +24,10 @@ fn fixture() -> (tempfile::TempDir, PathResolver, PathBuf) {
     fs::write(&entry, "import c_std::io; func main() {}").unwrap();
     let universal = root.path().join("objects/universal/c_std");
     fs::create_dir_all(&universal).unwrap();
-    let input = universal.join("io.toml");
+    let input = universal.join("io.h");
     fs::write(&input, IO).unwrap();
-    artifacts::convert_toml(&input, &universal.join("io.sym")).unwrap();
+    artifacts::convert_c_header(&input, &universal.join("io.sym"), "c_std::io", "universal")
+        .unwrap();
     (root, paths, entry)
 }
 
@@ -36,7 +37,13 @@ fn universal_printf_is_a_valid_exported_c_declaration() {
     let plan = BuildPlan::discover_with_paths(&entry, &paths).unwrap();
     let artifact = artifacts::load(&plan.targets[1].file).unwrap();
     assert_eq!(artifact.manifest.config.object, ObjectMode::None);
-    let symbol = &artifact.manifest.symbols.functions[0];
+    let symbol = artifact
+        .manifest
+        .symbols
+        .functions
+        .iter()
+        .find(|function| function.name == "printf")
+        .unwrap();
     assert_eq!(symbol.name, "printf");
     assert_eq!(symbol.params[0].ty.as_ref().unwrap().0.dump(), "$i8");
     assert_eq!(symbol.params[1].name, "...");
@@ -45,7 +52,7 @@ fn universal_printf_is_a_valid_exported_c_declaration() {
         FileId::new(0),
         vec![],
         "c_std::io".into(),
-        "io.toml".into(),
+        "io.h".into(),
         ErrorHandle::new("io".into()),
         WarningHandle::new("io".into()),
     );

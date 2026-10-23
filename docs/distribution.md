@@ -71,3 +71,5 @@ System32 中的 DLL 是运行时实现，不作为 .lib 链接输入。
 cargo test --test msvc_cli -- --include-ignored
 cargo test --test stdlib_cli -- --include-ignored
 ```
+
+`lib/universal/c_std/*.h` 按 `--triplet universal` 转换到 `objects/universal/c_std/*.sym`；`lib/<triplet>/c_std/*.h` 使用对应 triplet。通用头文件只包含已支持 64 位平台上 ABI 一致的接口。

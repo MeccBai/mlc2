@@ -1,4 +1,4 @@
-import c_std::runtime;
+import c_std::lib;
 import std::mem;
 
 
@@ -44,7 +44,7 @@ api String::func new() -> String {
 // Public capacity counts usable bytes, excluding the trailing NUL.
 api String::func with_capacity(capacity: u64) -> String {
     if (capacity == cast<u64>(18446744073709551615)) {
-        c_std::runtime::abort();
+        c_std::lib::abort();
     }
     val allocated = capacity + cast<u64>(1);
     var data: res = std::mem::alloc<i8>(allocated);
@@ -105,7 +105,7 @@ api String::func reserve(mut self, required: u64) {
 api String::func append(mut self, value: ConstStringView) {
     val maximum: u64 = 18446744073709551615;
     if (value.length >= maximum - self -> length) {
-        c_std::runtime::abort();
+        c_std::lib::abort();
     }
     val required = self -> length + value.length + cast<u64>(1);
     if (required > self -> capacity) {
@@ -146,7 +146,7 @@ api String::func append(mut self, value: ConstStringView) {
 
 api String::func push_byte(mut self, value: i8) {
     if (self -> length > cast<u64>(18446744073709551613)) {
-        c_std::runtime::abort();
+        c_std::lib::abort();
     }
     self -> reserve(self -> length + cast<u64>(2));
     self -> data[self -> length] = value;
@@ -157,7 +157,7 @@ api String::func push_byte(mut self, value: i8) {
 
 api String::func from(value: ConstStringView) -> String {
     if (value.length == cast<u64>(18446744073709551615)) {
-        c_std::runtime::abort();
+        c_std::lib::abort();
     }
     val capacity = value.length + cast<u64>(1);
     var data: res = std::mem::alloc<i8>(capacity);

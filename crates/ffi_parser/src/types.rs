@@ -4,6 +4,10 @@ use mlc_syntax::parser::out::{Span, Spanned, TempPath, TempType};
 pub(super) struct DataModel;
 impl DataModel {
     pub fn new(target: &str) -> Option<Self> {
+        // Universal means the explicit-width subset shared by the supported 64-bit ABIs.
+        if target == "universal" {
+            return Some(Self);
+        }
         // The semantic type store currently uses 64-bit references.
         if !matches!(target.split('-').next()?, "x86_64" | "aarch64") {
             return None;

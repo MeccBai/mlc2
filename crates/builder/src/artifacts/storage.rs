@@ -224,7 +224,11 @@ pub fn convert_c_header(
         config: Metadata {
             format_version: FORMAT_VERSION,
             module_name: module.into(),
-            target: target.into(),
+            target: if target == "universal" {
+                String::new()
+            } else {
+                target.into()
+            },
             object: ObjectMode::None,
             ..Metadata::default()
         },
