@@ -7,9 +7,13 @@
 | `mlc_codegen` | `crates/codegen` | AST → IR、ABI 映射与生成诊断 |
 | `mlc_builder` | `crates/builder` | 构建产物、路径管理、LLVM OBJ 输出和链接 |
 | `mlc_examples` | `crates/examples` | 按主题组织的内嵌示例源码、索引与文本输出 |
+| `mlc_optimizer` | `crates/optimizer` | 可配置 AST 优化 passes |
+| `mlc_formatter` | `crates/formatter` | 固定样式格式化、注释与 token 保真 |
+| `ffi_parser` | `crates/ffi_parser` | 受限 C 头文件声明 → Temp AST |
 | `mlc` | 根 package 的 `src` | CLI、前端与 IR 编排、构建及链接 |
 
-生产依赖没有环：core → syntax；codegen → core / syntax；builder → core / syntax；mlc 使用各层。
+生产依赖没有环：core → syntax；codegen → core / syntax；builder → core / syntax / ffi_parser；
+optimizer → core；formatter 和 ffi_parser → syntax；mlc 使用各层。
 codegen 的开发依赖使用 builder 验证生成的 IR，但 codegen 的生产依赖没有 LLVM。
 examples 没有生产依赖，开发依赖 syntax 验证语法；顶层 mlc 测试负责示例的编译运行验证。
 

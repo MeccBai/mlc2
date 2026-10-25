@@ -23,12 +23,12 @@ Modules follow their role in c_std rather than C header filenames: use c_std::io
 import c_std::lib;
 import c_std::string;
 import c_std::math;
-import c_std::io;
+import std;
 
 func main()->i32 {
     var n=c_std::lib::atoi(const_c_str("42"));
     var length=c_std::string::strlen(const_c_str("hello"));
-    c_std::io::printf(const_c_str("n=%d length=%llu sqrt=%.1f\n"),n,length,c_std::math::sqrt(81.0));
+    std::println!("n={} length={} sqrt={}", n, length, c_std::math::sqrt(81.0));
     return 0;
 }
 ```

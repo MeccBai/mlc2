@@ -11,20 +11,20 @@
 普通 main 不需要为了成为入口而加 C ABI attribute。
 
 ```rust
-import c_std::io;
+import std;
 
 func main() -> i32 {
-    c_std::io::printf(const_c_str("Hello World!\n"));
+    std::println!("Hello World!");
     return 0;
 }
 ```
 
-这里的 c_std::io 是 C 声明模块；常用 C API 模块见 [c_std](c_std.md)，MLC 自身标准库使用 std。
+普通输出使用 std::println!，不需要构造 C 字符串。常用 C API 声明模块见 [c_std](c_std.md)。
 可以用 `mlc build main.m2` 构建、`mlc run main.m2` 构建并运行，或 `mlc ll main.m2` 只生成 LLVM IR。
 
 AST 优化由独立的 `mlc_optimizer` pass 管线控制：常量折叠、死代码消除、未使用局部变量存储消除、零引用函数消除。
 默认关闭可选优化；`--release` 和 `--rel-with-info` 全开，`--debug` 关闭。`--optimize` / `--no-optimize` 可显式覆盖优化设置，同时控制 LLVM 机器码优化。
-开关不影响 `const` 求值、数值范围检查和字面量类型规范化，也不控制 LLVM 后端优化或调试信息生成。
+开关同时控制可选 AST 优化和 LLVM 后端优化；不影响 `const` 求值、数值范围检查、字面量类型规范化或调试信息开关。
 
 ## 2. 词法与标点
 
@@ -63,20 +63,20 @@ null 已有词法与临时节点，但尚无完整的公共空指针初始化约
 
 类型后置：变量、字段及参数写成 `name:Type`，函数返回类型写成 `-> Type`。
 
-| 类型形式 | 含义 | 示例 |
-|---|---|---|
-| i8、i16、i32、i64 | 有符号整数 | i32 |
-| u8、u16、u32、u64 | 无符号整数 | u32 |
-| f32、f64 | 浮点数 | f64 |
-| bool | 布尔值 | bool |
-| Name / module::Name | 命名类型 | Point |
-| Name<T,...> | 泛型类型的具体应用 | Box<i32> |
-| [T:N] | 固定长度数组 | [i32:10] |
-| $T | 普通只读引用 | $i32 |
-| $mut T | 普通可变引用 | $mut i32 |
-| res $T / res $mut T | 拥有内存资源的引用 | res $mut i32 |
-| func(T1,T2)->R | 函数指针 | func(i32)->i32 |
-| func(T1,T2) | 无返回值函数指针 | func(i32) |
+| 类型形式            | 含义               | 示例           |
+|---------------------|--------------------|----------------|
+| i8、i16、i32、i64   | 有符号整数         | i32            |
+| u8、u16、u32、u64   | 无符号整数         | u32            |
+| f32、f64            | 浮点数             | f64            |
+| bool                | 布尔值             | bool           |
+| Name / module::Name | 命名类型           | Point          |
+| Name<T,...>         | 泛型类型的具体应用 | Box<i32>       |
+| [T:N]               | 固定长度数组       | [i32:10]       |
+| $T                  | 普通只读引用       | $i32           |
+| $mut T              | 普通可变引用       | $mut i32       |
+| res $T / res $mut T | 拥有内存资源的引用 | res $mut i32   |
+| func(T1,T2)->R      | 函数指针           | func(i32)->i32 |
+| func(T1,T2)         | 无返回值函数指针   | func(i32)      |
 
 类型形式可以递归组合，如 `[func(i32)->i32:2]`、`$[i32:10]`。
 数组长度必须是可解析为 usize 的整数字面量，不是任意常量表达式。
@@ -85,12 +85,12 @@ null 已有词法与临时节点，但尚无完整的公共空指针初始化约
 
 ## 4. 变量、常量与赋值
 
-| 声明 | 语义 |
-|---|---|
-| var name[:Type] = value; | 可修改的变量 |
-| val name[:Type] = value; | 初始化后不可重新赋值 |
-| const name[:Type] = value; | 必须由编译期常量初始化 |
-| global var / val / const ... | 当前模块的全局变量 |
+| 声明                         | 语义                   |
+|------------------------------|------------------------|
+| var name[:Type] = value;     | 可修改的变量           |
+| val name[:Type] = value;     | 初始化后不可重新赋值   |
+| const name[:Type] = value;   | 必须由编译期常量初始化 |
+| global var / val / const ... | 当前模块的全局变量     |
 
 全部变量必须初始化。省略类型时由右侧推断。
 可变性存储在类型本身，不是 TypeIndex 上的独立标志。
@@ -142,21 +142,21 @@ cast<T>(value) 表示主动转换，不按目标数值范围拒绝输入；它�
 
 ## 5. 表达式与运算符
 
-| 优先级：高 → 低 | 语法 |
-|---|---|
-| 分组、后缀访问 | (expr)、call(...)、expr.member、expr->member、expr[index] |
-| 前缀 | -expr、!expr、~expr、@expr、@mut expr、$expr |
-| 乘除余 | *、/、% |
-| 加减 | +、- |
-| 移位 | <<、>> |
-| 大小比较 | <、<=、>、>= |
-| 相等比较 | ==、!= |
-| 按位与 | & |
-| 按位异或 | ^ |
-| 按位或 | \| |
-| 短路与 | && |
-| 短路或 | \|\| |
-| 管道 | \|> |
+| 优先级：高 → 低 | 语法                                                      |
+|-----------------|-----------------------------------------------------------|
+| 分组、后缀访问  | (expr)、call(...)、expr.member、expr->member、expr[index] |
+| 前缀            | -expr、!expr、~expr、@expr、@mut expr、$expr              |
+| 乘除余          | *、/、%                                                   |
+| 加减            | +、-                                                      |
+| 移位            | <<、>>                                                    |
+| 大小比较        | <、<=、>、>=                                              |
+| 相等比较        | ==、!=                                                    |
+| 按位与          | &                                                         |
+| 按位异或        | ^                                                         |
+| 按位或          | \|                                                        |
+| 短路与          | &&                                                        |
+| 短路或          | \|\|                                                      |
+| 管道            | \|>                                                       |
 
 同级二元运算左结合，括号改变结合次序。比较返回 bool，&& / || 保持短路求值。
 & 是按位与，不是取引用；* 是乘法，不是解引用。
@@ -301,12 +301,12 @@ Interface 可以带普通参数、泛型和返回类型；没有继承或虚方�
 
 ## 11. 可见性
 
-| 声明 | 默认 | pub | export | api |
-|---|---|---|---|---|
-| Interface | 私有接口 | 单元外可调用 | 模块导出，单元访问仍受限 | 同时 pub 与 export |
-| func、unit、union、enum、generic、using、import | 模块内部 | 非法 | 模块导出 / 转导出 | 非法 |
-| Unit 字段 | 私有 | 允许外部访问 | 非法 | 非法 |
-| global 变量 | 当前模块内部 | 非法 | 非法 | 非法 |
+| 声明                                            | 默认         | pub          | export                   | api                |
+|-------------------------------------------------|--------------|--------------|--------------------------|--------------------|
+| Interface                                       | 私有接口     | 单元外可调用 | 模块导出，单元访问仍受限 | 同时 pub 与 export |
+| func、unit、union、enum、generic、using、import | 模块内部     | 非法         | 模块导出 / 转导出        | 非法               |
+| Unit 字段                                       | 私有         | 允许外部访问 | 非法                     | 非法               |
+| global 变量                                     | 当前模块内部 | 非法         | 非法                     | 非法               |
 
 pub 不等于 export；api 是 Interface 的两种可见性同时开启。
 仅支持一个可见性关键字，不写 pub export 组合。
@@ -368,13 +368,13 @@ func main() -> i32 {
 }
 ```
 
-| 内置约束 | 含义 |
-|---|---|
-| std::generic::is_integer; | 整数类型 |
-| std::generic::is_float; | 浮点类型 |
-| std::generic::is_signed; | 有符号数值类型 |
-| std::generic::min_bits<N>; | 最小位宽 |
-| std::generic::max_bits<N>; | 最大位宽 |
+| 内置约束                   | 含义           |
+|----------------------------|----------------|
+| std::generic::is_integer;  | 整数类型       |
+| std::generic::is_float;    | 浮点类型       |
+| std::generic::is_signed;   | 有符号数值类型 |
+| std::generic::min_bits<N>; | 最小位宽       |
+| std::generic::max_bits<N>; | 最大位宽       |
 
 这些约束名称由编译器识别，无需 import std::generic。
 一个 generic 内各要求同时满足；也可要求具体 Interface 签名。
@@ -583,14 +583,14 @@ Unit 和固定数组递归析构资源成员；Union 只析构活跃候选。
 
 ## 19. 内建调用与 C IO
 
-| 调用 | 用途 | 是否需 import |
-|---|---|---|
-| cast<T>(value) | 显式基本类型 / Ref 转换 | 否 |
-| const_c_str("text") | 静态只读 C 字符串，自动追加零 | 否 |
-| std::function(name) | 普通函数地址 | 否 |
-| std::function<T,...>(name) | 泛型函数实例地址 | 否 |
-| std::mem::alloc<T>(count) | 分配 count 个 T，返回 Res | import std::mem; |
-| std::mem::dealloc<T>(owner) | 消耗并释放 Res | import std::mem; |
+| 调用                        | 用途                          | 是否需 import    |
+|-----------------------------|-------------------------------|------------------|
+| cast<T>(value)              | 显式基本类型 / Ref 转换       | 否               |
+| const_c_str("text")         | 静态只读 C 字符串，自动追加零 | 否               |
+| std::function(name)         | 普通函数地址                  | 否               |
+| std::function<T,...>(name)  | 泛型函数实例地址              | 否               |
+| std::mem::alloc<T>(count)   | 分配 count 个 T，返回 Res     | import std::mem; |
+| std::mem::dealloc<T>(owner) | 消耗并释放 Res                | import std::mem; |
 
 alloc 是低层内存分配，不初始化元素；调用方须先写入再读取。
 分配失败、负数数量或分配字节数溢出时直接终止程序，不展开栈，也不运行 RAII 清理。
@@ -599,30 +599,31 @@ alloc 是低层内存分配，不初始化元素；调用方须先写入再读�
 
 ```rust
 import std::mem;
-import c_std::io;
+import std;
 
 func main() -> i32 {
     var memory:res = std::mem::alloc<i32>(1);
     memory[0] = 42;
-    c_std::io::printf(const_c_str("value=%d\n"),memory[0]);
+    std::println!("value={}", memory[0]);
     std::mem::dealloc<i32>(memory);
-    c_std::io::puts(const_c_str("done"));
-    c_std::io::putchar(10);
+    std::println!("done");
+    std::println!();
     return 0;
 }
 ```
 
-当前 c_std::io 保留 printf、scanf、puts、putchar、getchar；更多内存、字符串、数学、文件和时间函数见 [c_std](c_std.md)。
+当前 c_std::io 提供 printf、scanf、puts、putchar、getchar 以及文件 I/O 等声明；完整模块与限制见 [c_std](c_std.md)。
 格式字符串、可变参数正确性及目标 CRT 的可用性由调用者负责，不能代替类型安全的格式化库。
-GNU Windows 后端可调用对应 scanf；MSVC CRT 的符号可用性需另行确认。
+输入接口仍依赖目标 CRT；普通输出推荐使用 std::println!。
 
 ```rust
 import c_std::io;
+import std;
 func main() -> i32 {
     var number = 0;
     var scanned = c_std::io::scanf(const_c_str("%d"),@mut number);
     var character = c_std::io::getchar();
-    c_std::io::printf(const_c_str("read=%d number=%d char=%d\n"),scanned,number,character);
+    std::println!("read={} number={} char={}", scanned, number, character);
     return 0;
 }
 ```
@@ -685,18 +686,23 @@ C ABI Unit 不允许泛型或 Interface；Union 不允许 C ABI。
 C ABI 函数不允许泛型，参数中不能出现非 C ABI Unit（包含经 Ref / 数组包装的情况）。
 平台 ABI 布局与寄存器映射由 lowering 决定，不把内部 ABI 规则当作所有平台的 C ABI 标准。
 
-外部 C API 通过声明元数据显式导入，不解析 .h、C 预处理或 C 源码。
-人工编写声明 TOML 后用 mlc symbols declarations.toml 转为 .sym；
-只声明模块使用 Object = "None"，具体格式见构建管线文档。
+外部 C API 通过 `.sym` 声明元数据显式导入。`mlc symbols declarations.h`
+支持受限头文件：完整具名 struct、函数原型、明确宽度整数、浮点和指针等；
+不执行预处理，不接受 `#include`、`typedef`、函数体或任意系统头文件。
+详细限制见 [ffi_parser](../crates/ffi_parser/README.md)。也可维护声明 TOML，
+通过 `mlc symbols declarations.toml` 转换。两种输入都生成 `Object = "None"` 的 `.sym`；
+普通 `import` 不直接读取 `.h` 或声明 TOML。源码中不允许无 body 的 C ABI 函数声明，
+但允许带 body 的 C ABI 定义。具体格式见 [构建流水线](build_pipeline.md)。
 符号元数据、对象和泛型体缓存不是语言中的反射或序列化语法。
 
 ## 22. 尚未提供的语法与边界
 
 不提供 lambda / 捕获闭包、继承、any、async / await、异常语法、用户手写析构、
-宏预处理、函数重载、可变长度数组对象或独立字符串类。
+文本宏预处理、函数重载或可变长度数组对象。支持受限的 `macro func`，不等同于 C 预处理器。
 不提供一般意义的编译期用户函数执行；当前常量展开主要覆盖受支持的常量运算。
 RAII 不是 GC，Ref 不是完整安全指针；指针索引和 C 可变参数仍需调用者处理，分配失败会直接终止程序。
-标准库目前只有少量声明与内建入口，不承诺完整 C 标准库或平台 SDK 覆盖。
+标准库已有 String、format!、print!、println!、Display 和内存接口，以及部分 C 库声明；
+不承诺完整 C 标准库、平台 SDK 或成熟标准库覆盖。
 
 故意错误的写法：
 
@@ -708,7 +714,7 @@ var array:[i32:3] = {1,2,3};         // 数组必须使用 []
 if (1) {}                           // 条件必须 bool
 export global var shared = 0;       // 全局变量不允许导出
 pub func ordinary() {}              // pub 只用于 Interface 或 Unit 字段
-self.value                          // self 访问必须 ->
+self.value                          // Unit 字段通过 self->value；基础类型 self 可用 $self
 value |> value.method()             // 不允许成员管道
 var pointer = ordinary;             // 使用 std::function(ordinary)
 match (payload = object) {}         // Union 本体不能按值匹配，右侧必须是 Ref

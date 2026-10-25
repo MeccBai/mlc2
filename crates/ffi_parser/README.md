@@ -2,7 +2,7 @@
 
 受限 C 声明输入 → `mlc_syntax::TempModule`，不依赖 core 或 LLVM，不调用预处理器。
 `parse(source, target)` 返回声明或带字节 span 的错误。builder 负责生成 Object=None
-的目标专用 `.sym`；普通 MLC import 不直接解析头文件。
+的 `.sym`（具体 triplet 或显式 universal）；普通 MLC import 不直接解析头文件。
 
 ```c
 struct Point {
@@ -31,7 +31,8 @@ inline/static/extern、属性、volatile/restrict、指针本身的 const、cons
 支持完整定义间的相互指针引用；拒绝递归值布局、重复名字和布局溢出。
 
 当前接受 x86_64/aarch64 的 Windows/Linux/macOS 目标；拒绝 32 位目标，避免与
-现有语义层固定 64 位引用大小不一致。产物记录 triplet，不能跨目标误用。
+现有语义层固定 64 位引用大小不一致。目标专用产物记录 triplet，不能跨目标误用；
+显式 universal 声明的适用范围见下文。
 这不是系统头文件兼容层，也不会静默忽略不支持的 C 语法。
 当前没有符号重命名机制，因此导出的 C 名字和成员名不能与 MLC 关键字冲突。
 

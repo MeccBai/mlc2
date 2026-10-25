@@ -11,7 +11,7 @@ installation/
   LLVM-C.dll                # 编译器启动依赖
   tools/                    # lld-link.exe / ld.lld.exe / llvm-ar.exe
   runtimes/
-    <triplet>/              # CRT .o、运行库 .a、系统导入库
+    <triplet>/              # MSVC .lib 或 GNU CRT .o / .a
   lib/
     <triplet>/
       std/
@@ -40,12 +40,13 @@ installation/
 
 | 层 | 入口 | 职责 |
 | --- | --- | --- |
-| 持久化 | `mlc_syntax::serialization`、`mlc_builder::artifacts` | Temp TOML、元数据、内容哈希、发布与校验 |
+| 持久化 | `mlc_syntax::serialization`、`mlc_builder::artifacts` | Temp 序列化、二进制元数据、内容哈希、发布与校验 |
 | 构建计划 | `BuildPlan::discover(entry, resolver)` | 文件发现、索引图、反向依赖、环检测、依赖优先顺序 |
 | 调度执行 | `schedule::build(plan, options, compile)` | taskflowrs 依赖任务、缓存决策、失败阻断、LLVM object 输出 |
 
 `compile` 接收 `CompileRequest`，包含当前源码节点、直接依赖的
-`Artifact` 和构建选项。成功返回 `CompileOutput { ir: Some(ir) }`，
+`Artifact` 和构建选项。成功返回 `CompileOutput { ir: Some(ir), global_init: None }`
+（有模块初始化入口时填写 `global_init`），
 构建层在该工作线程中创建 LLVM target machine 并产生 object；
 显式返回 `ir: None` 表示只发布声明，不产生 object。
 
@@ -78,8 +79,9 @@ inner 声明不等于对外可见声明，不能直接拼接进公共搜索空�
 二进制文件带有 magic 和版本头；旧格式构建缓存需要重新生成。
 手写 C 声明仍可维护为 TOML，通过 `mlc symbols io.toml` 生成 `io.sym` 后导入。
 也支持 `mlc symbols native.h`：受限固定宽度 C 声明由 ffi_parser 处理，生成
-目标专用 Object=None 符号表。普通源码不允许无 body 的 C ABI 声明。
-普通 import 不再直接读取 TOML；Project.toml 和全局配置格式不变。
+Object=None 符号表；默认目标为宿主 triplet，ABI 一致的通用接口可显式选择
+`--triplet universal`。普通源码不允许无 body 的 C ABI 声明。
+普通 import 不直接读取 TOML 或 `.h`；Project.toml 和全局配置格式不变。
 TOML 没有 null：编译器生成格式用保留表 `{ "$none" = true }`
 表示 `None` 和 unit 值；因此这不是最终面向人工编写的精简 C FFI 格式。
 
@@ -126,7 +128,7 @@ object 和模板先写入，manifest 最后原子替换。不再被引用的旧�
 当前导入文件所在目录仍优先于所有库目录。
 源码库也搜索 `lib/universal`。全部源码位置均未找到后才搜索 objects 目录，
 其中 `objects/universal/<module>.sym` 仅接受 `Object = "None"`。
-仓库提供 `objects/universal/c_std/io.sym` 中的 C ABI `printf` 声明，
+仓库通过 `lib/universal/c_std/io.h` 生成 `objects/universal/c_std/io.sym` 中的 C ABI 声明，
 通过 `import c_std::io;` 使用；实际实现和链接库由目标 C 运行时提供。
 项目配置的相对路径基于项目根目录，全局配置的相对路径基于配置文件目录。
 
@@ -162,22 +164,21 @@ Core 已通过 ResolveContext 接通 path、resolve_type、跨 arena 类型操�
 会重新解析，不把其他 Package 的运行期 index 直接复制过来。
 这个编排入口和最终链接没有在这里替代调用方实现。
 
-同样，缓存中的文件身份需要稳定分配；示例测试使用 TargetIndex 仅适用于
-固定的小型测试图。正式入口需要稳定的文件身份清单，或去除生成符号中
-对临时文件编号的依赖，避免图变化后复用缓存造成全局初始化函数重名。
+运行期 arena 文件身份不能直接持久化为外部符号。当前 CLI 的全局初始化符号
+按完整模块名稳定编码，不依赖临时文件编号；自身 IR 指纹也参与对象缓存校验。
 
 ## 验证
 
 ```text
 cargo test --workspace
 cargo test --test hello_world -- --nocapture
-cargo test --manifest-path experiments/taskflow/Cargo.toml
+cargo test --test build_pipeline
 ```
 
 覆盖 Temp 往返、源码到 object、增量缓存、损坏恢复、模板变化、
 传递依赖变化、独立任务失败隔离、目录优先级、重复依赖和环检测。
 
-Windows 的 `hello_world` 测试加载仓库 `objects/universal/c_std/io.sym`，
+Windows 的 `hello_world` 测试由测试 helper 从声明输入建立隔离安装目录，
 编译 `tests/fixtures/hello_world.m2`：构造 i8 数组、手动将最后一项写为 0，
 将第一项的引用传给 printf。MLC/LLVM 生成 object 后，使用 PATH 中的
 MSVC/UCRT `lld-link` 直接链接，复用 CLI 参数表和库路径发现逻辑。
@@ -190,15 +191,16 @@ MLC 安装的 runtimes/<triplet>，最后使用现有 MSVC/SDK 自动发现。
 
 ## 生成产物与首次检出
 
-Git 只保存标准库的 `.m2` 和声明 `.toml` 源文件；`.sym`、`.obj`、`.mg` 都是生成产物，不提交到仓库。
-首次检出后，先构建编译器并生成通用声明，再运行测试或示例：
+Git 保存标准库的 `.m2`、声明 `.toml` 和受限 `.h` 输入；`.sym`、`.obj`、`.mg` 都是生成产物，不提交到仓库。
+测试 helper 会自动生成隔离声明。手动运行示例前，可使用打包脚本建立完整安装：
 
 ```powershell
 cargo build --bin mlc
-.\target\debug\mlc.exe symbols lib/universal/std/mem.toml -o objects/universal/std/mem.sym
-.\target\debug\mlc.exe symbols lib/universal/c_std/io.h --module c_std::io --triplet universal -o objects/universal/c_std/io.sym
+pwsh -NoProfile -File scripts/copy_to.ps1 -Profile debug -Destination D:\mlc
 ```
 
+脚本转换各目标和 universal 下的所有声明输入，而非仅生成 io.sym；标准库也会引用
+lib、runtime 等模块。工具及运行库配置见 [安装分发](distribution.md)。
 标准库 `.m2` 的对象文件与模板缓存由正常构建按需生成。
 
 标准库只提供 debug/release 两档，Project.toml 的 `[Project]` 或 target 可设置 `std_type = "debug"` / `"release"`；target 优先。省略时 default/debug 使用 debug，release/rel-with-info 使用 release。该设置没有 CLI 选项，单文件入口继续忽略 Project.toml。

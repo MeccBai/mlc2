@@ -102,6 +102,9 @@ tools/
 lib/                         # universal/<triplet> 源码
 objects/                     # universal/<triplet> 符号和对象缓存
 runtimes/
+  x86_64-pc-windows-msvc/
+    msvcrt.lib, vcruntime.lib, ucrt.lib, kernel32.lib
+    legacy_stdio_definitions.lib, oldnames.lib
   x86_64-pc-windows-gnu/
     crt2.o, dllcrt2.o, crtbegin.o, crtend.o
     libmingw32.a, libmingwex.a, libmoldname.a, libmsvcrt.a
@@ -109,12 +112,14 @@ runtimes/
     libkernel32.a, libadvapi32.a, libshell32.a, libuser32.a
 ```
 
-LLVM-C.dll 放在 mlc.exe 旁边；链接库按可执行文件位置查找，
-不依赖 PATH。当前参数表不添加 libunwind 或 C++ 运行库，暂不支持异常展开。
-EXE 使用 crt2.o，DLL 使用 dllcrt2.o 和 --shared；均保留 CRT 初始化。
+LLVM-C.dll 放在 mlc.exe 旁边；链接库优先使用安装目录 runtimes。
+MSVC 缺库时还会查询 LIB、Build Tools 和 Windows SDK；完整随包库不要求系统 SDK。
+当前参数表不添加 libunwind 或 C++ 运行库，暂不支持异常展开。
+MSVC EXE 使用 /subsystem:console，DLL 使用 /dll；GNU EXE 使用 crt2.o，
+DLL 使用 dllcrt2.o 和 --shared。两种配置均保留 CRT 初始化。
 链接缓存包含目标 runtimes 目录内文件内容，更新运行库会触发重新链接。
 
-默认 triplet 跟随编译器自身的平台与架构，Windows 使用 `<arch>-pc-windows-gnu`。
+默认 triplet 跟随编译器自身的平台与架构，Windows 使用 `<arch>-pc-windows-msvc`。
 优先级为 CLI `--triplet` > 项目选中 target 的 Triplet > 项目 Triplet > 系统默认。
 目标选择不代表已配置该目标的原生链接参数表。
 
@@ -122,7 +127,7 @@ bin 入口要求 main 无参数，返回 i32 或 void。
 shared 和 static 均支持全局运行期初始化。
 
 每个编译模块生成唯一的 C ABI `void global_init(void)` 入口，实际符号名记录在
-该模块 TOML 的 `[Config].GlobalInit`。符号名由完整模块名编码生成，稳定且不依赖
+该模块 `.sym` 元数据的 `Config.GlobalInit`。符号名由完整模块名编码生成，稳定且不依赖
 临时文件编号。入口持有私有 bool：已完成则直接返回，否则先调用依赖入口，
 再按声明顺序初始化自己的全局变量，最后设置完成标记。
 
@@ -138,27 +143,28 @@ BuildPlan 已拒绝循环依赖，所以只需完成标记，不需要“初始�
 
 ## 编排和缓存边界
 
-开发部署脚本使用环境变量 `MLC` 指定安装目录（本机已设置为 `D:\mlc`）：
+安装打包使用统一脚本，显式指定目标目录：
 
 ```powershell
-pwsh -NoProfile -File ./scripts/build_copy_debug.ps1
-pwsh -NoProfile -File ./scripts/build_copy_release.ps1
+pwsh -NoProfile -File ./scripts/copy_to.ps1 -Profile debug -Destination D:\mlc
+pwsh -NoProfile -File ./scripts/copy_to.ps1 -Profile release -Destination D:\mlc
 ```
 
-脚本构建对应 profile，仅在构建成功后将生成的 mlc.exe 复制到 `$env:MLC`。
-支持 Cargo 自定义 target 目录；已有会话未刷新环境变量时，也会读取用户级 MLC 设置。
-安装目录中的 LLD、runtime 和 lib 需预先配置。
+脚本构建对应 profile，部署编译器、库和声明产物，并从指定目录复制工具及运行库。
+具体选项和缺失依赖处理见 [安装分发](distribution.md)。
 
 Package 分析及 IR 生成在主线程完成，不把 Rc 送进构建线程；taskflowrs
 调度各源码的 LLVM object 生成和缓存发布。声明文件仅 export，不生成空函数体。
 所有新泛型实例集中生成到一个补充 object，避免多文件重复定义。
 native 函数的 linkage name 按模块限定，c_abi 函数保留原名。
 
-当前缓存键保守地包含整组 IR，以避免文件编号/实例归属变化造成错误命中。
-因此第二次构建可复用 object，但仍会执行前端；修改一个文件可能使其他文件
-重生成 object。这版优先实现正确闭环，细粒度增量和增量链接尚未接入。
+每个源码节点按自身源码、IR 和直接依赖的符号/泛型指纹检查 object 缓存。
+普通函数体修改通常只重编自身；公开声明或泛型闭包变化可保守地链式传播。
+前端仍重新分析和生成 IR；泛型实例对象和最终链接分别检查缓存。
+这里的链接复用不是增量链接器内部补丁，详细边界见 [构建流水线](build_pipeline.md)。
 
-Hello World 使用显式固定长度数组：
+普通 Hello World 推荐 `import std;` 后调用 `std::println!("Hello World!");`。
+C 字符串互操作测试另外使用显式固定长度数组：
 
 ```text
 var text:[i8:14] = "Hello World!\n";

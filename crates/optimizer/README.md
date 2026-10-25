@@ -33,5 +33,7 @@ mutable-local propagation, or whole-program reachability analysis is performed.
 Defaults preserve the earlier optimizations: folding and control-flow pruning
 on, unused variable/function elimination off. `enabled()` and `disabled()` set
 all four switches. The CLI exposes `--optimize` and `--no-optimize`; settings
-participate in the object cache key. These switches do not control LLVM backend
-optimization or generate debug information.
+participate in the object cache key. The library configuration controls AST passes
+only; the CLI switches also control LLVM backend optimization, independently of
+debug information. CLI defaults are unoptimized; the library defaults above do
+not select the CLI build mode.
