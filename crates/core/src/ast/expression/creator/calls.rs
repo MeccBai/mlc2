@@ -106,6 +106,21 @@ impl Expression {
         context: Option<&StatementContext>,
     ) -> Self {
         if let TempExpr::Path(path) = &callee.0 {
+            if let Some((kind, bits, signed, value)) =
+                crate::ast::builtins::numeric_constant(&path.segments)
+            {
+                if !args.is_empty() {
+                    config.submit_error(
+                        CompileError::IllegalUse(IllegalUseError::ArgumentCountMismatch),
+                        span,
+                    );
+                    return Self::Poison(span);
+                }
+                let ty = symbols.get_base(kind, bits, signed);
+                return Self::ConstValueE(crate::ast::expression::ConstValue { ty, value }, span);
+            }
+        }
+        if let TempExpr::Path(path) = &callee.0 {
             if Self::is_function_builtin(path) {
                 return Self::new_function_pointer(
                     config,

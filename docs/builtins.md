@@ -53,3 +53,15 @@ Interface addresses and capturing lambdas are not supported.
 Resource ownership does not provide a complete borrow checker. Ordinary references
 can be indexed, and callers remain responsible for bounds and alias lifetime safety.
 Allocation failure is not a recoverable null result and does not unwind or run cleanup.
+
+## Numeric constant intrinsics
+
+`std::i8/i16/i32/i64::min()/max()` and `std::u8/u16/u32/u64::min()/max()` return the exact limits of that type. `std::f32/f64::min()/max()` return the most negative and largest finite values; `min_positive()` returns the smallest positive normal value, and `epsilon()` returns the spacing above 1.
+
+```text
+const upper:u32 = std::u32::max();
+const lower:i32 = std::i32::min();
+const tolerance:f64 = std::f64::epsilon();
+```
+
+These compiler-owned, zero-argument functions produce typed constant expressions immediately, including in default/debug builds. They do not require importing a library module, emit no function call, accept no generic arguments and do not enable implicit narrowing or signedness conversion. Call them directly; they are not runtime function-pointer targets.

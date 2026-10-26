@@ -50,5 +50,6 @@ mlc_core.workspace = true
 mlc_codegen.workspace = true
 mlc_builder.workspace = true
 mlc_examples.workspace = true
+toml.workspace = true
 clap.workspace = true
 tempfile.workspace = true

@@ -192,3 +192,25 @@ Use `--default` (neither optimization nor debug information), `--debug` (debug i
 标准库只使用 debug/release 两档。默认映射：default/debug → debug，release/rel-with-info → release。可在 Project.toml 的 `[Project]` 或 target 中写 `std_type = "debug"` 或 `std_type = "release"`，target 优先，没有对应 CLI 选项。标准库缓存为 `<安装根>/objects/<std_type>/<triplet>/`；显式 LibCacheDir 同样追加 `<std_type>/<triplet>`。纯声明 `objects/universal/` 保持共享。
 
 通用固定宽度 C 声明可使用 `mlc symbols portable.h --triplet universal --module c_std::portable`，安装到 `objects/universal/`。这不会放宽头文件语法限制；ABI 不同的接口仍必须绑定具体 triplet。新增常用 C API 的模块和限制见 [c_std](c_std.md)。
+## Initialize a project and prepare libraries
+
+```powershell
+mlc setup                  # prepare all installed lib inputs for debug and release
+mlc setup --release        # prepare only the release library variant
+mlc setup --triplet x86_64-pc-windows-msvc
+mlc setup --lib-dir ./lib   # use a different library source root
+mlc setup --lib-dir ./lib -o ./cache
+
+mlc init hello
+cd hello
+mlc build
+mlc run hello
+```
+
+`init <project>` creates a new directory containing `Project.toml` and `src/main.m2` with a Hello World program. The executable target uses the directory name. Existing directories/files are never overwritten. A parent directory supplied as part of the path must already exist.
+
+`setup` defaults to `lib/` beside `mlc.exe`, scans every library input rather than only imported modules, and ignores Project.toml/user-wide configuration. It converts `.h` and declaration `.toml` inputs first, then compiles `.m2` modules for each available triplet. Source builds produce `.sym`, `.obj`/`.o` and generic `.mg` where needed, without invoking a linker or archiver. Generic instantiations remain consumer-specific.
+
+Declarations go to `objects/universal/` or `objects/<triplet>/`; source artifacts go to `objects/debug/<triplet>/` and `objects/release/<triplet>/`. On targets without debug-line support, the debug library variant remains unoptimized without source line metadata. Explicit build-mode flags select one library variant. `--triplet` restricts the target. `-o` selects a destination root, with `objects/` beneath it. Repeated setup reuses valid object caches. Library source inputs retain the layout `lib/<triplet-or-universal>/<module>.m2`, `.h` or `.toml`.
+
+Missing imports report the actual source and symbol paths searched. Missing entries, declaration inputs, Project.toml, explicit config files and native tools/libraries include their expected paths. The optional default user configuration may still be absent.

@@ -126,9 +126,12 @@ pub fn link(
         command.args(&cli.link_args);
         command
     };
-    let result = command
-        .output()
-        .map_err(|e| format!("Cannot launch linker/archiver: {e}"))?;
+    let result = command.output().map_err(|e| {
+        format!(
+            "Cannot launch linker/archiver: {e}\nExpected executable: {}",
+            command.get_program().to_string_lossy()
+        )
+    })?;
     if !result.status.success() {
         return Err(format!(
             "Link failed ({}):\n{}\n{}",

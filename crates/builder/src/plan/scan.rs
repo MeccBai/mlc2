@@ -22,9 +22,14 @@ pub(super) fn discover(
     resolver: &ImportResolver,
     paths: Option<&crate::paths::PathResolver>,
 ) -> Result<BuildPlan, String> {
-    let entry = entry
-        .canonicalize()
-        .map_err(|e| format!("{}: {e}", entry.display()))?;
+    let entry = entry.canonicalize().map_err(|e| {
+        format!(
+            "Cannot open source: {e}\nExpected path: {}",
+            std::path::absolute(entry)
+                .unwrap_or_else(|_| entry.to_owned())
+                .display()
+        )
+    })?;
     let mut scan = Scanner {
         paths,
         resolver,
@@ -136,10 +141,15 @@ impl Scanner<'_> {
         });
         self.stack.push(file.clone());
         for import in imports {
+            let cached_declarations = self
+                .paths
+                .map(|paths| paths.cached_declaration_roots(&import.path().join("::")))
+                .unwrap_or_default();
             let dependency = self.resolver.resolve_with_modes(
                 &file,
                 &import,
                 self.paths.map(|paths| (paths.mode, paths.std_mode())),
+                &cached_declarations,
             )?;
             let dependency = self.visit(dependency)?;
             if !self.targets[id.0].requires.contains(&dependency) {

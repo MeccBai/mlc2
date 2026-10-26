@@ -159,6 +159,27 @@ impl PathResolver {
         module == "std" || module.starts_with("std::")
     }
 
+    pub(crate) fn cached_declaration_roots(&self, module: &str) -> Vec<PathBuf> {
+        let Some(cache) = self
+            .lib_cache
+            .as_ref()
+            .and_then(|path| path.parent())
+            .and_then(|path| path.parent())
+        else {
+            return vec![];
+        };
+        let mode = if Self::is_std_module(module) {
+            self.std_mode()
+        } else {
+            self.mode
+        };
+        vec![
+            cache.join(mode.directory()).join(&self.triplet),
+            cache.join(&self.triplet),
+            cache.join("universal"),
+        ]
+    }
+
     pub fn artifact_stems(&self, file: &Path, module: &str) -> Result<Vec<PathBuf>, String> {
         let relative = module_path(module)?;
         let library = self

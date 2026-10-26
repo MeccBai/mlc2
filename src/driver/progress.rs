@@ -138,7 +138,7 @@ impl Progress {
             "{operation} {status} in {:.3}s.",
             self.started.elapsed().as_secs_f64()
         );
-        if operation == "Build" {
+        if operation == "Build" || operation == "Setup" {
             summary.push_str(&format!(
                 "\nCache hits: {} ({}/{} object checks); links reused: {}/{}; declarations: {}.",
                 rate(state.hits, state.checks),

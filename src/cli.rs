@@ -1,7 +1,7 @@
 use clap::{Parser, Subcommand, ValueEnum};
 use std::path::PathBuf;
 
-#[derive(Debug, Parser)]
+#[derive(Debug, Clone, Parser)]
 #[command(version, about = "MLC compiler and project builder")]
 pub struct Cli {
     /// Build without optimization or debugging information.
@@ -49,8 +49,12 @@ pub struct Cli {
     pub jobs: Option<usize>,
 }
 
-#[derive(Debug, Subcommand)]
+#[derive(Debug, Clone, Subcommand)]
 pub enum Commands {
+    /// Compile installed library declarations and sources into objects (debug and release).
+    Setup,
+    /// Create a new project directory with Project.toml and src/main.m2.
+    Init { project: PathBuf },
     /// Format one source file, or all project sources when no input is given.
     Fmt { input: Option<PathBuf> },
     /// Generate LLVM IR (.ll) only, without object emission or linking.

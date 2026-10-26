@@ -6,6 +6,7 @@ use std::{
 };
 
 fn invoke(root: &Path, arguments: &[&str]) -> Output {
+    fs::write(root.join("config.toml"), "").unwrap();
     Command::new(env!("CARGO_BIN_EXE_mlc"))
         .current_dir(root)
         .args(arguments)

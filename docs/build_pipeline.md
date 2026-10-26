@@ -204,3 +204,5 @@ lib、runtime 等模块。工具及运行库配置见 [安装分发](distributio
 标准库 `.m2` 的对象文件与模板缓存由正常构建按需生成。
 
 标准库只提供 debug/release 两档，Project.toml 的 `[Project]` 或 target 可设置 `std_type = "debug"` / `"release"`；target 优先。省略时 default/debug 使用 debug，release/rel-with-info 使用 release。该设置没有 CLI 选项，单文件入口继续忽略 Project.toml。
+
+`mlc setup` prepares every installed library input before application builds, including unreferenced modules. It runs declaration conversion first, then invokes the normal analysis/codegen/cache scheduler in object-only mode. This uses the same library cache keys as consumer builds and retains library helpers independently of the current entry. Configured library cache roots are also searched for generated declarations, including when setup redirects output with `-o`.

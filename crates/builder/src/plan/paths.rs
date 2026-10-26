@@ -45,7 +45,7 @@ impl ImportResolver {
     }
 
     pub fn resolve(&self, importer: &Path, import: &ImportModule) -> Result<PathBuf, String> {
-        self.resolve_with_modes(importer, import, None)
+        self.resolve_with_modes(importer, import, None, &[])
     }
 
     pub(super) fn resolve_with_modes(
@@ -53,6 +53,7 @@ impl ImportResolver {
         importer: &Path,
         import: &ImportModule,
         modes: Option<(crate::project::BuildMode, crate::project::BuildMode)>,
+        extra_objects: &[PathBuf],
     ) -> Result<PathBuf, String> {
         if import.path().is_empty() {
             return Err("Empty import path".into());
@@ -71,12 +72,62 @@ impl ImportResolver {
         }
         let local = importer.parent().ok_or("Importing file has no directory")?;
         let sources = self.source_roots();
+        let mut expected = Vec::new();
         for root in std::iter::once(local).chain(sources.iter().map(PathBuf::as_path)) {
             let candidate = root
                 .join(&relative)
                 .with_extension(SOURCE_SUFFIX.trim_start_matches('.'));
+            if !expected.contains(&candidate) {
+                expected.push(candidate.clone());
+            }
             if candidate.is_file() {
                 return candidate.canonicalize().map_err(|e| e.to_string());
+            }
+        }
+        // Explicit local artifacts win. Canonical declaration-only inputs then
+        // precede old per-mode copies left by earlier installations.
+        let local_symbol = local.join(&relative).with_extension("sym");
+        if !expected.contains(&local_symbol) {
+            expected.push(local_symbol.clone());
+        }
+        if local_symbol.is_file() {
+            if local
+                .file_name()
+                .is_some_and(|name| name == crate::manifest::UNIVERSAL_LIB_DIR)
+                && crate::artifacts::load(&local_symbol)?
+                    .manifest
+                    .config
+                    .object
+                    != crate::artifacts::ObjectMode::None
+            {
+                return Err(format!(
+                    "Universal library must use Object = None: {}",
+                    local_symbol.display()
+                ));
+            }
+            return local_symbol
+                .canonicalize()
+                .map_err(|error| error.to_string());
+        }
+        let canonical_objects: Vec<_> = extra_objects
+            .iter()
+            .skip(1)
+            .cloned()
+            .chain(sources.iter().map(|root| Self::object_root(root)))
+            .collect();
+        for root in canonical_objects {
+            let candidate = root.join(&relative).with_extension("sym");
+            if !expected.contains(&candidate) {
+                expected.push(candidate.clone());
+            }
+            if candidate.is_file() {
+                let bytes = std::fs::read(&candidate)
+                    .map_err(|error| format!("{}: {error}", candidate.display()))?;
+                let manifest: crate::artifacts::Manifest = crate::artifacts::from_binary(&bytes)?;
+                if manifest.config.object == crate::artifacts::ObjectMode::None {
+                    crate::artifacts::load(&candidate)?;
+                    return candidate.canonicalize().map_err(|error| error.to_string());
+                }
             }
         }
         let mut objects = Vec::new();
@@ -97,9 +148,13 @@ impl ImportResolver {
                 );
             }
         }
+        objects.extend_from_slice(extra_objects);
         objects.extend(sources.iter().map(|root| Self::object_root(root)));
         for root in std::iter::once(local).chain(objects.iter().map(PathBuf::as_path)) {
             let candidate = root.join(&relative).with_extension("sym");
+            if !expected.contains(&candidate) {
+                expected.push(candidate.clone());
+            }
             if candidate.is_file() {
                 if root
                     .file_name()
@@ -116,9 +171,19 @@ impl ImportResolver {
             }
         }
         Err(format!(
-            "{}: import {} not found",
+            "{}: import {} not found\nExpected paths:\n{}",
             importer.display(),
-            import.path().join("::")
+            import.path().join("::"),
+            expected
+                .iter()
+                .map(|path| format!(
+                    "  {}",
+                    std::path::absolute(path)
+                        .unwrap_or_else(|_| path.clone())
+                        .display()
+                ))
+                .collect::<Vec<_>>()
+                .join("\n")
         ))
     }
 }

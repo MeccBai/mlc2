@@ -467,6 +467,7 @@ dependencies = [
  "mlc_optimizer",
  "mlc_syntax",
  "tempfile",
+ "toml",
 ]
 
 [[package]]

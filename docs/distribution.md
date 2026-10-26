@@ -73,3 +73,5 @@ cargo test --test stdlib_cli -- --include-ignored
 ```
 
 `lib/universal/c_std/*.h` 按 `--triplet universal` 转换到 `objects/universal/c_std/*.sym`；`lib/<triplet>/c_std/*.h` 使用对应 triplet。通用头文件只包含已支持 64 位平台上 ABI 一致的接口。
+
+Run `mlc setup` after copying library sources into an installation. It converts all declaration inputs and prepares both debug/release object variants for all target directories, without requiring the native linker. Use `mlc setup --triplet <triplet> --release` to prepare only one target and variant. Source declarations remain in neutral `objects/universal` or target-specific `objects/<triplet>`; compiled sources are cached under `objects/<mode>/<triplet>`.

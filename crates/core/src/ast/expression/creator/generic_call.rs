@@ -8,7 +8,7 @@ use crate::ast::expression::{Expression, FuncCall};
 use crate::ast::statement::Variable;
 use crate::ast::types::resolve_type;
 use crate::ast::{EnumBool, SymbolTable, TypeIndex};
-use crate::diagnostic::error::{CompileError, ResolveError};
+use crate::diagnostic::error::{CompileError, IllegalUseError, ResolveError};
 use crate::parser::out::{Span, Spanned, TempExpr, TempExpr::Path, TempPath, TempType};
 
 impl Expression {
@@ -21,6 +21,15 @@ impl Expression {
         symbols: &mut dyn Resolution,
         context: Option<&crate::ast::symbols::StatementContext>,
     ) -> Self {
+        if crate::ast::builtins::numeric_constant(&path.segments).is_some() {
+            config.submit_error(
+                CompileError::IllegalUse(
+                    crate::diagnostic::error::IllegalUseError::GenericCountMismatch,
+                ),
+                span,
+            );
+            return Self::Poison(span);
+        }
         if Self::is_function_builtin(&path) {
             return Self::new_function_pointer(config, generic_args, args, span, symbols, context);
         }

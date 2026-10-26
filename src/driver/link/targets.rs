@@ -70,7 +70,12 @@ impl Profile {
         for name in self.libraries {
             if !roots.iter().any(|root| root.join(name).is_file()) {
                 return Err(format!(
-                    "MSVC/UCRT library not found: {name}. Install the C++ Build Tools and Windows SDK, or provide runtimes/x86_64-pc-windows-msvc."
+                    "MSVC/UCRT library not found: {name}\nExpected paths:\n{}\nInstall the C++ Build Tools and Windows SDK, or provide runtimes/x86_64-pc-windows-msvc.",
+                    roots
+                        .iter()
+                        .map(|root| format!("  {}", root.join(name).display()))
+                        .collect::<Vec<_>>()
+                        .join("\n")
                 ));
             }
         }

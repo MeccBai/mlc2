@@ -1,9 +1,11 @@
 mod cache;
 mod formatting;
 mod frontend;
+mod initialize;
 mod ir_dump;
 mod link;
 mod progress;
+mod setup;
 use crate::cli::{Cli, Commands};
 use mlc_builder::{
     config::GlobalConfig,
@@ -18,6 +20,7 @@ use std::{collections::HashMap, path::Path};
 pub fn run(cli: Cli) -> Result<i32, String> {
     let operation = match &cli.command {
         Commands::Build { .. } => Some("Build"),
+        Commands::Setup => Some("Setup"),
         Commands::Fmt { .. } => Some("Format"),
         _ => None,
     };
@@ -30,11 +33,20 @@ pub fn run(cli: Cli) -> Result<i32, String> {
 fn run_inner(cli: Cli, progress: &Progress) -> Result<i32, String> {
     let root = std::env::current_dir().map_err(|e| e.to_string())?;
     let targets = match &cli.command {
+        Commands::Setup => return setup::run(&cli, &root, progress),
+        Commands::Init { project } => return initialize::run(&root, project),
         Commands::Fmt { input } => return formatting::run(&root, input.as_deref(), progress),
         Commands::Ll { input } => {
             vec![(input.clone(), None, TargetKind::Bin)]
         }
         Commands::Symbols { input, module } => {
+            let input = root.join(input);
+            if !input.is_file() {
+                return Err(format!(
+                    "Declaration input not found\nExpected path: {}",
+                    input.display()
+                ));
+            }
             let output = cli
                 .output
                 .clone()
@@ -49,9 +61,9 @@ fn run_inner(cli: Cli, progress: &Progress) -> Result<i32, String> {
                         .triplet
                         .as_deref()
                         .unwrap_or(mlc_builder::paths::HOST_TRIPLET);
-                    mlc_builder::artifacts::convert_c_header(input, &output, name, target)?;
+                    mlc_builder::artifacts::convert_c_header(&input, &output, name, target)?;
                 }
-                Some("toml") => mlc_builder::artifacts::convert_toml(input, &output)?,
+                Some("toml") => mlc_builder::artifacts::convert_toml(&input, &output)?,
                 _ => return Err("symbols accepts only .h or .toml input".into()),
             }
             println!("Written {}", output.display());
@@ -80,7 +92,13 @@ fn run_inner(cli: Cli, progress: &Progress) -> Result<i32, String> {
                 Commands::Run { target } => Some(target.as_str()),
                 _ => unreachable!(),
             };
-            let project = ProjectFile::load(&root)?.ok_or("Project.toml not found")?;
+            let project = ProjectFile::load(&root)?.ok_or_else(|| {
+                format!(
+                    "Project.toml not found\nExpected paths:\n  {}\n  {}",
+                    root.join("Project.toml").display(),
+                    root.join("project.toml").display()
+                )
+            })?;
             let selected: Vec<_> = project
                 .project
                 .targets
@@ -97,7 +115,16 @@ fn run_inner(cli: Cli, progress: &Progress) -> Result<i32, String> {
         }
     };
     let global = match &cli.config {
-        Some(path) => GlobalConfig::load(path)?,
+        Some(path) => {
+            let path = root.join(path);
+            if !path.is_file() {
+                return Err(format!(
+                    "Configuration file not found\nExpected path: {}",
+                    path.display()
+                ));
+            }
+            GlobalConfig::load(&path)?
+        }
         None => GlobalConfig::load_default()?,
     };
     for (entry, name, kind) in targets {
@@ -115,6 +142,7 @@ fn run_inner(cli: Cli, progress: &Progress) -> Result<i32, String> {
             name.as_deref(),
             kind,
             progress,
+            false,
         )?;
         if matches!(cli.command, Commands::Run { .. }) {
             let artifact = artifact.ok_or("Build did not produce an executable")?;
@@ -137,6 +165,7 @@ fn build(
     name: Option<&str>,
     kind: TargetKind,
     progress: &Progress,
+    objects_only: bool,
 ) -> Result<Option<std::path::PathBuf>, String> {
     progress.stage("Discovering sources", 0);
     let executable = std::env::current_exe().map_err(|e| e.to_string())?;
@@ -168,7 +197,7 @@ fn build(
     paths.configure_output(output_root.clone(), mode);
     let output = output_root.join(mode.directory());
     let plan = BuildPlan::discover_with_paths(entry, &paths)?;
-    let debug = mode.debug_info();
+    let debug = mode.debug_info() && (!objects_only || paths.triplet.contains("windows"));
     if debug && !paths.triplet.contains("windows") {
         return Err("Debug line tables currently require a Windows target".into());
     }
@@ -177,35 +206,41 @@ fn build(
     } else {
         cli.optimize || mode.optimized()
     };
-    let optimize = if optimized {
+    let mut optimize = if optimized {
         mlc_optimizer::OptimizeConfig::enabled()
     } else {
         mlc_optimizer::OptimizeConfig::disabled()
     };
+    if objects_only {
+        optimize.unused_function_elimination = false;
+    }
     let std_mode = paths.std_mode();
-    let std_optimized = std_mode.optimized();
-    let std_debug = std_mode.debug_info() && paths.triplet.contains("windows");
     let module_configs: HashMap<_, _> = plan
         .targets
         .iter()
-        .filter(|target| {
-            PathResolver::is_std_module(&target.module_name) && target.artifact_stems.len() > 1
-        })
+        .filter(|target| target.artifact_stems.len() > 1)
         .map(|target| {
-            let mut optimize = if std_optimized {
+            let library_mode = if PathResolver::is_std_module(&target.module_name) {
+                std_mode
+            } else {
+                mode
+            };
+            let library_optimized = library_mode.optimized();
+            let library_debug = library_mode.debug_info() && paths.triplet.contains("windows");
+            let mut optimize = if library_optimized {
                 mlc_optimizer::OptimizeConfig::enabled()
             } else {
                 mlc_optimizer::OptimizeConfig::disabled()
             };
-            // A shared std object must retain helpers independently of this consumer.
+            // A shared library object must retain helpers independently of this consumer.
             optimize.unused_function_elimination = false;
             (
                 target.id.0,
                 (
                     optimize,
                     mlc_codegen::gens::CodegenConfig {
-                        debug_info: std_debug,
-                        optimized: std_optimized,
+                        debug_info: library_debug,
+                        optimized: library_optimized,
                     },
                 ),
             )
@@ -235,7 +270,14 @@ fn build(
                     *id,
                     output_root
                         .join("ll")
-                        .join(std_mode.directory())
+                        .join(
+                            if PathResolver::is_std_module(&plan.targets[*id].module_name) {
+                                std_mode
+                            } else {
+                                mode
+                            }
+                            .directory(),
+                        )
                         .join(&paths.triplet),
                 )
             })
@@ -263,7 +305,7 @@ fn build(
                 mlc_builder::schedule::ModuleOptions {
                     optimize: codegen.optimized,
                     compiler_options: vec![
-                        format!("std-v1={std_mode:?}"),
+                        format!("library-v2={},{}", codegen.optimized, codegen.debug_info),
                         format!("optimizer={optimize:?}"),
                         format!("debug-lines-v3={}", codegen.debug_info),
                     ],
@@ -316,6 +358,15 @@ fn build(
     }
     if !report.succeeded() {
         return Err(format!("Build failed: {:?}", report.results));
+    }
+    if objects_only {
+        println!(
+            "Prepared {} ({}/{})",
+            entry.display(),
+            mode.directory(),
+            paths.triplet
+        );
+        return Ok(None);
     }
     std::fs::create_dir_all(&paths.output).map_err(|e| e.to_string())?;
     let mut objects = report.objects;
