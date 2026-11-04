@@ -1,5 +1,6 @@
 use mlc_syntax::{ImportModule, manifest::SOURCE_SUFFIX};
 use std::path::{Component, Path, PathBuf};
+use crate::manifest;
 
 #[derive(Debug, Clone)]
 pub struct ImportResolver {
@@ -12,7 +13,7 @@ impl ImportResolver {
         let mut roots = self.lib_dirs.clone();
         for root in &self.lib_dirs {
             if let Some(parent) = root.parent() {
-                let universal = parent.join(crate::manifest::UNIVERSAL_LIB_DIR);
+                let universal = parent.join(manifest::UNIVERSAL_LIB_DIR);
                 if !roots.contains(&universal) {
                     roots.push(universal);
                 }
@@ -27,7 +28,7 @@ impl ImportResolver {
         library
             .parent()
             .unwrap_or(library)
-            .join(crate::manifest::OBJECTS_DIR)
+            .join(manifest::OBJECTS_DIR)
             .join(root.file_name().unwrap_or_default())
     }
 
@@ -38,7 +39,7 @@ impl ImportResolver {
             .ok_or("Executable has no installation root")?;
         Ok(Self {
             lib_dirs: vec![
-                root.join(crate::manifest::LIB_DIR)
+                root.join(manifest::LIB_DIR)
                     .join(crate::paths::HOST_TRIPLET),
             ],
         })
@@ -93,7 +94,7 @@ impl ImportResolver {
         if local_symbol.is_file() {
             if local
                 .file_name()
-                .is_some_and(|name| name == crate::manifest::UNIVERSAL_LIB_DIR)
+                .is_some_and(|name| name == manifest::UNIVERSAL_LIB_DIR)
                 && crate::artifacts::load(&local_symbol)?
                     .manifest
                     .config
@@ -158,7 +159,7 @@ impl ImportResolver {
             if candidate.is_file() {
                 if root
                     .file_name()
-                    .is_some_and(|name| name == crate::manifest::UNIVERSAL_LIB_DIR)
+                    .is_some_and(|name| name == manifest::UNIVERSAL_LIB_DIR)
                     && crate::artifacts::load(&candidate)?.manifest.config.object
                         != crate::artifacts::ObjectMode::None
                 {

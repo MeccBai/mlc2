@@ -33,13 +33,20 @@ pub fn linker_path(cli: &Cli, triplet: &str) -> Result<PathBuf, String> {
     ))
 }
 
-pub fn runtime_identity(triplet: &str) -> Result<Vec<(PathBuf, String)>, String> {
+fn runtime_path(cli: &Cli, triplet: &str) -> Result<PathBuf, String> {
+    if let Some(path) = &cli.runtime_dir {
+        return Ok(path.clone());
+    }
     let exe = std::env::current_exe().map_err(|e| e.to_string())?;
-    let root = exe
+    Ok(exe
         .parent()
         .ok_or("Compiler has no parent")?
         .join(mlc_builder::manifest::RUNTIMES_DIR)
-        .join(triplet);
+        .join(triplet))
+}
+
+pub fn runtime_identity(cli: &Cli, triplet: &str) -> Result<Vec<(PathBuf, String)>, String> {
+    let root = runtime_path(cli, triplet)?;
     let mut files = targets::profile(triplet)?.runtime_files(&root)?;
     files.sort();
     files
@@ -94,15 +101,10 @@ pub fn link(
     } else {
         let lld = linker_path(cli, triplet)?;
         let mut command = Command::new(&lld);
-        let executable = std::env::current_exe().map_err(|e| e.to_string())?;
         if !lld.is_file() {
             return Err(format!("Distribution linker not found: {}", lld.display()));
         }
-        let runtime = executable
-            .parent()
-            .ok_or("Compiler has no parent")?
-            .join(mlc_builder::manifest::RUNTIMES_DIR)
-            .join(triplet);
+        let runtime = runtime_path(cli, triplet)?;
         command.args(targets::profile(triplet)?.arguments(&runtime, objects, &staged, kind)?);
         if debug {
             let pdb = staged.with_extension("pdb");

@@ -1,4 +1,8 @@
-use crate::ast::symbols::Resolution;
+use crate::ast::{
+    arena,
+    symbols::{self, Resolution},
+    types,
+};
 use std::{
     collections::{HashMap, HashSet},
     rc::Rc,
@@ -64,7 +68,7 @@ pub(crate) fn generics(
                         })
                 })
                 .or_else(|| match symbols.named_export(config, &name) {
-                    Some(crate::ast::symbols::ExportSymbol::GenericRequire(index)) => Some(index),
+                    Some(symbols::ExportSymbol::GenericRequire(index)) => Some(index),
                     _ => None,
                 })
             else {
@@ -132,16 +136,13 @@ pub(super) fn signature(
     }
     let ret = returns
         .and_then(|ty| resolve_type_with_bindings(config, ty, symbols, types))
-        .map(|ty| ty.into_value_type(crate::ast::types::ValueType::Flex, symbols));
+        .map(|ty| ty.into_value_type(types::ValueType::Flex, symbols));
     (params, ret)
 }
 
 pub(super) fn context(
     config: &mut Config,
-    belong: crate::ast::symbols::EnumBool<
-        crate::ast::arena::InterfaceIndex,
-        crate::ast::arena::FuncIndex,
-    >,
+    belong: symbols::EnumBool<arena::InterfaceIndex, arena::FuncIndex>,
     parameters: &[(TypeIndex, String)],
     generic_map: &HashMap<String, GenericIndex>,
     types: &HashMap<String, TypeIndex>,

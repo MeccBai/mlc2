@@ -1,8 +1,30 @@
 use clap::{Parser, Subcommand, ValueEnum};
 use std::path::PathBuf;
+use std::sync::OnceLock;
+
+/// Runtime version banner. Add copyright, toolchain or installation details here.
+pub fn version() -> &'static str {
+    static VERSION: OnceLock<String> = OnceLock::new();
+    VERSION.get_or_init(|| {
+        let installation = std::env::current_exe()
+            .ok()
+            .and_then(|path| path.parent().map(|parent| parent.to_path_buf()))
+            .map(|path| path.display().to_string())
+            .unwrap_or_else(|| "unknown".into());
+        format!(
+            "{}\nCopyright (c) 2026 Mecc\nHost: {}\nInstalled at: {}",
+            env!("CARGO_PKG_VERSION"),
+            mlc_builder::paths::HOST_TRIPLET,
+            installation,
+        )
+    })
+}
 
 #[derive(Debug, Clone, Parser)]
-#[command(version, about = "MLC compiler and project builder")]
+#[command(
+    version = version(),
+    about = "MLC compiler and project builder"
+)]
 pub struct Cli {
     /// Build without optimization or debugging information.
     #[arg(long = "default", global = true, conflicts_with_all = ["debug", "release", "rel_with_info"])]
@@ -39,6 +61,9 @@ pub struct Cli {
     /// Override the triplet's bundled linker executable.
     #[arg(long, global = true)]
     pub linker: Option<PathBuf>,
+    /// Override the runtime directory for the selected triplet (no triplet appended).
+    #[arg(long, global = true)]
+    pub runtime_dir: Option<PathBuf>,
     /// Override tools/llvm-ar in the compiler installation.
     #[arg(long, global = true)]
     pub archiver: Option<PathBuf>,
@@ -51,6 +76,8 @@ pub struct Cli {
 
 #[derive(Debug, Clone, Subcommand)]
 pub enum Commands {
+    /// Remove the project build output directory (default: build).
+    Clean,
     /// Compile installed library declarations and sources into objects (debug and release).
     Setup,
     /// Create a new project directory with Project.toml and src/main.m2.
@@ -115,6 +142,19 @@ impl Cli {
 mod tests {
     use super::*;
     use mlc_builder::project::BuildMode;
+    #[test]
+    fn version_flags_display_the_runtime_banner() {
+        for flag in ["--version", "-V"] {
+            let error = Cli::try_parse_from(["mlc", flag]).unwrap_err();
+            assert_eq!(error.kind(), clap::error::ErrorKind::DisplayVersion);
+            let banner = error.to_string();
+            assert!(banner.contains(env!("CARGO_PKG_VERSION")));
+            assert!(banner.contains("Copyright (c) 2026 Mecc"));
+            let executable = std::env::current_exe().unwrap();
+            assert!(banner.contains(&executable.parent().unwrap().display().to_string()));
+        }
+    }
+
     #[test]
     fn four_modes_override_configuration_and_are_mutually_exclusive() {
         let modes = [

@@ -32,6 +32,8 @@ use crate::parser::out::{
     TempLiteralKind::{Boolean, Float, Integer, Null},
 };
 
+use crate::ast::symbols::PathSymbol;
+
 impl Expression {
     pub fn null() -> Self {
         Expression::ConstValueE(ConstValue::null(), (0..0).into())
@@ -95,7 +97,7 @@ impl Expression {
                         }
                     };
                 }
-                use crate::ast::symbols::PathSymbol;
+
                 let error = match symbols.resolve_path(config, &path, context) {
                     Some(PathSymbol::Variable(variable)) => {
                         variable.read_count.set(variable.read_count.get() + 1);

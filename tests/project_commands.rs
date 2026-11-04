@@ -31,6 +31,10 @@ fn init_creates_a_valid_project_and_never_overwrites_existing_files() {
     let config = ProjectFile::load(&project).unwrap().unwrap();
     assert_eq!(config.project.name, "demo");
     assert_eq!(config.project.targets[0].entry, Path::new("src/main.m2"));
+    assert_eq!(
+        config.project.targets[0].profile,
+        Some(mlc_builder::project::BuildMode::Default)
+    );
     let source = project.join("src/main.m2");
     let original = fs::read(&source).unwrap();
     assert!(!invoke(root.path(), &["init", "demo"]).status.success());

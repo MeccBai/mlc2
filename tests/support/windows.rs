@@ -23,7 +23,12 @@ pub fn link(objects: &[PathBuf], executable: &Path) -> Output {
         .join("tools")
         .join(format!("{DEFAULT_WINDOWS_LINKER}.exe"));
     let linker = std::env::var_os("MLC_TEST_LLD_LINK").unwrap_or_else(|| {
-        if bundled.is_file() {
+        let repository = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tools")
+            .join(format!("{DEFAULT_WINDOWS_LINKER}.exe"));
+        if repository.is_file() {
+            repository.into_os_string()
+        } else if bundled.is_file() {
             bundled.into_os_string()
         } else {
             DEFAULT_WINDOWS_LINKER.into()
@@ -43,6 +48,12 @@ pub fn link(objects: &[PathBuf], executable: &Path) -> Output {
 fn runtime(installation: &Path) -> PathBuf {
     if let Some(path) = std::env::var_os("MLC_TEST_RUNTIME_DIR") {
         return path.into();
+    }
+    let repository = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("runtimes")
+        .join(X86_64_PC_WINDOWS_MSVC);
+    if repository.join("ucrt.lib").is_file() {
+        return repository;
     }
     let bundled = installation.join("runtimes").join(X86_64_PC_WINDOWS_MSVC);
     if bundled.is_dir() {

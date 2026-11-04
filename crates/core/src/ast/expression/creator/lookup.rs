@@ -3,6 +3,7 @@ use crate::ast::config::Config;
 use crate::ast::expression::Expression;
 use crate::ast::symbol_name::SymbolName;
 use crate::ast::symbols::Resolution;
+use crate::ast::types;
 use crate::ast::{EnumBool, SymbolTable};
 use crate::diagnostic::error::{CompileError, IllegalUseError, ResolveError};
 use crate::diagnostic::ice::ice;
@@ -59,7 +60,7 @@ impl Expression {
                 if owner_type.is_empty() {
                     return None;
                 }
-                let owner_type = owner_type.into(crate::ast::types::ValueType::Flex, symbols);
+                let owner_type = owner_type.into(types::ValueType::Flex, symbols);
                 let interface_name = SymbolName::callable(Some(&owner_type.format(symbols)), &name);
                 let candidate = symbols
                     .associated_interface(owner_type, &interface_name)

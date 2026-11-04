@@ -1,5 +1,10 @@
 # CLI
 
+`mlc clean` 删除当前项目的整个构建输出目录（包括所有 profile）。默认是 `build/`，
+存在 Project.toml 时使用 `Project.OutputDir`；`mlc clean -o out` 可显式指定。
+目录不存在视为成功，不清理安装目录中的标准库缓存。为避免误删，拒绝项目根目录、
+项目外路径、文件、目录链接以及含 Project.toml 或 .git 的目录。
+
 `build` 和 `fmt` 在交互终端的 stderr 显示分阶段进度条，结束后输出总耗时，
 失败也输出耗时。重定向或管道中不输出动态进度控制字符，保留普通结果摘要。
 项目多目标构建的耗时和统计累计计算。
@@ -88,6 +93,9 @@ Windows 默认使用 `x86_64-pc-windows-msvc` 和安装目录 tools 下的 `lld-
 显式选择 GNU 目标时仍使用 `ld.lld.exe` 和匹配的 MinGW 运行库；其他 triplet
 在补齐参数表及运行库前会明确报错。
 `--linker` 覆盖链接器路径，`--link-arg` 直接传递原生链接参数（不使用 `-Wl,`）。
+`--runtime-dir` 覆盖当前目标的运行库目录（直接指向含 `.lib` 或 CRT 对象的目录，
+不再追加 triplet）；链接与运行库内容缓存校验均使用此目录。
+仓库开发测试可指定 `--linker tools/lld-link.exe --runtime-dir runtimes/x86_64-pc-windows-msvc`。
 静态库使用 tools/llvm-ar，支持 `--archiver`。工具通过进程参数数组调用，不经过 shell。
 
 安装布局：
@@ -184,6 +192,21 @@ CLI 执行测试保留完整构建、运行与缓存断言，目前显式标为 
 MSVC 链接环境配置完成；Windows 运行测试也统一生成 MSVC 对象并直接调用 lld-link。
 
 ## Debug and release builds
+
+`mlc build <target>` 和 `mlc run <target>` 默认读取选中 target 的 `Profile`：
+
+```toml
+[[Project.Targets]]
+Name = "app"
+Entry = "src/main.m2"
+Type = "bin"
+Profile = "release"
+```
+
+可选值为 default/debug/release/rel-with-info。优先级：显式 CLI 模式 > target Profile >
+target Mode > Project Mode > default。省略 Profile 的现有项目仍可使用 Mode；
+显式 Profile="default" 也会覆盖旧 Mode。`mlc build` 构建全部 target 时分别使用各自配置。
+显式 `.m2` 入口仍不读取 Project.toml。
 
 Use `--default` (neither optimization nor debug information), `--debug` (debug information only), `--release` (optimization only), or `--rel-with-info` (both). These flags are mutually exclusive. Project and target tables accept the matching `Mode = "default"`, `"debug"`, `"release"`, or `"rel-with-info"`; explicit flags take precedence. `--optimize` / `--no-optimize` override the optimization setting only. Standalone source files ignore Project.toml. The default is no optimization and no debug information. See [basic debugging information](debug-info.md) for PDB output and stepping rules.
 

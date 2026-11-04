@@ -177,6 +177,56 @@ fn project_build_modes_follow_target_then_project_precedence() {
 }
 
 #[test]
+fn target_profile_overrides_legacy_modes_and_selects_output_layout() {
+    use crate::project::BuildMode;
+    let root = tempfile::tempdir().unwrap();
+    let executable = root.path().join("mlc.exe");
+    for mode in [
+        BuildMode::Default,
+        BuildMode::Debug,
+        BuildMode::Release,
+        BuildMode::RelWithInfo,
+    ] {
+        let project = format!(
+            "[Project]\nName='demo'\nVersion='1'\nOutputDir='out'\nMode='debug'\n\
+             [[Project.Targets]]\nName='app'\nEntry='main.m2'\nType='bin'\n\
+             Mode='release'\nProfile='{}'",
+            mode.directory()
+        );
+        fs::write(root.path().join("Project.toml"), project).unwrap();
+        let paths = PathResolver::new(
+            &executable,
+            root.path(),
+            Some("app"),
+            &GlobalConfig::default(),
+        )
+        .unwrap();
+        assert_eq!(paths.mode, mode);
+        assert_eq!(
+            paths.std_mode(),
+            if mode.optimized() {
+                BuildMode::Release
+            } else {
+                BuildMode::Debug
+            }
+        );
+        assert_eq!(
+            paths.output,
+            root.path()
+                .join("out/objects")
+                .join(mode.directory())
+                .join(&paths.triplet)
+        );
+        assert_eq!(
+            PathResolver::standalone(&executable, root.path(), &GlobalConfig::default())
+                .unwrap()
+                .mode,
+            BuildMode::Default
+        );
+    }
+}
+
+#[test]
 fn all_four_project_modes_have_independent_optimization_and_debug_settings() {
     use crate::project::BuildMode;
     for (name, expected, optimized, debug) in [

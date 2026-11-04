@@ -3,10 +3,10 @@ use crate::visibility::TempVisibilityExt;
 use std::collections::{HashMap, HashSet};
 
 use crate::ast::arena::{FuncIndex, InterfaceIndex, get_ident};
-use crate::ast::attribute::FuncAttibute;
+use crate::ast::attribute::{self, FuncAttibute};
 use crate::ast::symbol_name::SymbolName;
 use crate::ast::types::resolve_type;
-use crate::ast::{Config, GenericIndex, TypeIndex};
+use crate::ast::{Config, GenericIndex, TypeIndex, builtins};
 use crate::ast::{
     statement::Statement,
     symbols::{EnumBool, SymbolTable},
@@ -77,7 +77,7 @@ impl FuncSymbol {
         let name_span = prototype.name_span;
         let mut attributes = FuncAttibute::parse(config, prototype.attributes, name_span);
         if let Some(kind) =
-            crate::ast::builtins::module_builtin(&config.symbol_prefix(), &prototype.name)
+            builtins::module_builtin(&config.symbol_prefix(), &prototype.name)
         {
             attributes.insert(FuncAttibute::Builtin(kind));
         }
@@ -165,7 +165,7 @@ impl InterfaceSymbol {
     ) -> (Self, Span) {
         let name_span = prototype.name_span;
         let attributes = FuncAttibute::parse(config, prototype.attributes, name_span);
-        crate::ast::attribute::validate::callable(
+        attribute::validate::callable(
             config,
             &attributes,
             !prototype.generics.is_empty(),
@@ -214,13 +214,13 @@ impl InterfaceSymbol {
             && matches!(symbols.get_type(owner).unqualified(), crate::ast::types::CompileType::Unit(unit)
             if unit.attributes.contains(&crate::ast::attribute::UnitAttribute::Cabi))
         {
-            crate::ast::attribute::validate::reject(
+            attribute::validate::reject(
                 config,
                 crate::diagnostic::error::CAbiError::UnitHasInterface,
                 name_span,
             );
         }
-        crate::ast::attribute::validate::parameters(
+        attribute::validate::parameters(
             config,
             &attributes,
             &params,

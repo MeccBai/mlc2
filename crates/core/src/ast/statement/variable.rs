@@ -1,4 +1,11 @@
-use crate::ast::symbols::Resolution;
+use mlc_syntax::parser::out;
+
+use crate::ast::{
+    expression,
+    symbols::{Resolution, StatementContext},
+    types,
+};
+use crate::diagnostic::{error, warning};
 use std::{collections::HashMap, rc::Rc};
 
 use crate::{
@@ -42,18 +49,18 @@ impl Variable {
         config: &mut Config,
         temp_var: TempVar,
         symbols: &mut dyn Resolution,
-        context: Option<&mut crate::ast::symbols::StatementContext>,
+        context: Option<&mut StatementContext>,
     ) -> Rc<Self> {
         let var_span = temp_var.initializer.1;
 
         let ctxt = context.map(|ctxt| &*ctxt);
         let declared = match temp_var.ty.clone() {
-            Some((crate::parser::out::TempType::InferredResource, _)) => None,
+            Some((out::TempType::InferredResource, _)) => None,
             Some(ty) => resolve_type(
                 config,
                 ty,
                 symbols,
-                ctxt.map(|context| context as &dyn crate::ast::types::TypeContext),
+                ctxt.map(|context| context as &dyn types::TypeContext),
             ),
             None => None,
         };
@@ -61,28 +68,26 @@ impl Variable {
             return Self::poison();
         }
         let array_length = declared.and_then(|ty| match symbols.get_type(ty).unqualified() {
-            crate::ast::types::CompileType::List(list) => Some(list.length),
+            types::CompileType::List(list) => Some(list.length),
             _ => None,
         });
         let init_val = match (array_length, temp_var.initializer.0) {
-            (Some(_), crate::parser::out::TempExpr::Init { .. }) => {
+            (Some(_), out::TempExpr::Init { .. }) => {
                 config.submit_error(
-                    crate::diagnostic::error::CompileError::IllegalUse(
+                    error::CompileError::IllegalUse(
                         IllegalUseError::ArrayInitializerRequiresBrackets,
                     ),
                     var_span,
                 );
                 return Self::poison();
             }
-            (Some(length), crate::parser::out::TempExpr::Array(values)) => {
+            (Some(length), out::TempExpr::Array(values)) => {
                 if values.len() > length {
                     config.submit_error(
-                        crate::diagnostic::error::CompileError::IllegalUse(
-                            IllegalUseError::TypeMismatched {
-                                expected: format!("at most {length} array elements"),
-                                found: format!("{} array elements", values.len()),
-                            },
-                        ),
+                        error::CompileError::IllegalUse(IllegalUseError::TypeMismatched {
+                            expected: format!("at most {length} array elements"),
+                            found: format!("{} array elements", values.len()),
+                        }),
                         var_span,
                     );
                     return Self::poison();
@@ -90,12 +95,12 @@ impl Variable {
                 if values.len() < length {
                     let element =
                         declared.and_then(|ty| match symbols.get_type(ty).unqualified() {
-                            crate::ast::types::CompileType::List(list) => Some(list.element_type),
+                            types::CompileType::List(list) => Some(list.element_type),
                             _ => None,
                         });
                     if element.is_some_and(|ty| ty.contains_function_pointer(symbols)) {
                         config.submit_error(
-                            crate::diagnostic::error::CompileError::IllegalUse(
+                            error::CompileError::IllegalUse(
                                 IllegalUseError::FunctionPointerRequiresInitializer,
                             ),
                             var_span,
@@ -103,7 +108,7 @@ impl Variable {
                         return Self::poison();
                     }
                     config.submit_warning(
-                        crate::diagnostic::warning::Warning::ArrayInitializerZeroFilled {
+                        warning::Warning::ArrayInitializerZeroFilled {
                             supplied: values.len(),
                             length,
                         },
@@ -111,7 +116,7 @@ impl Variable {
                     );
                 }
                 Expression::InitListE(
-                    crate::ast::expression::InitialList::Array {
+                    expression::InitialList::Array {
                         ty: declared.expect("declared array"),
                         values: values
                             .into_iter()
@@ -145,28 +150,24 @@ impl Variable {
             && (inferred.has_res(symbols) || declared.is_some_and(|ty| ty.has_res(symbols)))
         {
             config.submit_error(
-                crate::diagnostic::error::CompileError::IllegalUse(
-                    IllegalUseError::UnsupportedResourceOperation,
-                ),
+                error::CompileError::IllegalUse(IllegalUseError::UnsupportedResourceOperation),
                 var_span,
             );
             return Self::poison();
         }
 
         let ty = match temp_var.ty {
-            Some((crate::parser::out::TempType::InferredResource, _)) => {
+            Some((out::TempType::InferredResource, _)) => {
                 if !inferred.has_res(symbols) {
                     config.submit_error(
-                        crate::diagnostic::error::CompileError::IllegalUse(
-                            IllegalUseError::TypeMismatched {
-                                expected: "resource initializer for res".into(),
-                                found: if inferred.is_empty() {
-                                    "void".into()
-                                } else {
-                                    inferred.format(symbols)
-                                },
+                        error::CompileError::IllegalUse(IllegalUseError::TypeMismatched {
+                            expected: "resource initializer for res".into(),
+                            found: if inferred.is_empty() {
+                                "void".into()
+                            } else {
+                                inferred.format(symbols)
                             },
-                        ),
+                        }),
                         var_span,
                     );
                     return Self::poison();
@@ -177,16 +178,14 @@ impl Variable {
                 Some(ty) => {
                     if init_val.type_check(&ty, config, symbols) == false {
                         config.submit_error(
-                            crate::diagnostic::error::CompileError::IllegalUse(
-                                IllegalUseError::TypeMismatched {
-                                    expected: symbols.get_type(ty).format(symbols),
-                                    found: if inferred.is_empty() {
-                                        "untyped initializer".into()
-                                    } else {
-                                        symbols.get_type(inferred).format(symbols)
-                                    },
+                            error::CompileError::IllegalUse(IllegalUseError::TypeMismatched {
+                                expected: symbols.get_type(ty).format(symbols),
+                                found: if inferred.is_empty() {
+                                    "untyped initializer".into()
+                                } else {
+                                    symbols.get_type(inferred).format(symbols)
                                 },
-                            ),
+                            }),
                             var_span,
                         );
                     }
@@ -197,23 +196,19 @@ impl Variable {
             None => {
                 if inferred.is_empty() {
                     config.submit_error(
-                        crate::diagnostic::error::CompileError::Resolve(
-                            crate::diagnostic::error::ResolveError::MissingType,
-                        ),
+                        error::CompileError::Resolve(error::ResolveError::MissingType),
                         var_span,
                     );
                 }
                 if inferred.is_resource(symbols) {
                     if !matches!(&init_val, Expression::VarValueE(_, ..)) {
                         config.submit_error(
-                            crate::diagnostic::error::CompileError::IllegalUse(
-                                IllegalUseError::ResourceRequiresOwner,
-                            ),
+                            error::CompileError::IllegalUse(IllegalUseError::ResourceRequiresOwner),
                             var_span,
                         );
                         return Self::poison();
                     }
-                    let crate::ast::types::CompileType::Ref(reference) =
+                    let types::CompileType::Ref(reference) =
                         symbols.get_type(inferred).unqualified()
                     else {
                         unreachable!()
@@ -223,7 +218,7 @@ impl Variable {
                     symbols
                         .local_mut()
                         .types
-                        .insert(name, crate::ast::types::CompileType::Ref(reference))
+                        .insert(name, types::CompileType::Ref(reference))
                 } else {
                     inferred
                 }
@@ -231,11 +226,8 @@ impl Variable {
         }
         .into_value_type(temp_var.value_type, symbols);
         // Native str bindings keep their compile-time payload and cannot be rebound.
-        let native_str = !ty.is_empty()
-            && matches!(
-                symbols.get_type(ty).unqualified(),
-                crate::ast::types::CompileType::Str
-            );
+        let native_str =
+            !ty.is_empty() && matches!(symbols.get_type(ty).unqualified(), types::CompileType::Str);
         let ty = if native_str {
             ty.into_value_type(ValueType::Constant, symbols)
         } else {
@@ -245,9 +237,7 @@ impl Variable {
         if (native_str || temp_var.value_type == ValueType::Constant) && !init_val.is_const(symbols)
         {
             config.submit_error(
-                crate::diagnostic::error::CompileError::IllegalUse(
-                    IllegalUseError::NonConstantInitializer,
-                ),
+                error::CompileError::IllegalUse(IllegalUseError::NonConstantInitializer),
                 var_span,
             );
         }

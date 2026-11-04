@@ -102,6 +102,8 @@ pub struct Target {
     pub entry: PathBuf,
     #[serde(rename = "Type")]
     pub kind: TargetKind,
+    #[serde(default, rename = "Profile")]
+    pub profile: Option<BuildMode>,
 }
 
 impl ProjectFile {

@@ -1,4 +1,5 @@
 use super::*;
+use crate::paths::PathResolver;
 use mlc_syntax::{ImportModule, parser::out::TempGlobalStmt};
 use std::{collections::HashMap, fs};
 
@@ -8,7 +9,7 @@ enum State {
     Resolved,
 }
 struct Scanner<'a> {
-    paths: Option<&'a crate::paths::PathResolver>,
+    paths: Option<&'a PathResolver>,
     resolver: &'a ImportResolver,
     project: PathBuf,
     targets: Vec<Target>,
@@ -20,7 +21,7 @@ struct Scanner<'a> {
 pub(super) fn discover(
     entry: &Path,
     resolver: &ImportResolver,
-    paths: Option<&crate::paths::PathResolver>,
+    paths: Option<&PathResolver>,
 ) -> Result<BuildPlan, String> {
     let entry = entry.canonicalize().map_err(|e| {
         format!(

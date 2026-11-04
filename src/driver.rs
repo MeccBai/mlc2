@@ -1,4 +1,5 @@
 mod cache;
+mod clean;
 mod formatting;
 mod frontend;
 mod initialize;
@@ -33,6 +34,7 @@ pub fn run(cli: Cli) -> Result<i32, String> {
 fn run_inner(cli: Cli, progress: &Progress) -> Result<i32, String> {
     let root = std::env::current_dir().map_err(|e| e.to_string())?;
     let targets = match &cli.command {
+        Commands::Clean => return clean::run(&root, cli.output.as_deref()),
         Commands::Setup => return setup::run(&cli, &root, progress),
         Commands::Init { project } => return initialize::run(&root, project),
         Commands::Fmt { input } => return formatting::run(&root, input.as_deref(), progress),
@@ -416,7 +418,7 @@ fn build(
     let lld = if kind == TargetKind::Static {
         None
     } else {
-        Some(link::runtime_identity(&paths.triplet)?)
+        Some(link::runtime_identity(cli, &paths.triplet)?)
     };
     let environment = [
         "PATH",

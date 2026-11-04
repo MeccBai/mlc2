@@ -116,7 +116,7 @@ fn common_functions_import_compile_and_run() {
 
 #[cfg(windows)]
 #[test]
-#[ignore = "Requires bundled GNU runtime and ld.lld beside the compiler"]
+#[ignore = "Requires repository tools/ld.lld.exe and runtimes/x86_64-pc-windows-gnu"]
 fn common_functions_run_with_gnu_runtime() {
     run_common_functions("x86_64-pc-windows-gnu");
 }
@@ -172,6 +172,22 @@ func main()->i32 {
         .current_dir(root.path())
         .args(["run", "main.m2", "--triplet", target, "--lib-dir"])
         .arg(support::library())
+        .arg("--linker")
+        .arg(
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("tools")
+                .join(if target.ends_with("msvc") {
+                    "lld-link.exe"
+                } else {
+                    "ld.lld.exe"
+                }),
+        )
+        .arg("--runtime-dir")
+        .arg(
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("runtimes")
+                .join(target),
+        )
         .output()
         .unwrap();
     assert!(

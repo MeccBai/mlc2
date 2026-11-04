@@ -1,3 +1,5 @@
+use mlc_syntax::parser;
+
 use super::{Statement, Variable};
 use crate::ast::arena::FuncIndex;
 use crate::ast::config::Config;
@@ -5,6 +7,7 @@ use crate::ast::expression::Expression;
 use crate::ast::statement::ReturnStatement;
 use crate::ast::symbols::Resolution;
 use crate::ast::symbols::{EnumBool, StatementContext, SymbolTable};
+use crate::ast::types;
 use crate::diagnostic::error::CompileError;
 use crate::diagnostic::error::IllegalUseError;
 use crate::parser::out::{Spanned, TempStmt};
@@ -29,7 +32,7 @@ impl Statement {
 
     pub(crate) fn parse_scope(
         config: &mut Config,
-        scope: crate::parser::Scope,
+        scope: parser::Scope,
         symbols: &mut dyn Resolution,
         context: &mut StatementContext,
     ) -> Vec<Self> {
@@ -147,7 +150,7 @@ impl Statement {
                     !ty.is_empty()
                         && matches!(
                             symbols.get_type(*ty).unqualified(),
-                            crate::ast::types::CompileType::Function(_)
+                            types::CompileType::Function(_)
                         )
                 });
                 if function_pointer && !right_expr.type_check(&target_type, config, symbols) {
@@ -166,12 +169,9 @@ impl Statement {
                         symbols.get_type(target_type).unqualified(),
                         symbols.get_type(source_type).unqualified(),
                     ) {
-                        (
-                            crate::ast::types::CompileType::Base(to),
-                            crate::ast::types::CompileType::Base(from),
-                        ) => {
-                            to.data_type() == crate::ast::types::base_type::DataType::Float
-                                && from.data_type() == crate::ast::types::base_type::DataType::Float
+                        (types::CompileType::Base(to), types::CompileType::Base(from)) => {
+                            to.data_type() == types::base_type::DataType::Float
+                                && from.data_type() == types::base_type::DataType::Float
                                 && to.bits() < from.bits()
                         }
                         _ => false,

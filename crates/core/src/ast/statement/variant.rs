@@ -1,8 +1,10 @@
 use super::*;
 use crate::ast::{
+    self,
     config::Config,
+    expression, symbols,
     symbols::{Resolution, StatementContext, SupperScopeType},
-    types::{CompileType, resolve_type},
+    types::{self, CompileType, resolve_type},
 };
 use crate::diagnostic::error::{CompileError, IllegalUseError};
 use crate::parser::out::{Spanned, TempExpr, TempScope, TempType};
@@ -66,7 +68,7 @@ impl Statement {
                 config,
                 candidate,
                 symbols,
-                context.map(|ctx| ctx as &dyn crate::ast::types::TypeContext),
+                context.map(|ctx| ctx as &dyn types::TypeContext),
             ) else {
                 return Self::Poison;
             };
@@ -104,9 +106,7 @@ impl Statement {
                 init_val: Box::new(Expression::null()),
             });
             let mut child = context.cloned().unwrap_or_else(|| {
-                StatementContext::new(crate::ast::symbols::EnumBool::False(
-                    crate::ast::FuncIndex::empty(),
-                ))
+                StatementContext::new(symbols::EnumBool::False(ast::FuncIndex::empty()))
             });
             child.push_scope(SupperScopeType::Match);
             if !child.declare(config, variable.clone(), binding.1) {

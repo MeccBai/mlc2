@@ -11,3 +11,5 @@
 *.sym
 *.obj
 *.mg
+/tools
+/runtimes

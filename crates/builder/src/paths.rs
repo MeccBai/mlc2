@@ -109,7 +109,7 @@ impl PathResolver {
             .or_else(|| global.lib_cache_dir.clone())
             .map(|dir| dir.join("debug").join(triplet));
         let mode = selected
-            .and_then(|target| target.mode)
+            .and_then(|target| target.profile.or(target.mode))
             .or_else(|| project.as_ref().and_then(|project| project.project.mode))
             .unwrap_or_default();
         let mut paths = Self {

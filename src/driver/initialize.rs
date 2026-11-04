@@ -1,5 +1,5 @@
 //! Create a new project without modifying an existing directory.
-use mlc_builder::project::{Project, ProjectFile, Target, TargetKind};
+use mlc_builder::project::{BuildMode, Project, ProjectFile, Target, TargetKind};
 use std::{fs, path::Path};
 
 pub(super) fn run(cwd: &Path, project: &Path) -> Result<i32, String> {
@@ -9,6 +9,8 @@ pub(super) fn run(cwd: &Path, project: &Path) -> Result<i32, String> {
         .and_then(|name| name.to_str())
         .filter(|name| !name.is_empty() && !name.contains(['/', '\\', ':']))
         .ok_or("Project must name a new directory")?;
+
+
     let config = ProjectFile {
         project: Project {
             mode: None,
@@ -28,6 +30,7 @@ pub(super) fn run(cwd: &Path, project: &Path) -> Result<i32, String> {
                 name: name.into(),
                 entry: "src/main.m2".into(),
                 kind: TargetKind::Bin,
+                profile: Some(BuildMode::Default),
             }],
         },
     };
