@@ -158,12 +158,23 @@ where
                 scope,
             });
 
+        let assignment_operator = choice((
+            operator(Token::Assign).to(None),
+            operator(Token::AddAssign).to(Some(crate::operators::Operator::Add)),
+            operator(Token::SubAssign).to(Some(crate::operators::Operator::Subtract)),
+            operator(Token::MulAssign).to(Some(crate::operators::Operator::Multiply)),
+            operator(Token::DivAssign).to(Some(crate::operators::Operator::Divide)),
+            operator(Token::RemAssign).to(Some(crate::operators::Operator::Remainder)),
+        ));
         let assignment = expression
             .clone()
-            .then_ignore(operator(Token::Assign))
+            .then(assignment_operator)
             .then(expression.clone())
             .then_ignore(semicolon.clone())
-            .map(|(target, value)| Statement::Assignment { target, value });
+            .map(|((target, op), value)| match op {
+                Some(op) => Statement::CompoundAssignment { target, op, value },
+                None => Statement::Assignment { target, value },
+            });
 
         let expression_statement = expression.then_ignore(semicolon).map(Statement::Expression);
         let anonymous = keyword(Token::Anonymous)

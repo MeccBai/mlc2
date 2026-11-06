@@ -94,6 +94,15 @@ impl Statement {
         let (stmt, span) = prototype;
 
         match stmt {
+            TempStmt::CompoundAssignment { target, op, value } => {
+                let lowered = Self::new(
+                    config,
+                    (super::compound::lower(target, op, value, span), span),
+                    symbols,
+                    context,
+                );
+                super::compound::check(lowered, config, symbols, span)
+            }
             TempStmt::VariantMatch {
                 binding,
                 value,

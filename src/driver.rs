@@ -1,6 +1,5 @@
 mod cache;
 mod clean;
-mod formatting;
 mod frontend;
 mod initialize;
 mod ir_dump;
@@ -37,7 +36,7 @@ fn run_inner(cli: Cli, progress: &Progress) -> Result<i32, String> {
         Commands::Clean => return clean::run(&root, cli.output.as_deref()),
         Commands::Setup => return setup::run(&cli, &root, progress),
         Commands::Init { project } => return initialize::run(&root, project),
-        Commands::Fmt { input } => return formatting::run(&root, input.as_deref(), progress),
+        Commands::Fmt { .. } => return Err("Use mlc fmt to invoke the formatting worker".into()),
         Commands::Ll { input } => {
             vec![(input.clone(), None, TargetKind::Bin)]
         }
@@ -320,7 +319,7 @@ fn build(
         optimize: optimized,
         output: paths.output.clone(),
         target: paths.triplet.clone(),
-        compiler_id: format!("mlc-{}-cli-v2", env!("CARGO_PKG_VERSION")),
+        compiler_id: format!("mlc-build-{}", mlc_builder::manifest::BUILD_NUMBER),
         compiler_options: vec![
             format!("kind={kind:?}"),
             format!("optimizer={optimize:?}"),
@@ -377,7 +376,7 @@ fn build(
         let object = paths.output.join("__mlc_instances.obj");
         let key = mlc_builder::artifacts::semantic_hash(&(
             &paths.triplet,
-            env!("CARGO_PKG_VERSION"),
+            mlc_builder::manifest::BUILD_NUMBER,
             &ir,
             optimized,
         ))?;

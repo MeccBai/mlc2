@@ -90,6 +90,16 @@ pub enum Token {
     LogicalNot,
     #[token("+")]
     Plus,
+    #[token("+=")]
+    AddAssign,
+    #[token("-=")]
+    SubAssign,
+    #[token("*=")]
+    MulAssign,
+    #[token("/=")]
+    DivAssign,
+    #[token("%=")]
+    RemAssign,
     #[token("-")]
     Minus,
     #[token("*")]
@@ -181,6 +191,11 @@ impl Token {
         matches!(
             self,
             Token::Assign
+                | Token::AddAssign
+                | Token::SubAssign
+                | Token::MulAssign
+                | Token::DivAssign
+                | Token::RemAssign
                 | Token::AddressOf
                 | Token::Dereference
                 | Token::Arrow

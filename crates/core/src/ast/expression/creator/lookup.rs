@@ -2,7 +2,7 @@ use crate::ast::arena::{FuncIndex, InterfaceIndex};
 use crate::ast::config::Config;
 use crate::ast::expression::Expression;
 use crate::ast::symbol_name::SymbolName;
-use crate::ast::symbols::Resolution;
+use crate::ast::symbols::{self, Resolution};
 use crate::ast::types;
 use crate::ast::{EnumBool, SymbolTable};
 use crate::diagnostic::error::{CompileError, IllegalUseError, ResolveError};
@@ -13,10 +13,7 @@ use crate::parser::out::{
 };
 
 impl Expression {
-    pub(super) fn is_receiver(
-        &self,
-        context: Option<&crate::ast::symbols::StatementContext>,
-    ) -> bool {
+    pub(super) fn is_receiver(&self, context: Option<&symbols::StatementContext>) -> bool {
         matches!(self, Self::VarValueE(variable, ..) if context
             .and_then(|context| context.lookup("self"))
             .is_some_and(|receiver| std::rc::Rc::ptr_eq(variable, receiver)))
@@ -26,7 +23,7 @@ impl Expression {
         config: &mut Config,
         temp_expr: Spanned<TempExpr>,
         symbols: &mut dyn Resolution,
-        context: Option<&crate::ast::symbols::StatementContext>,
+        context: Option<&symbols::StatementContext>,
     ) -> Option<(Expression, InterfaceIndex, bool)> {
         if config.is_poisoned() {
             return None;

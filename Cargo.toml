@@ -2,6 +2,15 @@
 name = "mlc"
 version = "0.1.0"
 edition = "2024"
+default-run = "mlc"
+
+[[bin]]
+name = "mlc-build"
+path = "src/builder_main.rs"
+
+[[bin]]
+name = "mlc-fmt"
+path = "src/formatter_main.rs"
 
 [workspace]
 members = [

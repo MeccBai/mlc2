@@ -3,7 +3,9 @@
 ```text
 MLC/
   mlc.exe
-  LLVM-C.dll                   # Windows 编译器启动依赖（如动态链接）
+  mlc-build.exe                 # 编译/构建工作进程
+  mlc-fmt.exe                   # 格式化工作进程
+  LLVM-C.dll                    # 仅 mlc-build 的启动依赖
   tools/                       # ld.lld.exe、lld-link.exe 等宿主机工具
   lib/
     universal/                 # 通用 .m2 源码
@@ -15,6 +17,11 @@ MLC/
   runtimes/
     <triplet>/                 # CRT 启动对象、基础库等链接依赖
 ```
+
+`mlc` 只解析参数并分发，`fmt` 启动同目录的 `mlc-fmt`，其他业务命令启动
+`mlc-build`。帮助和版本在分发器内直接完成。只有构建工作进程导入 LLVM-C.dll；
+分发器和格式化器不加载 LLVM。三个程序保持同目录，工作进程继承当前目录、
+标准输入输出和环境，退出码回传。开发构建请使用 `cargo build --bins`。
 
 源码搜索顺序：导入文件所在目录 → 配置的目标专用 lib 目录（按配置顺序）
 → 对应的 universal 源码目录。任何位置找到源码，都走正常源码构建流程，
@@ -34,6 +41,8 @@ build/objects/<mode>/<triplet>/lib。项目对象放在 build/objects/<mode>/<tr
 
 ```powershell
 pwsh -NoProfile -File scripts/copy_to.ps1 -Profile release -Destination F:\Develop\MLC
+# 生成供安装器封装的完整目录，缺少默认 MSVC 工具/运行库时直接失败：
+pwsh -NoProfile -File scripts/copy_to.ps1 -Profile release -Destination target/package -RequireComplete
 # 自定义工具和运行库来源：
 pwsh -NoProfile -File scripts/copy_to.ps1 -Profile debug -Destination out/MLC `
   -ToolsSource F:\Toolchain\tools -RuntimesSource F:\Toolchain\runtimes
@@ -46,8 +55,38 @@ pwsh -NoProfile -File scripts/copy_to.ps1 -Profile debug -Destination out/MLC `
 目录不存在会明确警告，脚本不会自动下载工具链或猜测系统 CRT 位置。
 
 脚本可以更新既有目录，但不会删除其中的旧文件。建议版本分发使用空目录，
-以免旧 lib 中遗留的源码优先于新的 objects。LLVM-C.dll 若不在构建输出旁，
-需要自行提供；它不是目标运行库，不能仅移动到 runtimes 后期待 Windows 自动加载。
+以免旧 lib 中遗留的源码优先于新的 objects。LLVM-C.dll 按显式 `-LlvmDllSource`、
+构建输出、SCOOP 的 llvm-dev/bin、PATH、已有目标安装目录的顺序寻找；找不到会终止。
+DLL 必须与构建时链接的 LLVM-C.lib 匹配。它不是目标运行库，不能仅移动到 runtimes。
+`-RequireComplete` 检查 lld-link.exe、llvm-ar.exe 和默认 MSVC 的六个导入库；
+不代表验证所有可选 GNU 组件、所有 DLL 的传递依赖或再分发许可。
+
+## 一键安装 / MSI（方案，尚未实现）
+
+保留两层流程：`copy_to.ps1` 生成目录包，独立安装项目将目录包封装为安装器。
+不把安装、注册表或卸载逻辑塞入编译器。
+
+需要 `.msi` 时可采用 WiX：
+
+1. 从空的 staging 目录生成 release 包，带 `-RequireComplete`，不要打包开发机残留缓存。
+2. 用 WiX 的 Files 递归收集目录，保留三个 EXE、LLVM DLL、tools/lib/objects/runtimes 的相对位置。
+3. 定义安装目录、版本、稳定的 UpgradeCode、升级/卸载行为，以及可选 PATH 注册；
+   仅追加 MLC 目录，卸载时只撤销自己添加的项，不覆盖整个 PATH。
+4. 在干净 Windows 环境验证安装、普通用户编译、升级、卸载及 DLL 依赖。
+   检查 VC Runtime 和 LLVM 所需运行时，不以开发机安装状态代替依赖验证。
+5. 发布前处理各工具和运行库所需的许可文件，并对安装包签名。
+
+若装入 Program Files，标准库缓存不能假设可写；使用用户级 LibCacheDir 或现有项目缓存回退，
+不要要求每次编译提权。安装器也不应修改或删除用户项目的 build 目录。
+
+WiX 可使用 .NET 工具或 MSBuild；生成后的 MSI 支持 Windows Installer 安装/卸载及静默模式。
+若只需要双击安装 EXE 而非 MSI，也可考虑 Inno Setup。当前脚本只生成目录包，不会生成 MSI、
+修改 PATH 或安装额外工具。
+
+参考：[WiX](https://docs.firegiant.com/wix/using-wix/)、
+[Files 目录收集](https://docs.firegiant.com/wix/schema/wxs/files/)、
+[Environment / PATH](https://docs.firegiant.com/wix/schema/wxs/environment/)、
+[msiexec 参数](https://learn.microsoft.com/en-us/windows/win32/msi/command-line-options)。
 
 ## Windows linker profiles
 

@@ -14,7 +14,9 @@ pub use storage::{Artifact, ArtifactPaths, convert_c_header, convert_toml, load,
 pub use symbols::Symbols;
 pub(crate) use symbols::has_templates;
 
-pub const FORMAT_VERSION: u32 = 6;
+/// Existing metadata/header field name; compatibility is governed only by the
+/// compiler build number, not an independently maintained format version.
+pub const FORMAT_VERSION: u32 = crate::manifest::BUILD_NUMBER;
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ObjectMode {

@@ -1,5 +1,9 @@
 # CLI
 
+CLI 由同目录的 `mlc`、`mlc-build`、`mlc-fmt` 组成，用户仍统一调用 `mlc`。
+`fmt` 分发给 mlc-fmt，其余业务命令交给 mlc-build；`--help` 和 `--version` 不启动工作进程。
+LLVM-C.dll 仅由 mlc-build 加载，格式化不依赖 LLVM。源码开发使用 `cargo build --bins`。
+
 `mlc clean` 删除当前项目的整个构建输出目录（包括所有 profile）。默认是 `build/`，
 存在 Project.toml 时使用 `Project.OutputDir`；`mlc clean -o out` 可显式指定。
 目录不存在视为成功，不清理安装目录中的标准库缓存。为避免误删，拒绝项目根目录、
@@ -29,7 +33,7 @@ runtimes，以及项目配置的输出/缓存目录。不加载 import，不要�
 格式未改变的文件不会重写，保留时间戳。
 
 ```powershell
-cargo build
+cargo build --bins
 target/debug/mlc.exe --help
 target/debug/mlc.exe build tests/fixtures/hello_world.m2 --lib-dir lib -o build
 ./build/hello_world.exe
@@ -102,6 +106,8 @@ Windows 默认使用 `x86_64-pc-windows-msvc` 和安装目录 tools 下的 `lld-
 
 ```text
 mlc.exe
+mlc-build.exe
+mlc-fmt.exe
 LLVM-C.dll
 tools/
   ld.lld.exe

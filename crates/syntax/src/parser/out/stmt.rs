@@ -26,6 +26,11 @@ pub enum TempStmt {
         branches: Vec<(Spanned<super::TempType>, TempScope)>,
     },
     Variable(TempVar),
+    CompoundAssignment {
+        target: Spanned<TempExpr>,
+        op: crate::operators::Operator,
+        value: Spanned<TempExpr>,
+    },
     Assignment {
         target: Spanned<TempExpr>,
         value: Spanned<TempExpr>,

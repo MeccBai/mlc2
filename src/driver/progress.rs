@@ -85,6 +85,7 @@ impl Progress {
         state.link_hits += usize::from(hit);
     }
 
+    #[allow(dead_code)] // Formatting and compilation use separate executables.
     pub fn formatted(&self, changed: bool) {
         let mut state = self.state();
         if changed {

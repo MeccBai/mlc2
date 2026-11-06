@@ -108,11 +108,11 @@ mlc symbols native.h   # 生成 native.sym，随后可 import native;
 
 1. Rust 工具链，支持 edition 2024。
 2. 与 `llvm-sys 231` 配套的 LLVM 23.1 开发库。当前脚本固定从 `$env:SCOOP/apps/llvm-dev/current/lib/LLVM-C.lib` 链接，需要设置 `SCOOP`。
-3. 编译器运行时需要 `LLVM-C.dll`，放在可执行文件旁或可被系统加载的位置。
+3. `mlc-build` 运行时需要 `LLVM-C.dll`，放在可执行文件旁或可被系统加载的位置；分发器 `mlc` 和格式化器 `mlc-fmt` 不加载 LLVM。三个 EXE 同目录部署。
 4. 链接 Windows 程序需要 `lld-link` 和 MSVC/UCRT/Windows SDK 库；静态归档使用 `llvm-ar`。C 插桩测试还需要 `clang-cl`，仅用于编译 C 夹具，不作为链接驱动。
 
 ```powershell
-cargo build --release
+cargo build --release --bins
 ./target/release/mlc.exe --help
 
 # 前端与格式化等组件的测试

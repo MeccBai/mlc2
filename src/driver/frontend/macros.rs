@@ -174,7 +174,8 @@ impl Expander<'_> {
                         constants.remove(&v.name);
                     }
                 }
-                TempStmt::Assignment { target, value } => {
+                TempStmt::Assignment { target, value }
+                | TempStmt::CompoundAssignment { target, value, .. } => {
                     self.expression(target, owner, &constants, depth)?;
                     self.expression(value, owner, &constants, depth)?;
                 }
@@ -541,7 +542,8 @@ fn substitute_scope(scope: &mut TempScope, names: &HashMap<String, String>) {
         match statement {
             TempStmt::Variable(v) => substitute_expr(&mut v.initializer, names),
             TempStmt::Expression(v) | TempStmt::Return(Some(v)) => substitute_expr(v, names),
-            TempStmt::Assignment { target, value } => {
+            TempStmt::Assignment { target, value }
+            | TempStmt::CompoundAssignment { target, value, .. } => {
                 substitute_expr(target, names);
                 substitute_expr(value, names)
             }

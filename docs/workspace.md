@@ -10,12 +10,16 @@
 | `mlc_optimizer` | `crates/optimizer` | 可配置 AST 优化 passes |
 | `mlc_formatter` | `crates/formatter` | 固定样式格式化、注释与 token 保真 |
 | `ffi_parser` | `crates/ffi_parser` | 受限 C 头文件声明 → Temp AST |
-| `mlc` | 根 package 的 `src` | CLI、前端与 IR 编排、构建及链接 |
+| `mlc` | 根 package 的 `src` | mlc 参数路由、mlc-build 编译构建、mlc-fmt 格式化三个独立入口 |
 
 生产依赖没有环：core → syntax；codegen → core / syntax；builder → core / syntax / ffi_parser；
 optimizer → core；formatter 和 ffi_parser → syntax；mlc 使用各层。
 codegen 的开发依赖使用 builder 验证生成的 IR，但 codegen 的生产依赖没有 LLVM。
 examples 没有生产依赖，开发依赖 syntax 验证语法；顶层 mlc 测试负责示例的编译运行验证。
+
+根 package 输出三个可执行文件，安装时同目录部署。`src/main.rs` 只连接 CLI 和
+dispatch；`builder_main.rs` 连接编译 driver；`formatter_main.rs` 只连接格式化和进度输出。
+仅 mlc-build 的运行时导入表包含 LLVM-C.dll；Rust crate 拆分和运行时 DLL 加载是两件事。
 
 现有类型的字段和语义保持不变。Operator、ValueType 和 ImportModule 由 syntax 定义，
 core 在原 AST 路径重新导出，Temp 与真 AST 仍共享同一类型，并非复制两套定义。

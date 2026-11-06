@@ -18,7 +18,7 @@ pub fn from_binary<T: DeserializeOwned>(bytes: &[u8]) -> Result<T, String> {
         return Err("Invalid binary artifact header".into());
     }
     if bytes[8..12] != super::FORMAT_VERSION.to_le_bytes() {
-        return Err("Unsupported artifact format version".into());
+        return Err("Unsupported artifact build number".into());
     }
     let mut decoder = rmp_serde::Deserializer::new(std::io::Cursor::new(&bytes[12..]));
     let value = T::deserialize(&mut decoder).map_err(|error| error.to_string())?;

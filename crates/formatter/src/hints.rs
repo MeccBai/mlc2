@@ -225,7 +225,8 @@ impl<'a> Hints<'a> {
         for (stmt, _) in &scope.statements {
             match stmt {
                 TempStmt::Variable(var) => self.variable(var),
-                TempStmt::Assignment { target, value } => {
+                TempStmt::Assignment { target, value }
+                | TempStmt::CompoundAssignment { target, value, .. } => {
                     self.expr(target);
                     self.expr(value);
                 }

@@ -7,6 +7,7 @@ fn binary_temp_roundtrip_preserves_recursive_nodes_and_rejects_corruption() {
         "unit P<T> { pub a:T; }; func<T> f(x:T) -> T { if (true) { return x; } return x; } func main() { var a = [1,2]; var p = P<i32>{1}; var s = \"hello\"; for i in [0,2] { a[i] = i; } match(1) { 1 => { return; } } }",
     );
     let bytes = to_binary(&module).unwrap();
+    assert_eq!(&bytes[8..12], &crate::manifest::BUILD_NUMBER.to_le_bytes());
     assert_eq!(from_binary::<TempModule>(&bytes).unwrap(), module);
     let text = mlc_syntax::serialization::to_toml(&GenericBundle {
         format_version: FORMAT_VERSION,
@@ -24,7 +25,7 @@ fn binary_temp_roundtrip_preserves_recursive_nodes_and_rejects_corruption() {
     assert!(
         from_binary::<TempModule>(&wrong_version)
             .unwrap_err()
-            .contains("version")
+            .contains("build number")
     );
     let mut trailing = bytes;
     trailing.push(0);

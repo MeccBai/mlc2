@@ -1,6 +1,9 @@
 //! Shared compiler distribution and backend configuration constants.
 
 pub const EXECUTABLE_NAME: &str = "mlc";
+/// Artifact/cache compatibility identity. Increment when compiler semantics or
+/// serialized layouts change; the display/package version is not a cache key.
+pub const BUILD_NUMBER: u32 = 1;
 /// Host executable suffix; independent of the compilation target.
 pub const EXE_SUFFIX: &str = std::env::consts::EXE_SUFFIX;
 pub const LIB_DIR: &str = "lib";

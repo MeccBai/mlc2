@@ -1,10 +1,10 @@
+#[allow(dead_code)]
 mod cli;
-mod driver;
-pub mod manifest;
+mod dispatch;
 
 fn main() {
     use clap::Parser;
-    match driver::run(cli::Cli::parse()) {
+    match dispatch::run(cli::Cli::parse()) {
         Ok(code) => std::process::exit(code),
         Err(error) => {
             eprintln!("{error}");

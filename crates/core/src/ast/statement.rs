@@ -1,6 +1,7 @@
 use crate::ast::TypeIndex;
 use crate::ast::expression::{Expression, FuncCall};
 use std::rc::Rc;
+mod compound;
 mod control;
 pub mod creator;
 mod exits;

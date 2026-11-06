@@ -12,8 +12,9 @@ pub fn version() -> &'static str {
             .map(|path| path.display().to_string())
             .unwrap_or_else(|| "unknown".into());
         format!(
-            "{}\nCopyright (c) 2026 Mecc\nHost: {}\nInstalled at: {}",
+            "{}\nBuild: {}\nCopyright (c) 2026 Mecc\nHost: {}\nInstalled at: {}",
             env!("CARGO_PKG_VERSION"),
+            mlc_builder::manifest::BUILD_NUMBER,
             mlc_builder::paths::HOST_TRIPLET,
             installation,
         )
@@ -149,6 +150,7 @@ mod tests {
             assert_eq!(error.kind(), clap::error::ErrorKind::DisplayVersion);
             let banner = error.to_string();
             assert!(banner.contains(env!("CARGO_PKG_VERSION")));
+            assert!(banner.contains(&format!("Build: {}", mlc_builder::manifest::BUILD_NUMBER)));
             assert!(banner.contains("Copyright (c) 2026 Mecc"));
             let executable = std::env::current_exe().unwrap();
             assert!(banner.contains(&executable.parent().unwrap().display().to_string()));

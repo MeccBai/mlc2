@@ -108,11 +108,11 @@ The current build script is configured for a Windows development environment. **
 
 1. A Rust toolchain supporting edition 2024.
 2. LLVM 23.1 development libraries matching `llvm-sys 231`. The script currently links `$env:SCOOP/apps/llvm-dev/current/lib/LLVM-C.lib`; `SCOOP` must be set.
-3. `LLVM-C.dll` must be available beside the compiler executable or through the system's DLL search path.
+3. `mlc-build` requires `LLVM-C.dll` beside its executable or through the system DLL search path. The `mlc` router and `mlc-fmt` formatter do not load LLVM. Deploy all three executables in the same directory.
 4. Windows linking requires `lld-link` and MSVC/UCRT/Windows SDK libraries; static archives use `llvm-ar`. Instrumented C tests also need `clang-cl`, used only to compile fixtures, not as the linker driver.
 
 ```powershell
-cargo build --release
+cargo build --release --bins
 ./target/release/mlc.exe --help
 
 # Frontend, header parser, and formatter tests
