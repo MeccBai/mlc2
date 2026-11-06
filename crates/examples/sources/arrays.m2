@@ -3,8 +3,8 @@
 // Expected output (/ separates lines): Hello World! / numbers[1]=25
 import std;
 
-
 using println = std::println;
+
 func main() -> i32 {
     // Arrays use [], not {}. Partial initialization warns and zero-fills.
     var numbers: [i32: 4] = [10, 20, 30, 40];

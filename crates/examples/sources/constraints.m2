@@ -3,8 +3,8 @@
 // Expected output: answer=42
 import std;
 
-
 using println = std::println;
+
 generic Integer {
     std::generic::is_integer;
 };

@@ -11,6 +11,9 @@ fn stable(source: &str) -> String {
     );
     let lexed = lexer::tokenize(&output).unwrap();
     let original = lexer::tokenize(source).unwrap();
+    let (module, _) = parser::parse(&original.tokens, source.len());
+    let sorted = imports::sorted(source, &original, &module.unwrap());
+    let original = lexer::tokenize(sorted.as_deref().unwrap_or(source)).unwrap();
     let comment_gaps = |lexed: &lexer::Lexed| {
         lexed
             .comments

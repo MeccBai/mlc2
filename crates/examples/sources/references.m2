@@ -2,11 +2,13 @@
 // Run: mlc run references.m2
 // Expected output (/ separates lines): value=42
 import std;
-using println=std::println;
 
-func increment(value:$mut i32) {
+using println = std::println;
+
+func increment(value: $mut i32) {
     $value = $value + 1;
 }
+
 
 func main() -> i32 {
     var value = 41;

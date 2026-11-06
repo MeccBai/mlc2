@@ -1,6 +1,7 @@
-//! Fixed-style, syntax-only formatting. No symbol resolution or source rewriting.
+//! Fixed-style, syntax-only formatting with import ordering. No symbol resolution.
 mod error;
 mod hints;
+mod imports;
 mod layout;
 mod render;
 mod separation;
@@ -29,8 +30,11 @@ pub fn format(source: &str) -> Result<String, FormatError> {
         ));
     }
     let module = module.ok_or_else(|| FormatError::Syntax(vec![]))?;
+    if let Some(sorted) = imports::sorted(source, &lexed, &module) {
+        return format(&sorted);
+    }
     let output = render::render(source, &lexed, &module);
-    // Formatting may change whitespace only. Guard against accidentally merging
+    // After import ordering, rendering may change whitespace only. Guard against merging
     // operators, swallowing code into a line comment, or dropping punctuation.
     let checked = lexer::tokenize(&output).map_err(|_| FormatError::InvalidOutput)?;
     if !lexed

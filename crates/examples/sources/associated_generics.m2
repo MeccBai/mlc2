@@ -4,13 +4,16 @@
 import std;
 
 using println = std::println;
-unit Base {};
+
+unit Base {
+};
 
 pub Base::func<T> swap(a: $mut T, b: $mut T) {
     val temporary = $a;
     $a = $b;
     $b = temporary;
 }
+
 
 func main() -> i32 {
     var a = 10;
@@ -22,8 +25,10 @@ func main() -> i32 {
     // Base::swap(@mut fa,@mut fb) also works, inferring f64.
     println!(
         "a={} b={} fa={} fb={}",
-        a,b,
-        fa,fb
+        a,
+        b,
+        fa,
+        fb
     );
     return 0;
 }

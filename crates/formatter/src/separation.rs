@@ -1,20 +1,31 @@
 //! Blank lines between top-level declarations, never inside a statement block.
 use mlc_syntax::{
     lexer::Lexed,
-    parser::out::{TempGlobalStmt, TempModule, TempVisibility},
+    parser::out::{TempGlobalStmt, TempModule},
 };
 
 pub(super) fn gaps(lexed: &Lexed, module: &TempModule) -> Vec<usize> {
     let mut gaps = vec![0; lexed.tokens.len() + 1];
-    for pair in module.windows(2) {
+    let mut group_count = 0;
+    for (position, pair) in module.windows(2).enumerate() {
         let (previous, _) = &pair[0];
         let (next, span) = &pair[1];
+        let category = directive(previous);
+        if category.is_some() {
+            group_count = if position > 0 && directive(&module[position - 1].0) == category {
+                group_count + 1
+            } else {
+                1
+            };
+        } else {
+            group_count = 0;
+        }
         let blank_lines = match previous {
             TempGlobalStmt::Func(_)
             | TempGlobalStmt::Interface(_)
             | TempGlobalStmt::MacroFunc(_) => 2,
             TempGlobalStmt::Unit(_) | TempGlobalStmt::Generic(_) => 1,
-            _ if directive(previous) && !directive(next) => 2,
+            _ if category.is_some() && category != directive(next) => group_count.min(2),
             _ => 0,
         };
         let index = lexed
@@ -25,13 +36,10 @@ pub(super) fn gaps(lexed: &Lexed, module: &TempModule) -> Vec<usize> {
     gaps
 }
 
-fn directive(item: &TempGlobalStmt) -> bool {
+fn directive(item: &TempGlobalStmt) -> Option<bool> {
     match item {
-        TempGlobalStmt::Import(_) => true,
-        TempGlobalStmt::Using(using) => matches!(
-            using.visibility,
-            TempVisibility::Export | TempVisibility::Api
-        ),
-        _ => false,
+        TempGlobalStmt::Import(_) => Some(false),
+        TempGlobalStmt::Using(_) => Some(true),
+        _ => None,
     }
 }
