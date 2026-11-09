@@ -134,7 +134,11 @@ fn variable_value_qualifiers_survive_source_to_ast() {
         let Statement::VariableDecl(variable) = statement else {
             panic!("variable expected");
         };
-        assert_eq!(variable.var_type.value_type(&ast.symbols.types), expected);
+        assert_eq!(
+            variable.var_type.is_immutable(&ast.symbols.types),
+            expected != ValueType::Flex
+        );
+        assert_eq!(variable.constant, expected == ValueType::Constant);
     }
     assert_eq!(main_body(&ast).len(), 3);
 }
@@ -172,10 +176,8 @@ fn native_str_literals_and_bindings_keep_compile_time_payloads() {
             ast.symbols.types.get(variable.var_type).unqualified(),
             crate::ast::types::CompileType::Str
         ));
-        assert_eq!(
-            variable.var_type.value_type(&ast.symbols.types),
-            ValueType::Constant
-        );
+        assert_eq!(variable.var_type.is_immutable(&ast.symbols.types), true);
+        assert!(variable.constant);
         assert!(matches!(
             &*variable.init_val,
             Expression::InitListE(InitialList::String { .. }, ..)
@@ -186,3 +188,38 @@ fn native_str_literals_and_bindings_keep_compile_time_payloads() {
     };
     assert!(matches!(&*length.init_val,Expression::ConstValueE(value, ..) if value.value=="7"));
 }
+
+#[test]
+fn immutable_bindings_and_constant_bindings_share_types_but_not_constantness() {
+    let ast =
+        valid("func runtime()->i32{return 7;}func main(){val a=runtime();const b=7;val c=7;}");
+    let variables = main_body(&ast)
+        .iter()
+        .map(|statement| {
+            let Statement::VariableDecl(variable) = statement else {
+                panic!("variable expected")
+            };
+            variable
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(variables[0].var_type, variables[1].var_type);
+    assert_eq!(variables[1].var_type, variables[2].var_type);
+    for (variable, constant) in variables.iter().zip([false, true, false]) {
+        assert!(variable.var_type.is_immutable(&ast.symbols));
+        assert_eq!(variable.constant, constant);
+        let value = Expression::VarValueE((*variable).clone(), (0..0).into());
+        assert_eq!(value.is_const(&ast.symbols), constant);
+    }
+    assert!(!variables[0].init_val.is_const(&ast.symbols));
+    assert!(variables[2].init_val.is_const(&ast.symbols));
+}
+
+semantic_case!(
+    immutable_binding_does_not_satisfy_const_initializer,
+    "func main(){val a=1;const b=a;}"
+);
+
+semantic_case!(
+    immutable_reference_does_not_make_its_contents_constant,
+    "func main(){val a=1;val p=@a;const b=$p;}"
+);

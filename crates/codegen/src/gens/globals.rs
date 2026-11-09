@@ -33,7 +33,7 @@ impl IrGenerator {
                 .expect("String write");
             }
             let generated = FunctionGenerator::globals(file, package);
-            generator.add_resources(&generated.resources, &generated.intrinsics);
+            generator.add_resources(&generated.resources, &generated.intrinsics, package);
             for call in &generated.calls {
                 if let Some(ty) = call.result().source {
                     generator.ensure_type(ty, package, &mut visited);

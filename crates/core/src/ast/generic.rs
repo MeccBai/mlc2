@@ -361,27 +361,27 @@ impl TypeIndex {
         if config.is_poisoned() {
             return None;
         }
-        let value = self.value_type(symbols);
+        let value = self.is_immutable(symbols);
         let ty = symbols.get_type(self).unqualified().clone();
         match ty {
             CompileType::Str | Base(_) | Enum(_) => Some(self),
             CompileType::Function(function) if !function.is_generic(symbols) => Some(self),
             CompileType::Function(function) => function
                 .instantiation(config, params, symbols, actives, span)
-                .map(|index| index.into_value_type(value, symbols)),
+                .map(|index| index.with_immutability(value, symbols)),
             CompileType::Generic(generic) => generic
                 .instantiation(config, params, symbols, span)
-                .map(|index| index.into_value_type(value, symbols)),
+                .map(|index| index.with_immutability(value, symbols)),
             CompileType::Unit(unit) if !unit.has_generic() => Some(self),
             CompileType::Unit(unit) => unit
                 .instantiation(config, params, symbols, actives, span)
-                .map(|index| index.into_value_type(value, symbols)),
+                .map(|index| index.with_immutability(value, symbols)),
             CompileType::List(list) => list
                 .instantiation(config, params, symbols, actives, span)
-                .map(|index| index.into_value_type(value, symbols)),
+                .map(|index| index.with_immutability(value, symbols)),
             CompileType::Ref(ref_type) => ref_type
                 .instantiation(config, params, symbols, actives, span)
-                .map(|index| index.into_value_type(value, symbols)),
+                .map(|index| index.with_immutability(value, symbols)),
             CompileType::Qualified { .. } => unreachable!(),
         }
     }

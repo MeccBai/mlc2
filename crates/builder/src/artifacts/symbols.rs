@@ -112,7 +112,7 @@ impl Symbols {
 pub fn has_templates(module: &TempModule) -> bool {
     module.iter().any(|(item, _)| match item {
         TempGlobalStmt::Unit(v) => !v.generics.is_empty(),
-        TempGlobalStmt::Func(v) => !v.symbol.generics.is_empty(),
+        TempGlobalStmt::Func(v) => v.symbol.constant || !v.symbol.generics.is_empty(),
         TempGlobalStmt::Interface(v) => !v.symbol.generics.is_empty(),
         TempGlobalStmt::Generic(_) | TempGlobalStmt::MacroFunc(_) => true,
         _ => false,

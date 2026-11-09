@@ -6,3 +6,5 @@ pub mod infer;
 pub use infer::TypeInfer;
 pub mod visibility;
 pub use mlc_syntax::{lexer, parser};
+
+pub mod constant_eval;

@@ -40,6 +40,7 @@ pub(super) fn object(
     triplet: &CStr,
     ir: &str,
     output: &Path,
+    o3: bool,
 ) -> Result<(), BackendError> {
     let path = output
         .to_str()
@@ -77,6 +78,18 @@ pub(super) fn object(
         let diagnostic = message(error);
         if invalid != 0 {
             return Err(BackendError::Codegen(diagnostic));
+        }
+        if o3 {
+            use llvm_sys::transforms::pass_builder::*;
+            let options = LLVMCreatePassBuilderOptions();
+            let failure = LLVMRunPasses(module.module, c"default<O3>".as_ptr(), machine, options);
+            LLVMDisposePassBuilderOptions(options);
+            if !failure.is_null() {
+                let text = llvm_sys::error::LLVMGetErrorMessage(failure);
+                let diagnostic = CStr::from_ptr(text).to_string_lossy().into_owned();
+                llvm_sys::error::LLVMDisposeErrorMessage(text);
+                return Err(BackendError::Codegen(diagnostic));
+            }
         }
         let mut error = ptr::null_mut();
         if LLVMTargetMachineEmitToFile(

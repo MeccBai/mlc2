@@ -5,7 +5,7 @@ use crate::ast::{
     expression::Expression,
     function::FuncSymbol,
     symbols::Resolution,
-    types::{CompileType, ValueType},
+    types::{CompileType},
 };
 use crate::diagnostic::error::{CompileError, IllegalUseError};
 use crate::parser::out::Span;
@@ -92,7 +92,7 @@ fn infer(
     let actual = symbols.get_type(found).unqualified().clone();
     match (target, actual) {
         (CompileType::Generic(index), _) if names.values().any(|value| *value == index) => {
-            let found = found.into_value_type(ValueType::Flex, symbols);
+            let found = found.with_immutability(false, symbols);
             if let Some(previous) = bindings.get(&index) {
                 if !previous.type_check(false, &found, symbols) {
                     return Err(IllegalUseError::GenericInferenceConflict {

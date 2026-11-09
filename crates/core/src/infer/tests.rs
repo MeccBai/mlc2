@@ -41,6 +41,7 @@ fn literal(value: &str, symbols: &SymbolTable) -> Expression {
 fn variable(ty: TypeIndex) -> Expression {
     Expression::VarValueE(
         Rc::new(Variable {
+            constant: false,
             read_count: Default::default(),
             declaration_span: (0..1).into(),
             name: "value".into(),
@@ -58,7 +59,7 @@ fn expression_inference_reports_value_place_and_reference_mutability() {
     let ty = symbols.get_base(DataType::Integer, 32, true);
     for mutable in [false, true] {
         let reference = ty.make_ref(&mut symbols, mutable);
-        let pointer = variable(reference.into_value_type(ValueType::Final, &mut symbols));
+        let pointer = variable(reference.with_immutability(true, &mut symbols));
         let dereference = Expression::UnaryExprE(
             UnaryExpr::Operator {
                 op: Operator::Dereference,
@@ -72,21 +73,14 @@ fn expression_inference_reports_value_place_and_reference_mutability() {
             panic!()
         };
         assert_eq!(result.category, ValueCategory::Place { mutable });
-        assert_eq!(
-            result.ty.value_type(&symbols),
-            if mutable {
-                ValueType::Flex
-            } else {
-                ValueType::Final
-            }
-        );
+        assert_eq!(result.ty.is_immutable(&symbols), !mutable);
     }
     let value = literal("42", &symbols);
     let Inference::Value(result) = TypeInfer::new(&mut config, &mut symbols).infer(&value) else {
         panic!()
     };
     assert_eq!(result.category, ValueCategory::Value);
-    assert_eq!(result.ty.value_type(&symbols), ValueType::Constant);
+    assert_eq!(result.ty.is_immutable(&symbols), true);
 }
 
 #[test]

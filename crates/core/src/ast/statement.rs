@@ -12,6 +12,8 @@ mod variant;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Variable {
+    /// Whether this binding has a compile-time value, independently of type immutability.
+    pub constant: bool,
     /// Source references, excluding scope bookkeeping and constant folding.
     pub read_count: std::cell::Cell<usize>,
     pub declaration_span: crate::parser::out::Span,

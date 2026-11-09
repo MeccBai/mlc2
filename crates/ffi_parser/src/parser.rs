@@ -155,6 +155,7 @@ impl Parser {
         Ok(TempFunc {
             body: None,
             symbol: TempFuncSymbol {
+                constant: false,
                 visibility: TempVisibility::Export,
                 name,
                 name_span,

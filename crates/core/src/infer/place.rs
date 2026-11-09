@@ -2,7 +2,7 @@ use super::TypeInfer;
 use crate::ast::{
     expression::{Access, CompAtom, Expression, InitialList, UnaryExpr, operators::Operator},
     symbols::Resolution,
-    types::{CompileType, ValueType},
+    types::CompileType,
 };
 impl TypeInfer<'_> {
     pub(crate) fn atom_assignable(&mut self, expression: &CompAtom) -> bool {
@@ -13,7 +13,7 @@ impl TypeInfer<'_> {
         let config = &mut *self.config;
         let symbols = &mut *self.symbols;
         match expression {
-            CompAtom::VarValueA(var, ..) => var.var_type.value_type(symbols) == ValueType::Flex,
+            CompAtom::VarValueA(var, ..) => !var.var_type.is_immutable(symbols),
             CompAtom::UnaryExprA(unary, ..) => unary.is_left_value(config, symbols),
             _ => false,
         }
@@ -26,7 +26,7 @@ impl TypeInfer<'_> {
         let config = &mut *self.config;
         let symbols = &mut *self.symbols;
         match expression {
-            Expression::VarValueE(var, ..) => var.var_type.value_type(symbols) == ValueType::Flex,
+            Expression::VarValueE(var, ..) => !var.var_type.is_immutable(symbols),
             Expression::UnaryExprE(unary, ..) => unary.is_left_value(config, symbols),
             _ => false,
         }

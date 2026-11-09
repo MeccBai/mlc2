@@ -242,3 +242,56 @@ fn body_error_checks_concrete_return_type_and_cleans_actives() {
     assert!(ast.symbols.function_instances.is_empty());
     assert!(actives.borrow().is_empty());
 }
+
+#[test]
+fn function_constant_flag_survives_lowering_and_generic_instantiation() {
+    use crate::parser::out::TempGlobalStmt;
+    let source = "func ordinary() {} func<T> identity(value:T)->T {return value;} func main() {var a=identity<i32>(1);}";
+    let tokens = crate::lexer::tokenize(source).unwrap();
+    let (module, errors) = crate::parser::parse(&tokens.tokens, source.len());
+    assert!(errors.is_empty());
+    let mut module = module.unwrap();
+    for (item, _) in &mut module {
+        if let TempGlobalStmt::Func(function) = item {
+            assert!(!function.symbol.constant);
+            function.symbol.constant = function.symbol.name != "main";
+        }
+    }
+    let ast = AnalyzedAst::new(config(), module);
+    assert!(ast.config.error_handle().errors.is_empty());
+    for name in ["ordinary", "main"] {
+        let index = ast.symbols.functions.get_by_name(&name.to_owned()).unwrap();
+        assert_eq!(
+            ast.symbols.functions.get(index).constant,
+            name == "ordinary"
+        );
+    }
+    let instance = ast.symbols.function_instances.values().next().unwrap();
+    assert!(ast.symbols.functions.get(instance.symbol).constant);
+}
+
+#[test]
+fn constant_check_validates_existing_function_bodies() {
+    for source in [
+        "func runtime()->i32{return 1;}func bad()->i32{return runtime();}",
+        "global var shared=1;func bad()->i32{return shared;}",
+    ] {
+        let mut ast = compile(source);
+        let index = ast
+            .symbols
+            .functions
+            .get_by_name(&"bad".to_string())
+            .unwrap();
+        ast.symbols.functions.get_mut(index).constant = true;
+        let body = ast
+            .body
+            .iter()
+            .find_map(|f| match f {
+                crate::ast::Function::Func(f) if f.symbol == index => Some(f.clone()),
+                _ => None,
+            })
+            .unwrap();
+        assert!(!body.constant_check(&ast.symbols, &mut ast.config));
+        assert!(ast.config.is_poisoned());
+    }
+}

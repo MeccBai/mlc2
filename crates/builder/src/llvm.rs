@@ -47,6 +47,14 @@ impl IrCompiler {
         config: BackendConfig,
         level: LLVMCodeGenOptLevel,
     ) -> Result<Self, BackendError> {
+        Self::with_relocation(triplet, config, level, LLVMRelocMode::LLVMRelocDefault)
+    }
+    fn with_relocation(
+        triplet: &str,
+        config: BackendConfig,
+        level: LLVMCodeGenOptLevel,
+        relocation: LLVMRelocMode,
+    ) -> Result<Self, BackendError> {
         target::initialize(triplet)?;
         let triplet = CString::new(triplet).map_err(|e| BackendError::Config(e.to_string()))?;
         let mut target = std::ptr::null_mut();
@@ -61,7 +69,7 @@ impl IrCompiler {
                 c"generic".as_ptr(),
                 c"".as_ptr(),
                 level,
-                LLVMRelocMode::LLVMRelocDefault,
+                relocation,
                 LLVMCodeModel::LLVMCodeModelDefault,
             );
             if machine.is_null() {
@@ -77,12 +85,39 @@ impl IrCompiler {
         }
     }
 
+    pub fn target_layout(&self) -> mlc_core::ast::config::TargetLayout {
+        unsafe {
+            let data = llvm_sys::target_machine::LLVMCreateTargetDataLayout(self.machine);
+            let context = llvm_sys::core::LLVMContextCreate();
+            let pointer = llvm_sys::core::LLVMPointerTypeInContext(context, 0);
+            let layout = mlc_core::ast::config::TargetLayout {
+                ptr_size: llvm_sys::target::LLVMPointerSize(data) as usize,
+                ptr_align: llvm_sys::target::LLVMABIAlignmentOfType(data, pointer) as usize,
+            };
+            llvm_sys::core::LLVMContextDispose(context);
+            llvm_sys::target::LLVMDisposeTargetData(data);
+            layout
+        }
+    }
+
+    pub fn with_o3(triplet: &str) -> Result<Self, BackendError> {
+        Self::with_relocation(
+            triplet,
+            BackendConfig::current()?,
+            LLVMCodeGenOptLevel::LLVMCodeGenLevelAggressive,
+            LLVMRelocMode::LLVMRelocPIC,
+        )
+    }
+    pub fn emit_o3(&self, ir: String, output: &Path) -> Result<(), BackendError> {
+        emit::object(self.machine, &self.triplet, &ir, output, true)
+    }
+
     pub fn config(&self) -> &BackendConfig {
         &self.config
     }
 
     pub fn emit(&self, ir: String, output: &Path) -> Result<(), BackendError> {
-        emit::object(self.machine, &self.triplet, &ir, output)?;
+        emit::object(self.machine, &self.triplet, &ir, output, false)?;
         if ir.contains("!llvm.dbg.cu")
             && self
                 .triplet

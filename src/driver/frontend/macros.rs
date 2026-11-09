@@ -426,6 +426,7 @@ impl Expander<'_> {
                 self.scope(&mut body, def.owner, &helper_constants, depth + 1)?;
                 let function = TempFunc {
                     symbol: TempFuncSymbol {
+                        constant: false,
                         visibility: TempVisibility::Export,
                         name: helper.clone(),
                         name_span: span,

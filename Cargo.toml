@@ -52,6 +52,8 @@ tempfile = "3"
 clap = { version = "4.6", features = ["derive"] }
 
 [dependencies]
+serde.workspace = true
+serde_json.workspace = true
 mlc_formatter.workspace = true
 mlc_optimizer.workspace = true
 mlc_syntax.workspace = true

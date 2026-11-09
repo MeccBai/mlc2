@@ -51,7 +51,12 @@ fn intrinsic(name: &str, args: Vec<TypedValue>) -> Instruction {
     }
 }
 impl IrGenerator {
-    pub(super) fn add_resources(&mut self, resources: &[Instruction], intrinsics: &[String]) {
+    pub(super) fn add_resources(
+        &mut self,
+        resources: &[Instruction],
+        intrinsics: &[String],
+        package: &crate::ast::symbols::PackageSymbolTable,
+    ) {
         for resource in resources {
             let Instruction::StringConstant { name, .. } = resource else {
                 unreachable!()
@@ -63,8 +68,12 @@ impl IrGenerator {
         for name in intrinsics {
             if name == "malloc" || name == "free" || name == "abort" {
                 if self.remember_symbol(name.clone()) {
+                    let malloc = format!(
+                        "declare ptr @malloc(i{})",
+                        crate::ast::types::TypeLookup::target_layout(package).ptr_size * 8
+                    );
                     let declaration = if name == "malloc" {
-                        "declare ptr @malloc(i64)"
+                        &malloc
                     } else if name == "free" {
                         "declare void @free(ptr)"
                     } else {

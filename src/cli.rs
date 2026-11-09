@@ -12,9 +12,8 @@ pub fn version() -> &'static str {
             .map(|path| path.display().to_string())
             .unwrap_or_else(|| "unknown".into());
         format!(
-            "{}\nBuild: {}\nCopyright (c) 2026 Mecc\nHost: {}\nInstalled at: {}",
+            "{}\nCopyright (c) 2026 Mecc\nHost: {}\nInstalled at: {}",
             env!("CARGO_PKG_VERSION"),
-            mlc_builder::manifest::BUILD_NUMBER,
             mlc_builder::paths::HOST_TRIPLET,
             installation,
         )

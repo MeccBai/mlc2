@@ -18,7 +18,6 @@ pub struct RefType {
     pub ownership: bool,
 }
 
-const REF_SIZE: usize = 8;
 #[cfg(test)]
 mod tests;
 
@@ -80,11 +79,11 @@ impl RefType {
         (self.level > 1).then(|| Self::new(self.base, self.level - 1, self.mut_base))
     }
 
-    pub fn size(&self) -> usize {
-        REF_SIZE
+    pub fn size(&self, arena: &(impl crate::ast::types::TypeLookup + ?Sized)) -> usize {
+        arena.target_layout().ptr_size
     }
-    pub fn align(&self) -> usize {
-        REF_SIZE
+    pub fn align(&self, arena: &(impl crate::ast::types::TypeLookup + ?Sized)) -> usize {
+        arena.target_layout().ptr_align
     }
 
     pub fn dump(&self, arena: &(impl crate::ast::types::TypeLookup + ?Sized)) -> String {

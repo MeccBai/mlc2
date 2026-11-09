@@ -140,3 +140,22 @@ fn universal_fixed_width_headers_import_across_supported_targets() {
         ));
     }
 }
+
+#[test]
+fn constant_functions_cannot_call_imported_c_symbols() {
+    let root = tempfile::tempdir().unwrap();
+    fs::write(root.path().join("native.h"), "int32_t abs(int32_t value);").unwrap();
+    success(&invoke(root.path(), &["symbols", "native.h"]));
+    fs::write(
+        root.path().join("app.m2"),
+        "import native;const func bad()->i32{return native::abs(-7);}func main(){}",
+    )
+    .unwrap();
+    let output = invoke(root.path(), &["ll", "app.m2"]);
+    assert!(!output.status.success());
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("cannot call C functions"),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}

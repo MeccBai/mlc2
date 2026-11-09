@@ -99,6 +99,7 @@ impl Statement {
             }
             let var_type = candidate.make_ref(symbols, mutable);
             let variable = Rc::new(Variable {
+                constant: false,
                 read_count: Default::default(),
                 declaration_span: binding.1,
                 name: binding.0.clone(),

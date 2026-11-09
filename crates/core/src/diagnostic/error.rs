@@ -40,6 +40,7 @@ pub enum ResolveError {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum IllegalUseError {
+    ConstantEvaluation { reason: String },
     NonConstantMatchCase,
     MissingDefaultBranch,
     ResourceRequiresOwner,

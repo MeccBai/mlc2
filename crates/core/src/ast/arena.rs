@@ -69,6 +69,7 @@ impl<T> ArenaIndex<T> {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NamedArena<T> {
+    pub layout: crate::ast::config::TargetLayout,
     file_id: FileId,
     values: Vec<T>,
     by_name: HashMap<Ident, ArenaIndex<T>>,
@@ -91,6 +92,7 @@ impl<T> NamedArena<T> {
 
     pub fn for_file(file_id: FileId) -> Self {
         Self {
+            layout: Default::default(),
             file_id,
             values: Vec::new(),
             by_name: HashMap::new(),

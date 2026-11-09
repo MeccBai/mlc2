@@ -3,7 +3,7 @@ use crate::ast::{builtins::Builtin, expression::FuncCall};
 use crate::ast::{
     expression::{Access, CompAtom, Expression, InitialList, UnaryExpr, operators::Operator},
     symbols::Resolution,
-    types::{CompileType, ValueType},
+    types::CompileType,
 };
 impl TypeInfer<'_> {
     pub(crate) fn atom_is_constant(expression: &CompAtom, symbols: &dyn Resolution) -> bool {
@@ -14,7 +14,7 @@ impl TypeInfer<'_> {
                 .iter()
                 .all(|member| member.is_const(symbols)),
             CompAtom::FuncCallA(call, ..) => call.is_const(symbols),
-            CompAtom::VarValueA(var, ..) => var.var_type.value_type(symbols) == ValueType::Constant,
+            CompAtom::VarValueA(var, ..) => var.constant,
             CompAtom::UnaryExprA(unary, ..) => unary.is_const(symbols),
             _ => false,
         }
@@ -27,9 +27,7 @@ impl TypeInfer<'_> {
                 .iter()
                 .all(|member| member.is_const(symbols)),
             Expression::UnaryExprE(unary, ..) => unary.is_const(symbols),
-            Expression::VarValueE(var, ..) => {
-                var.var_type.value_type(symbols) == ValueType::Constant
-            }
+            Expression::VarValueE(var, ..) => var.constant,
             Expression::InitListE(
                 InitialList::Array { values, .. } | InitialList::List { values, .. },
                 ..,
@@ -55,7 +53,7 @@ impl TypeInfer<'_> {
     pub(crate) fn call_is_constant(expression: &FuncCall, symbols: &dyn Resolution) -> bool {
         expression.callee.is_none()
             && matches!(expression.func, crate::ast::symbols::EnumBool::False(index)
-            if matches!(symbols.get_function_regular(index).builtin(), Some(Builtin::Cast | Builtin::ConstCStr | Builtin::StrLen))
+            if (symbols.get_function_regular(index).constant || matches!(symbols.get_function_regular(index).builtin(), Some(Builtin::Cast | Builtin::ConstCStr | Builtin::StrLen)))
                 && expression.args.iter().all(|argument| argument.is_const(symbols)))
     }
 }

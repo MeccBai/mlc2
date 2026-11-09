@@ -46,19 +46,20 @@ pub enum CompileType {
     List(ListType),
     Enum(EnumType),
     Generic(GenericIndex),
+    /// Write protection only; compile-time availability belongs to values and bindings.
     Qualified {
         base: Box<CompileType>,
-        value: ValueType,
+        immut: bool,
     },
 }
 
 pub use mlc_syntax::ValueType;
 
 impl CompileType {
-    pub fn value_type(&self) -> ValueType {
+    pub fn is_immutable(&self) -> bool {
         match self {
-            Self::Qualified { value, .. } => *value,
-            _ => ValueType::Flex,
+            Self::Qualified { immut, .. } => *immut,
+            _ => false,
         }
     }
 
@@ -85,7 +86,9 @@ impl CompileType {
         match self {
             Self::Str => "str".into(),
             Self::Function(function) => function.format(arena),
-            Self::Qualified { base, value } => format!("{}{}", value.prefix(), base.format(arena)),
+            Self::Qualified { base, immut } => {
+                format!("{}{}", if *immut { "val " } else { "" }, base.format(arena))
+            }
             Base(base_type) => base_type.name(),
             Ref(ref_type) => ref_type.format(arena),
             Unit(unit_type) => unit_type.format(),
@@ -99,7 +102,9 @@ impl CompileType {
         match self {
             Self::Str => "str".into(),
             Self::Function(function) => function.format(arena),
-            Self::Qualified { base, value } => format!("{}{}", value.prefix(), base.dump(arena)),
+            Self::Qualified { base, immut } => {
+                format!("{}{}", if *immut { "val " } else { "" }, base.dump(arena))
+            }
             Base(base) => base.dump(),
             Ref(reference) => reference.dump(arena),
             Unit(unit) => unit.dump(arena),
@@ -111,11 +116,16 @@ impl CompileType {
 
     pub fn size(&self, arena: &(impl crate::ast::types::TypeLookup + ?Sized)) -> usize {
         match self {
-            Self::Str => 16,
-            Self::Function(_) => 8,
+            Self::Str => arena
+                .target_layout()
+                .ptr_size
+                .next_multiple_of(8)
+                .saturating_add(8)
+                .next_multiple_of(arena.target_layout().ptr_align.max(8)),
+            Self::Function(_) => arena.target_layout().ptr_size,
             Self::Qualified { base, .. } => base.size(arena),
             Base(base) => base.size(),
-            Ref(reference) => reference.size(),
+            Ref(reference) => reference.size(arena),
             Unit(unit) => unit.size(arena),
             List(list) => list.size(arena),
             Enum(enm) => enm.size(),
@@ -146,47 +156,42 @@ impl TypeArena {
 }
 
 impl TypeIndex {
-    pub fn value_type(&self, arena: &(impl crate::ast::types::TypeLookup + ?Sized)) -> ValueType {
-        arena.get_type(*self).value_type()
+    pub fn is_immutable(&self, arena: &(impl crate::ast::types::TypeLookup + ?Sized)) -> bool {
+        arena.get_type(*self).is_immutable()
     }
 
-    pub fn into_value_type(
+    pub fn with_immutability(
         self,
-        value: ValueType,
+        immut: bool,
         arena: &mut (impl crate::ast::types::TypeStorage + ?Sized),
     ) -> Self {
-        if self.is_empty() {
-            return self;
-        }
-        if self.value_type(arena) == value {
+        if self.is_empty() || self.is_immutable(arena) == immut {
             return self;
         }
         let base = arena.get_type(self).unqualified().clone();
-        let qualified = match value {
-            ValueType::Flex => base,
-            _ => CompileType::Qualified {
+        let qualified = if immut {
+            CompileType::Qualified {
                 base: Box::new(base),
-                value,
-            },
+                immut: true,
+            }
+        } else {
+            base
         };
         let name = qualified.format(arena);
         arena.insert_type(get_ident(&name), qualified)
     }
-
-    pub fn into(
-        self,
-        value: ValueType,
-        arena: &mut (impl crate::ast::types::TypeStorage + ?Sized),
-    ) -> Self {
-        self.into_value_type(value, arena)
-    }
     pub fn size(&self, arena: &(impl crate::ast::types::TypeLookup + ?Sized)) -> usize {
         let ty = arena.get_type(*self).unqualified();
         match ty {
-            CompileType::Str => 16,
-            CompileType::Function(_) => 8,
+            CompileType::Str => arena
+                .target_layout()
+                .ptr_size
+                .next_multiple_of(8)
+                .saturating_add(8)
+                .next_multiple_of(arena.target_layout().ptr_align.max(8)),
+            CompileType::Function(_) => arena.target_layout().ptr_size,
             Base(base) => base.size(),
-            Ref(ref_type) => ref_type.size(),
+            Ref(ref_type) => ref_type.size(arena),
             Unit(unit) => unit.size(arena),
             List(list) => list.size(arena),
             Enum(enm) => enm.size(),
@@ -199,10 +204,10 @@ impl TypeIndex {
     pub fn align(&self, arena: &(impl crate::ast::types::TypeLookup + ?Sized)) -> usize {
         let ty = arena.get_type(*self).unqualified();
         match ty {
-            CompileType::Str => 8,
-            CompileType::Function(_) => 8,
+            CompileType::Str => arena.target_layout().ptr_align.max(8),
+            CompileType::Function(_) => arena.target_layout().ptr_align,
             Base(base) => base.align(),
-            Ref(ref_type) => ref_type.align(),
+            Ref(ref_type) => ref_type.align(arena),
             Unit(unit) => unit.align(arena),
             List(list) => list.align(arena),
             Enum(enm) => enm.align(),
@@ -367,12 +372,8 @@ impl TypeIndex {
             Ref(ref_type) => {
                 let mutable = ref_type.mut_base;
                 ref_type.clone().deref(arena).map(|base| {
-                    let value = if mutable {
-                        ValueType::Flex
-                    } else {
-                        ValueType::Final
-                    };
-                    base.into_value_type(value, arena)
+                    let value = !mutable;
+                    base.with_immutability(value, arena)
                 })
             }
             _ => ice("Non-ref type cannot be de referenced."),
@@ -384,7 +385,7 @@ impl TypeIndex {
         arena: &mut (impl crate::ast::types::TypeStorage + ?Sized),
         mut_base: bool,
     ) -> TypeIndex {
-        let base = self.into_value_type(ValueType::Flex, arena);
+        let base = self.with_immutability(false, arena);
         let ty = arena.get_type(base).unqualified();
         match ty {
             Ref(ref_type) if !ref_type.ownership => {

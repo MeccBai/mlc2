@@ -75,6 +75,7 @@ impl fmt::Display for IllegalUseError {
             InvalidFunctionPointerOperation => "Function pointers support calling, copying and borrowing, not arithmetic or value matching",
             FunctionPointerRequiresInitializer => "Every function pointer array element must be initialized; null function pointers are not supported",
             ReservedDeconstruct => "Unit deconstruct is generated automatically and cannot be defined by the user",
+            ConstantEvaluation { reason } => return write!(f, "Compile-time evaluation: {reason}"),
             NonConstantMatchCase => "Match case values must be compile-time constants",
             MissingDefaultBranch => "Match requires a default branch: _ => { ... }",
             ResourceRequiresOwner => "A temporary resource requires an explicit res owner",

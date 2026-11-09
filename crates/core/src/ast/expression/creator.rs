@@ -19,6 +19,7 @@ use super::{
 use crate::ast::symbol_name::SymbolName;
 use crate::ast::types::CompileType;
 use crate::ast::types::ListType;
+use crate::ast::types::base_type::DataType;
 use crate::ast::{
     EnumBool, SymbolTable, TypeIndex, config::Config, expression::Expression::InitListE,
     statement::Variable, types::resolve_type,
@@ -50,6 +51,11 @@ impl Expression {
             return Self::Poison(span);
         }
         let expression = Self::create(config, temp_expr, symbols, context);
+        if !config.is_poisoned() {
+            if let Some(context) = context {
+                expression.check_constant_context(symbols, config, context);
+            }
+        }
         if config.is_poisoned() {
             Self::Poison(span)
         } else {
@@ -211,7 +217,7 @@ impl Expression {
                         span,
                     );
                 }
-                let expressions = operands
+                let mut expressions = operands
                     .into_iter()
                     .map(|operand| {
                         let expr = Self::new(config, operand, symbols, context);
@@ -252,6 +258,46 @@ impl Expression {
                     }
                 });
 
+                // Give integer constants the operand type before lowering comparisons
+                // or arithmetic. A comparison's result type is bool, not its input type.
+                let order = expressions
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(index, value)| (!value.is_const(symbols)).then_some(index))
+                    .chain(0..expressions.len())
+                    .collect::<Vec<_>>();
+                let target = order.into_iter().find_map(|index| {
+                    let ty = expressions[index].type_inference(config, symbols);
+                    if ty.is_empty() {
+                        return None;
+                    }
+                    matches!(
+                        symbols.get_type(ty).unqualified(),
+                        CompileType::Base(base) if base.data_type() == DataType::Integer
+                    )
+                    .then_some(ty)
+                });
+                if let Some(target) = target {
+                    let target = target.with_immutability(false, symbols);
+                    for atom in &mut expressions {
+                        let ty = atom.type_inference(config, symbols);
+                        if atom.is_const(symbols)
+                            && !ty.is_empty()
+                            && matches!(symbols.get_type(ty).unqualified(), CompileType::Base(base) if base.data_type()==DataType::Integer)
+                        {
+                            if ty.with_immutability(false, symbols) == target {
+                                continue;
+                            }
+                            let value = atom.clone().to_expression().const_fold(config, symbols);
+                            value.check_constant_range(target, config, symbols, value.span());
+                            if config.is_poisoned() {
+                                return Self::Poison(span);
+                            }
+                            *atom =
+                                CompAtom::from_expr(value.normalize_initializer(target, symbols));
+                        }
+                    }
+                }
                 Expression::CompositeE(
                     Composite {
                         members: expressions,
@@ -446,7 +492,7 @@ impl Expression {
                 let ty = if let Some(first) = values.first() {
                     let element_type = first
                         .type_inference(config, symbols)
-                        .into(crate::ast::types::ValueType::Flex, symbols);
+                        .with_immutability(false, symbols);
                     if element_type.is_empty() {
                         TypeIndex::empty()
                     } else {

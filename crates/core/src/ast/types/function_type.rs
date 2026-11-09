@@ -51,6 +51,7 @@ impl FunctionType {
         ty.signature = symbols.local_mut().functions.insert(
             name.clone(),
             FuncSymbol {
+                constant: false,
                 span: (0..0).into(),
                 name,
                 params,

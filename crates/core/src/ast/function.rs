@@ -3,7 +3,7 @@ use crate::visibility::TempVisibilityExt;
 use std::collections::{HashMap, HashSet};
 
 use crate::ast::arena::{FuncIndex, InterfaceIndex, get_ident};
-use crate::ast::attribute::{self, FuncAttibute};
+use crate::ast::attribute::{self, FuncAttibute, validate};
 use crate::ast::symbol_name::SymbolName;
 use crate::ast::types::resolve_type;
 use crate::ast::{Config, GenericIndex, TypeIndex, builtins};
@@ -18,6 +18,7 @@ use crate::parser::out::{TempFuncSymbol, TempInterfaceSymbol, TempType, TempVisi
 
 pub(crate) mod bindings;
 pub(crate) mod instantiate;
+pub(crate) mod constant;
 pub use instantiate::InstantiationActives;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -29,6 +30,7 @@ pub struct FuncBody {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FuncSymbol {
+    pub constant: bool,
     pub span: Span,
     pub name: String,
     pub params: Vec<(TypeIndex, String)>,
@@ -76,12 +78,10 @@ impl FuncSymbol {
     ) -> (Self, Span) {
         let name_span = prototype.name_span;
         let mut attributes = FuncAttibute::parse(config, prototype.attributes, name_span);
-        if let Some(kind) =
-            builtins::module_builtin(&config.symbol_prefix(), &prototype.name)
-        {
+        if let Some(kind) = builtins::module_builtin(&config.symbol_prefix(), &prototype.name) {
             attributes.insert(FuncAttibute::Builtin(kind));
         }
-        crate::ast::attribute::validate::callable(
+        validate::callable(
             config,
             &attributes,
             !prototype.generics.is_empty(),
@@ -98,13 +98,7 @@ impl FuncSymbol {
             symbols,
         );
 
-        crate::ast::attribute::validate::parameters(
-            config,
-            &attributes,
-            &params,
-            symbols,
-            name_span,
-        );
+        validate::parameters(config, &attributes, &params, symbols, name_span);
         (
             Self {
                 span: name_span,
@@ -114,6 +108,7 @@ impl FuncSymbol {
                 generics,
                 generic_map,
                 attributes,
+                constant: prototype.constant,
                 exported: prototype.visibility.normal_export(config, &name_span),
             },
             name_span,
@@ -145,11 +140,9 @@ impl FuncBody {
         };
 
         Statement::warn_unused(&body, config);
-        Self {
-            span: symbols.get_function_regular(index).span,
-            symbol: index,
-            body,
-        }
+        let result = Self { span: symbols.get_function_regular(index).span, symbol: index, body };
+        result.constant_check(symbols, config);
+        result
     }
 }
 
@@ -220,13 +213,7 @@ impl InterfaceSymbol {
                 name_span,
             );
         }
-        attribute::validate::parameters(
-            config,
-            &attributes,
-            &params,
-            symbols,
-            name_span,
-        );
+        attribute::validate::parameters(config, &attributes, &params, symbols, name_span);
         let receiver_type = (prototype.has_self && !owner.is_empty())
             .then(|| owner.make_ref(symbols, prototype.mutable));
         (

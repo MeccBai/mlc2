@@ -104,6 +104,7 @@ impl FunctionGenerator<'_> {
             .unwrap_or_else(|| fail("Missing match scrutinee type"));
         self.bindings.insert(temporary.clone(), binding);
         let variable = std::rc::Rc::new(crate::ast::statement::Variable {
+            constant: false,
             read_count: Default::default(),
             declaration_span: (0..0).into(),
             name: temporary.clone(),

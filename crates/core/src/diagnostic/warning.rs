@@ -4,6 +4,8 @@ use crate::lexer::Span;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Warning {
+    ConstantPointer,
+    ConstantTarget { host: String, target: String },
     UnusedVariable { name: String },
     AttributeNotFound,
     ArrayInitializerZeroFilled { supplied: usize, length: usize },
@@ -12,6 +14,8 @@ pub enum Warning {
 impl std::fmt::Display for Warning {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Self::ConstantPointer => write!(f, "Compile-time function uses pointers; pointer validity and lifetime are the caller's responsibility"),
+            Self::ConstantTarget { host, target } => write!(f, "Compile-time code runs on {host}, while the output target is {target}; target layouts are checked before embedding results"),
             Self::UnusedVariable { name } => write!(f, "Variable `{name}` is never used"),
             Self::AttributeNotFound => write!(f, "Unknown attribute"),
             Self::ArrayInitializerZeroFilled { supplied, length } => write!(

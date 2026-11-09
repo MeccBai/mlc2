@@ -57,6 +57,9 @@ impl GlobalConfig {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Config {
+    pub ptr_size: usize,
+    pub ptr_align: usize,
+    suppress_pointer_warning: bool,
     statement_locations: bool,
     file_id: FileId,
     system_path: Vec<String>,
@@ -79,6 +82,9 @@ impl Config {
     ) -> Self {
         let poisoned = !err_h.errors.is_empty();
         Self {
+            ptr_size: std::mem::size_of::<usize>(),
+            ptr_align: std::mem::align_of::<usize>(),
+            suppress_pointer_warning: false,
             statement_locations: false,
             file_id,
             system_path,
@@ -88,6 +94,24 @@ impl Config {
             warning_h,
             poisoned,
             source_lines: None,
+        }
+    }
+
+    pub(crate) fn suppress_pointer_warning(&self) -> bool {
+        self.suppress_pointer_warning
+    }
+    pub(crate) fn set_suppress_pointer_warning(&mut self, value: bool) {
+        self.suppress_pointer_warning = value;
+    }
+    pub fn set_target_layout(&mut self, layout: TargetLayout) {
+        assert!(layout.ptr_size > 0 && layout.ptr_align.is_power_of_two());
+        self.ptr_size = layout.ptr_size;
+        self.ptr_align = layout.ptr_align;
+    }
+    pub fn target_layout(&self) -> TargetLayout {
+        TargetLayout {
+            ptr_size: self.ptr_size,
+            ptr_align: self.ptr_align,
         }
     }
 
@@ -159,3 +183,17 @@ impl Config {
 
 #[cfg(test)]
 mod tests;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TargetLayout {
+    pub ptr_size: usize,
+    pub ptr_align: usize,
+}
+impl Default for TargetLayout {
+    fn default() -> Self {
+        Self {
+            ptr_size: std::mem::size_of::<usize>(),
+            ptr_align: std::mem::align_of::<usize>(),
+        }
+    }
+}

@@ -7,7 +7,7 @@ use crate::ast::symbols::Resolution;
 use crate::ast::{
     config::Config,
     symbols::SymbolTable,
-    types::{CompileType, ValueType, base_type::DataType},
+    types::{CompileType, base_type::DataType},
 };
 use std::ops::Deref;
 impl<'a, S> TypeInfer<'a, S>
@@ -22,9 +22,7 @@ where
             return Expression::Poison(span);
         }
         match expression {
-            Expression::VarValueE(var, ..)
-                if var.var_type.value_type(symbols) == ValueType::Constant =>
-            {
+            Expression::VarValueE(var, ..) if var.constant => {
                 (*var.init_val).clone().with_span(span)
             }
             Expression::CompositeE(mut c, ..) => {
@@ -88,6 +86,9 @@ where
                         }
                     }
                 }
+                if let Some(value) = crate::constant_eval::evaluate(&call, config, symbols, span) {
+                    return value;
+                }
                 Expression::FuncCallE(call, span)
             }
             Expression::UnaryExprE(
@@ -121,6 +122,70 @@ where
                         op: Operator::Negate,
                         value: Box::new(value),
                     },
+                    span,
+                )
+            }
+            Expression::UnaryExprE(
+                UnaryExpr::Access(Access::Member {
+                    base,
+                    indirect: false,
+                    name,
+                }),
+                ..,
+            ) => {
+                let folded = base.clone().to_expression().const_fold(config, symbols);
+                if let Expression::InitListE(
+                    InitialList::List {
+                        onwer: Some(owner),
+                        values,
+                    },
+                    ..,
+                ) = &folded
+                {
+                    if let CompileType::Unit(unit) = symbols.get_type(*owner).unqualified() {
+                        if let Some(index) = unit.members.iter().position(|m| m.name == name) {
+                            if let Some(value) = values.get(index) {
+                                return value.clone().with_span(span);
+                            }
+                        }
+                    }
+                }
+                let base = if matches!(folded, Expression::InitListE(..)) {
+                    *base
+                } else {
+                    CompAtom::from_expr(folded)
+                };
+                Expression::UnaryExprE(
+                    UnaryExpr::Access(Access::Member {
+                        base: Box::new(base),
+                        indirect: false,
+                        name,
+                    }),
+                    span,
+                )
+            }
+            Expression::UnaryExprE(UnaryExpr::Access(Access::Index { base, index }), ..) => {
+                let constant = base.is_const(symbols);
+                let base = base.const_fold(config, symbols);
+                let index = index.const_fold(config, symbols);
+                if constant {
+                    if let (
+                        Expression::InitListE(InitialList::Array { values, .. }, ..),
+                        Expression::ConstValueE(i, ..),
+                    ) = (&base, &index)
+                    {
+                        if let Some(value) =
+                            i.value.parse::<usize>().ok().and_then(|i| values.get(i))
+                        {
+                            return value.clone().with_span(span);
+                        }
+                    }
+                }
+                Expression::UnaryExprE(
+                    UnaryExpr::Access(Access::Index {
+                        base: Box::new(base),
+                        index: Box::new(index),
+                    }),
                     span,
                 )
             }
@@ -178,7 +243,12 @@ where
     }
 }
 fn fold_atom(a: CompAtom, config: &mut Config, symbols: &dyn Resolution) -> CompAtom {
-    CompAtom::from_expr(a.to_expression().const_fold(config, symbols))
+    let folded = a.clone().to_expression().const_fold(config, symbols);
+    if matches!(folded, Expression::InitListE(..)) {
+        a
+    } else {
+        CompAtom::from_expr(folded)
+    }
 }
 
 fn fold_composite(mut c: Composite, symbols: &dyn Resolution) -> CompAtom {

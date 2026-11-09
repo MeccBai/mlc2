@@ -100,6 +100,7 @@ fn registered_generic_function_is_found_in_generic_table() {
     let index = symbols.generics.functions.insert(
         "identity".into(),
         crate::ast::function::FuncSymbol {
+            constant: false,
             span: (0..0).into(),
             name: "identity".into(),
             params: Vec::new(),

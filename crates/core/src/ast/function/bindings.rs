@@ -136,7 +136,7 @@ pub(super) fn signature(
     }
     let ret = returns
         .and_then(|ty| resolve_type_with_bindings(config, ty, symbols, types))
-        .map(|ty| ty.into_value_type(types::ValueType::Flex, symbols));
+        .map(|ty| ty.with_immutability(false, symbols));
     (params, ret)
 }
 
@@ -154,6 +154,7 @@ pub(super) fn context(
         context.insert_self(
             config,
             Rc::new(Variable {
+                constant: false,
                 read_count: Default::default(),
                 declaration_span: (0..0).into(),
                 name: "self".into(),
@@ -177,6 +178,7 @@ pub(super) fn context(
         context.insert_parameter(
             config,
             Rc::new(Variable {
+                constant: false,
                 read_count: Default::default(),
                 declaration_span: (0..0).into(),
                 name: name.clone(),

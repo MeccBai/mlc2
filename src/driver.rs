@@ -258,6 +258,7 @@ fn build(
             optimized,
         },
         &module_configs,
+        Some(paths.output.join("ctfe")),
     )?;
     if matches!(cli.command, Commands::Ll { .. }) {
         let directory = output_root
@@ -469,3 +470,5 @@ fn build(
     println!("Built {}", artifact.display());
     Ok(Some(artifact))
 }
+
+pub(crate) fn constant_worker() -> Result<(), String> { frontend::ctfe::worker() }

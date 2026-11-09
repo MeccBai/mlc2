@@ -99,11 +99,12 @@ pub fn function_parser<'tokens, I>()
 where
     I: ValueInput<'tokens, Token = TokenPack, Span = Span>,
 {
-    keyword(Token::Function)
-        .ignore_then(signature_parser())
+    keyword(Token::Constant).or_not()
+        .then_ignore(keyword(Token::Function))
+        .then(signature_parser())
         .then(body_parser())
         .try_map(
-            |((generics, (name, name_span), params, return_type), body), span| {
+            |((constant, (generics, (name, name_span), params, return_type)), body), span| {
                 let params = std::iter::Iterator::collect::<Result<Vec<_>, _>>(
                     params.into_iter().map(|param| match param {
                         ParsedParam::Typed(param) => Ok(param),
@@ -119,6 +120,7 @@ where
                 )?;
                 Ok(FunctionDecl {
                     symbol: TempFuncSymbol {
+                        constant: constant.is_some(),
                         visibility: Default::default(),
                         name,
                         name_span,

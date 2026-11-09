@@ -51,12 +51,13 @@ fn reference_index_uses_pointee_mutability_not_binding_mutability() {
             reference.format(&symbols.types),
             CompileType::Ref(reference),
         );
-        let ty = ty.into(ValueType::Final, &mut symbols.types);
+        let ty = ty.with_immutability(true, &mut symbols.types);
         symbols.globals.insert(
             "pointer".into(),
             (
                 0,
                 Rc::new(Variable {
+                    constant: false,
                     read_count: Default::default(),
                     declaration_span: (0..0).into(),
                     name: "pointer".into(),
@@ -80,14 +81,7 @@ fn reference_index_uses_pointee_mutability_not_binding_mutability() {
             None,
         );
         let inferred = expr.type_inference(&mut config, &mut symbols);
-        assert_eq!(
-            inferred.value_type(&symbols),
-            if mutable {
-                ValueType::Flex
-            } else {
-                ValueType::Final
-            }
-        );
+        assert_eq!(inferred.is_immutable(&symbols), !mutable);
         assert_eq!(expr.assignable(&mut config, &mut symbols), mutable);
         assert!(config.error_handle().errors.is_empty());
     }
@@ -105,6 +99,7 @@ fn list_index_becomes_unary_access_with_element_type() {
         (
             0,
             Rc::new(Variable {
+                constant: false,
                 read_count: Default::default(),
                 declaration_span: (0..0).into(),
                 name: "values".into(),
@@ -155,7 +150,7 @@ fn array_literal_can_be_indexed() {
         expression.type_inference(&mut config, &mut symbols),
         symbols
             .get_base(DataType::Integer, 32, true)
-            .into(ValueType::Constant, &mut symbols.types)
+            .with_immutability(true, &mut symbols.types)
     );
     assert!(!expression.assignable(&mut config, &mut symbols));
     assert!(config.error_handle().errors.is_empty());

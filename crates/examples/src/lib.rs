@@ -72,6 +72,13 @@ pub const EXAMPLES: &[Example] = &[
         "fibonacci(10)=55\n"
     ),
     example!(
+        "const-functions",
+        "Compile-time function calls, loops and recursion",
+        "const_functions",
+        "Functions and generics",
+        "sum_squares(5)=30 factorial(5)=120\nruntime value=7\n"
+    ),
+    example!(
         "aliases",
         "Type, function and macro aliases with using",
         "aliases",

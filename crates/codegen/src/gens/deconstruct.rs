@@ -121,7 +121,7 @@ impl IrGenerator {
             }
         }
         code.push(Instruction::Return { value: None });
-        self.add_resources(&[], &["free".into()]);
+        self.add_resources(&[], &["free".into()], package);
         // pub 不等于 export；合并同一具体类型在不同 OBJ 中的内部生成实现。
         let name = IrValue::Global(body.name.clone()).to_string();
         let comdat = if self.coff {

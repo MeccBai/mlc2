@@ -25,7 +25,7 @@ fn nested_queries_follow_each_indices_file_id() {
         "foreign-qualified".into(),
         CompileType::Qualified {
             base: Box::new(CompileType::List(ListType::new(integer, 3))),
-            value: ValueType::Final,
+            immut: true,
         },
     );
     let mut unit = UnitType::empty();

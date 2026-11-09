@@ -73,11 +73,13 @@ impl FuncBody {
             actives,
             span,
         );
-        Self {
+        let result = Self {
             span: symbols.get_function_regular(symbol).span,
             symbol,
             body,
-        }
+        };
+        result.constant_check(symbols, config);
+        result
     }
 }
 

@@ -193,12 +193,13 @@ fn setup() -> (PackageSymbolTable, TypeIndex, TypeIndex, TypeIndex) {
     let large = symbols
         .types
         .insert("large".into(), CompileType::List(ListType::new(small, 2)));
-    let immutable = large.into(ValueType::Final, &mut symbols.types);
+    let immutable = large.with_immutability(true, &mut symbols.types);
     (package, small, large, immutable)
 }
 
 fn symbol(params: Vec<TypeIndex>, ret: Option<TypeIndex>) -> FuncSymbol {
     FuncSymbol {
+        constant: false,
         span: (0..0).into(),
         name: "unnamed::test".into(),
         params: params

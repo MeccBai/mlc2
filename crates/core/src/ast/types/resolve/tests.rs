@@ -217,7 +217,7 @@ fn qualified_generic_reference_can_be_named_and_instantiated() {
         SymbolName::generic_type(generic),
         CompileType::Generic(generic),
     );
-    let ty = ty.into_value_type(ValueType::Final, &mut symbols.types);
+    let ty = ty.with_immutability(true, &mut symbols.types);
     let context = HashMap::from([("T".to_owned(), ty)]);
     let resolved = resolve_type(
         &mut config,

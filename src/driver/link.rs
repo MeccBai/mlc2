@@ -5,7 +5,7 @@ use std::{
     process::Command,
 };
 
-mod targets;
+pub(crate) mod targets;
 
 pub fn archiver_path(cli: &Cli) -> Result<PathBuf, String> {
     if let Some(path) = &cli.archiver {

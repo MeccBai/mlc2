@@ -18,6 +18,7 @@ use mlc_core::{
     diagnostic::{error::ErrorHandle, warning::WarningHandle},
 };
 use std::collections::HashMap;
+pub(crate) mod ctfe;
 #[cfg(test)]
 mod enum_tests;
 #[cfg(test)]
@@ -77,7 +78,15 @@ pub fn generate_with_config(
     optimize: mlc_optimizer::OptimizeConfig,
     codegen: mlc_codegen::gens::CodegenConfig,
 ) -> Result<Generated, String> {
-    generate_with_module_configs(plan, triplet, kind, optimize, codegen, &HashMap::new())
+    generate_with_module_configs(
+        plan,
+        triplet,
+        kind,
+        optimize,
+        codegen,
+        &HashMap::new(),
+        None,
+    )
 }
 
 pub fn generate_with_module_configs(
@@ -93,7 +102,27 @@ pub fn generate_with_module_configs(
             mlc_codegen::gens::CodegenConfig,
         ),
     >,
+    cache_root: Option<std::path::PathBuf>,
 ) -> Result<Generated, String> {
+    let cache_root = cache_root.unwrap_or_else(|| {
+        let mode = match (codegen.optimized, codegen.debug_info) {
+            (false, false) => "default",
+            (false, true) => "debug",
+            (true, false) => "release",
+            (true, true) => "rel-with-info",
+        };
+        plan.targets[plan.entry.0]
+            .file
+            .parent()
+            .unwrap_or_else(|| std::path::Path::new("."))
+            .join("build/objects")
+            .join(mode)
+            .join(triplet)
+            .join("ctfe")
+    });
+    let target_layout = mlc_builder::llvm::IrCompiler::init(triplet)
+        .map_err(|error| error.to_string())?
+        .target_layout();
     let mut package = PackageSymbolTable::new();
     let mut asts = vec![];
     let mut parsed_modules = HashMap::new();
@@ -120,6 +149,14 @@ pub fn generate_with_module_configs(
         parsed_modules.insert(id.0, module);
     }
     macros::expand(plan, &mut parsed_modules)?;
+    let _constant_executor =
+        mlc_core::constant_eval::install(std::rc::Rc::new(ctfe::Executor::new(
+            plan.clone(),
+            parsed_modules.clone(),
+            triplet.into(),
+            target_layout,
+            cache_root,
+        )));
     for id in &plan.order {
         let target = &plan.targets[id.0];
         let module = parsed_modules.remove(&id.0).unwrap();
@@ -143,6 +180,7 @@ pub fn generate_with_module_configs(
             ErrorHandle::new(file.clone()),
             WarningHandle::new(file),
         );
+        config.set_target_layout(target_layout);
         config.set_statement_locations(codegen.debug_info);
         if let TargetInput::Source { lines, .. } = &target.input {
             config.set_source_lines(lines.clone());

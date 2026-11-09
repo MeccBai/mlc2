@@ -8,7 +8,7 @@ use crate::ast::{
         operators::Operator,
     },
     symbols::{EnumBool, Resolution},
-    types::{CompileType, ListType, ValueType, base_type::DataType},
+    types::{CompileType, ListType, base_type::DataType},
 };
 impl TypeInfer<'_> {
     pub(crate) fn atom_type(&mut self, expression: &CompAtom) -> TypeIndex {
@@ -23,7 +23,7 @@ impl TypeInfer<'_> {
             CompAtom::CompositeA(composite, ..) => composite.type_inference(config, symbols),
             CompAtom::FuncCallA(func_call, ..) => func_call.type_inference(symbols),
             CompAtom::ConstValueA(const_value, ..) => {
-                const_value.ty.into(ValueType::Constant, symbols)
+                const_value.ty.with_immutability(true, symbols)
             }
             CompAtom::UnaryExprA(unary, ..) => unary.type_inference(config, symbols),
         }
@@ -38,7 +38,7 @@ impl TypeInfer<'_> {
             Expression::Poison(..) => TypeIndex::empty(),
             Expression::VarValueE(var, ..) => var.var_type,
             Expression::ConstValueE(const_value, ..) => {
-                const_value.ty.into(ValueType::Constant, symbols)
+                const_value.ty.with_immutability(true, symbols)
             }
             Expression::UnaryExprE(unary, ..) => unary.type_inference(config, symbols),
             Expression::InitListE(init_list, ..) => match init_list {
@@ -46,14 +46,7 @@ impl TypeInfer<'_> {
                     Some(ty) => *ty,
                     None => TypeIndex::empty(),
                 },
-                InitialList::Array { ty, values } => {
-                    let value = if values.iter().all(|value| value.is_const(symbols)) {
-                        ValueType::Constant
-                    } else {
-                        ValueType::Flex
-                    };
-                    (*ty).into(value, symbols)
-                }
+                InitialList::Array { ty, values } => (*ty).with_immutability(true, symbols),
                 InitialList::String { .. } => symbols.local_type("str").expect("native str type"),
             },
             Expression::CompositeE(composite, ..) => composite.type_inference(config, symbols),
@@ -108,32 +101,28 @@ impl TypeInfer<'_> {
                 if *indirect && base_type.is_ref(symbols) {
                     base_type = base_type.deref(symbols).unwrap_or(TypeIndex::empty());
                 }
-                let value = base_type.value_type(symbols);
+                let value = base_type.is_immutable(symbols);
                 let member = match symbols.get_type(base_type).unqualified() {
                     CompileType::Unit(unit) => unit
                         .get_member(name)
                         .map_or(TypeIndex::empty(), |member| member.member_type),
                     _ => TypeIndex::empty(),
                 };
-                member.into(value, symbols)
+                member.with_immutability(value, symbols)
             }
             Access::Index { base, .. } => {
                 let base_type = base.type_inference(config, symbols);
-                let value = base_type.value_type(symbols);
+                let value = base_type.is_immutable(symbols);
                 let element = match symbols.get_type(base_type).unqualified() {
                     CompileType::List(list) => list.element_type(),
                     CompileType::Ref(reference) => {
-                        let value = if reference.mut_base {
-                            ValueType::Flex
-                        } else {
-                            ValueType::Final
-                        };
+                        let value = !reference.mut_base;
                         let element = base_type.deref(symbols).unwrap_or(TypeIndex::empty());
-                        return element.into(value, symbols);
+                        return element.with_immutability(value, symbols);
                     }
                     _ => TypeIndex::empty(),
                 };
-                element.into(value, symbols)
+                element.with_immutability(value, symbols)
             }
         }
     }

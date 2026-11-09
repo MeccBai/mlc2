@@ -149,17 +149,43 @@ impl Expander<'_> {
                     fail("Invalid allocation result");
                 };
                 let size = reference.base.size(self.symbols.arenas());
+                let bits = (mlc_core::ast::types::TypeLookup::target_layout(self.symbols).ptr_size
+                    * 8) as u32;
+                let maximum = (1u128 << bits) - 1;
+                let original_bits = match input.value.ty {
+                    LlvmType::Int(bits) => bits,
+                    _ => fail("allocation count is not an integer"),
+                };
+                let overflow = if original_bits > bits {
+                    let valid = self.allocate();
+                    input.value.code.push(Instruction::Compare {
+                        target: valid,
+                        condition: Condition::ULe,
+                        ty: input.value.ty.clone(),
+                        lhs: operand.clone(),
+                        rhs: IrValue::Integer(maximum as i128),
+                    });
+                    Some(valid)
+                } else {
+                    None
+                };
                 let mut count = operand;
-                if input.value.ty != LlvmType::Int(64) {
+                if input.value.ty != LlvmType::Int(bits) {
                     let target = self.allocate();
                     input.value.code.push(Instruction::Cast {
                         target,
-                        op: if input.signed { Cast::SExt } else { Cast::ZExt },
+                        op: if original_bits > bits {
+                            Cast::Trunc
+                        } else if input.signed {
+                            Cast::SExt
+                        } else {
+                            Cast::ZExt
+                        },
                         value: TypedValue {
                             ty: input.value.ty,
                             value: count,
                         },
-                        to: LlvmType::Int(64),
+                        to: LlvmType::Int(bits),
                     });
                     count = IrValue::Reg(target);
                 }
@@ -174,9 +200,9 @@ impl Expander<'_> {
                 input.value.code.push(Instruction::Compare {
                     target: checked,
                     condition: Condition::ULe,
-                    ty: LlvmType::Int(64),
+                    ty: LlvmType::Int(bits),
                     lhs: count.clone(),
-                    rhs: IrValue::Integer((u64::MAX / (size.max(1) as u64)) as i128),
+                    rhs: IrValue::Integer((maximum / size.max(1) as u128) as i128),
                 });
                 let condition = if input.signed {
                     let nonnegative = self.allocate();
@@ -185,7 +211,7 @@ impl Expander<'_> {
                         Instruction::Compare {
                             target: nonnegative,
                             condition: Condition::SGe,
-                            ty: LlvmType::Int(64),
+                            ty: LlvmType::Int(bits),
                             lhs: count.clone(),
                             rhs: IrValue::Integer(0),
                         },
@@ -201,6 +227,19 @@ impl Expander<'_> {
                 } else {
                     IrValue::Reg(checked)
                 };
+                let condition = if let Some(overflow) = overflow {
+                    let valid = self.allocate();
+                    input.value.code.push(Instruction::Operation {
+                        target: valid,
+                        op: Operator::And,
+                        ty: LlvmType::Int(1),
+                        lhs: condition,
+                        rhs: IrValue::Reg(overflow),
+                    });
+                    IrValue::Reg(valid)
+                } else {
+                    condition
+                };
                 input.value.code.extend([
                     Instruction::ConditionalBranch {
                         condition,
@@ -213,7 +252,7 @@ impl Expander<'_> {
                     Instruction::Operation {
                         target: bytes,
                         op: Operator::Mul,
-                        ty: LlvmType::Int(64),
+                        ty: LlvmType::Int(bits),
                         lhs: count,
                         rhs: IrValue::Integer(size as i128),
                     },
@@ -222,7 +261,7 @@ impl Expander<'_> {
                         func: IrValue::Global("malloc".into()),
                         return_type: LlvmType::Ptr,
                         args: vec![TypedValue {
-                            ty: LlvmType::Int(64),
+                            ty: LlvmType::Int(bits),
                             value: IrValue::Reg(bytes),
                         }],
                         variadic_params: None,

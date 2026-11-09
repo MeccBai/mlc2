@@ -122,7 +122,7 @@ fn invalid_return_type_submits_error_at_value() {
         "true",
         CompileError::IllegalUse(IllegalUseError::TypeMismatched {
             expected: "i32".into(),
-            found: "const bool".into(),
+            found: "val bool".into(),
         }),
     );
 }

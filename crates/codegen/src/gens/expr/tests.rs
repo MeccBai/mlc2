@@ -37,6 +37,7 @@ fn reference_index_loads_pointer_and_uses_single_gep_index() {
         CompileType::Ref(reference),
     );
     let variable = std::rc::Rc::new(crate::ast::statement::Variable {
+        constant: false,
         read_count: Default::default(),
         declaration_span: (0..0).into(),
         name: "pointer".into(),
@@ -154,6 +155,7 @@ fn grouping_and_unsigned_operations() {
 fn variable_binding_is_loaded_without_replaying_initialization() {
     let (package, ty) = setup(true);
     let variable = std::rc::Rc::new(crate::ast::statement::Variable {
+        constant: false,
         read_count: Default::default(),
         declaration_span: (0..0).into(),
         name: "a".into(),
@@ -341,6 +343,7 @@ fn array_index_and_call_pass_llvm_verification() {
         .types
         .insert("array".into(), CompileType::List(ListType::new(ty, 2)));
     let symbol = FuncSymbol {
+        constant: false,
         span: (0..0).into(),
         name: "f".into(),
         params: vec![(ty, "x".into())],

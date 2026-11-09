@@ -24,6 +24,8 @@ pub struct TempFunc {
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct TempFuncSymbol {
+    #[serde(default)]
+    pub constant: bool,
     pub visibility: TempVisibility,
     pub name: String,
     pub name_span: Span,
@@ -133,5 +135,28 @@ impl TempInterfaceSymbol {
                 .unwrap_or_else(|| "None".into()),
             self.attributes
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn function_constant_metadata_defaults_for_older_declarations() {
+        let source = "func f() {}";
+        let lexed = crate::lexer::tokenize(source).unwrap();
+        let (module, errors) = crate::parser::parse(&lexed.tokens, source.len());
+        assert!(errors.is_empty());
+        let super::super::TempGlobalStmt::Func(function) = &module.unwrap()[0].0 else {
+            panic!("expected a function");
+        };
+        let mut value = serde_json::to_value(&function.symbol).unwrap();
+        value.as_object_mut().unwrap().remove("constant");
+        assert!(!serde_json::from_value::<TempFuncSymbol>(value.clone()).unwrap().constant);
+        value["constant"] = true.into();
+        let symbol: TempFuncSymbol = serde_json::from_value(value).unwrap();
+        let encoded = serde_json::to_string(&symbol).unwrap();
+        assert!(serde_json::from_str::<TempFuncSymbol>(&encoded).unwrap().constant);
     }
 }

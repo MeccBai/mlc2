@@ -28,6 +28,7 @@ impl Variable {
 
     pub fn poison() -> Rc<Self> {
         Rc::new(Self {
+            constant: false,
             read_count: Default::default(),
             declaration_span: (0..0).into(),
             name: String::new(),
@@ -37,6 +38,7 @@ impl Variable {
     }
     pub fn empty() -> Rc<Self> {
         Rc::new(Variable {
+            constant: false,
             read_count: Default::default(),
             declaration_span: (0..0).into(),
             name: String::new(),
@@ -71,6 +73,10 @@ impl Variable {
             types::CompileType::List(list) => Some(list.length),
             _ => None,
         });
+        let previous_pointer_warning = config.suppress_pointer_warning();
+        if temp_var.name.starts_with('$') {
+            config.set_suppress_pointer_warning(true);
+        }
         let init_val = match (array_length, temp_var.initializer.0) {
             (Some(_), out::TempExpr::Init { .. }) => {
                 config.submit_error(
@@ -128,6 +134,7 @@ impl Variable {
             }
             (_, expr) => Expression::new(config, (expr, var_span), symbols, ctxt),
         };
+        config.set_suppress_pointer_warning(previous_pointer_warning);
         if init_val.is_poisoned() {
             return Self::poison();
         }
@@ -224,12 +231,12 @@ impl Variable {
                 }
             }
         }
-        .into_value_type(temp_var.value_type, symbols);
+        .with_immutability(temp_var.value_type != ValueType::Flex, symbols);
         // Native str bindings keep their compile-time payload and cannot be rebound.
         let native_str =
             !ty.is_empty() && matches!(symbols.get_type(ty).unqualified(), types::CompileType::Str);
         let ty = if native_str {
-            ty.into_value_type(ValueType::Constant, symbols)
+            ty.with_immutability(true, symbols)
         } else {
             ty
         };
@@ -250,6 +257,7 @@ impl Variable {
             return Self::poison();
         }
         Rc::new(Self {
+            constant: (native_str && ctxt.is_some()) || temp_var.value_type == ValueType::Constant,
             read_count: Default::default(),
             declaration_span: temp_var.name_span,
             name: temp_var.name,

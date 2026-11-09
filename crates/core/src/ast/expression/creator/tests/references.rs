@@ -28,6 +28,7 @@ fn address_of_preserves_mutability_in_type_identity() {
         (
             0,
             Rc::new(Variable {
+                constant: false,
                 read_count: Default::default(),
                 declaration_span: (0..0).into(),
                 name: "a".into(),
@@ -112,12 +113,13 @@ fn val_can_only_produce_immutable_reference() {
     );
     let mut symbols = SymbolTable::new();
     let base = symbols.get_base(DataType::Integer, 32, true);
-    let final_type = base.into(ValueType::Final, &mut symbols.types);
+    let final_type = base.with_immutability(true, &mut symbols.types);
     symbols.globals.insert(
         "fixed".into(),
         (
             0,
             Rc::new(Variable {
+                constant: false,
                 read_count: Default::default(),
                 declaration_span: (0..0).into(),
                 name: "fixed".into(),
@@ -174,12 +176,13 @@ fn final_binding_does_not_freeze_mutable_reference_target() {
     let base = symbols.get_base(DataType::Integer, 32, true);
     let reference = base
         .make_ref(&mut symbols.types, true)
-        .into(ValueType::Final, &mut symbols.types);
+        .with_immutability(true, &mut symbols.types);
     symbols.globals.insert(
         "reference".into(),
         (
             0,
             Rc::new(Variable {
+                constant: false,
                 read_count: Default::default(),
                 declaration_span: (0..0).into(),
                 name: "reference".into(),
@@ -210,7 +213,7 @@ fn final_binding_does_not_freeze_mutable_reference_target() {
     assert_eq!(
         dereference
             .type_inference(&mut config, &mut symbols)
-            .value_type(&symbols.types),
-        ValueType::Flex
+            .is_immutable(&symbols.types),
+        false
     );
 }

@@ -106,8 +106,8 @@ fn body_locals_and_uses_share_concrete_unit_instance() {
         panic!("val expected");
     };
     assert_eq!(
-        frozen.var_type.value_type(&ast.symbols.types),
-        ValueType::Final
+        frozen.var_type.is_immutable(&ast.symbols.types),
+        true
     );
     let Statement::ReturnBlock(ret) = &instance.body[2] else {
         panic!("return expected");

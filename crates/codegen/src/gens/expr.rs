@@ -256,6 +256,11 @@ impl Expander<'_> {
                 };
                 IrValue::Val(format!("0x{:016X}", number.to_bits()))
             }
+            LlvmType::Ptr => {
+                let address: u128 = constant.value.parse().unwrap_or_else(|_| invalid());
+                let bits = mlc_core::ast::types::TypeLookup::target_layout(self.symbols).ptr_size * 8;
+                IrValue::Val(format!("inttoptr (i{bits} {address} to ptr)"))
+            }
             _ => {
                 unsupported("non-scalar literal");
             }

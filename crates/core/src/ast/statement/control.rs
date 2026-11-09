@@ -56,8 +56,8 @@ fn same_type(
     symbols: &mut dyn Resolution,
     span: Span,
 ) -> bool {
-    let expected = expected.into_value_type(ValueType::Flex, symbols);
-    let found = found.into_value_type(ValueType::Flex, symbols);
+    let expected = expected.with_immutability(false, symbols);
+    let found = found.with_immutability(false, symbols);
     // Qualifier conversion can intern an imported type in the current arena.
     // Equal checked types need not have the same arena/index identity.
     if !expected.is_empty()
@@ -268,8 +268,9 @@ impl Statement {
         if !same_type(config, start_ty, end_ty, symbols, end_span) {
             return Self::Poison;
         }
-        let var_type = start_ty.into_value_type(ValueType::Flex, symbols);
+        let var_type = start_ty.with_immutability(false, symbols);
         let variable = Rc::new(Variable {
+            constant: false,
             read_count: Default::default(),
             declaration_span: binding.1,
             name: binding.0,

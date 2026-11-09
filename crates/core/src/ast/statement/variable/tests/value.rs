@@ -27,6 +27,7 @@ fn const_requires_constant_initializer() {
         (
             0,
             Rc::new(Variable {
+                constant: false,
                 read_count: Default::default(),
                 declaration_span: (0..0).into(),
                 name: "runtime".into(),
@@ -55,10 +56,8 @@ fn const_requires_constant_initializer() {
         &mut symbols,
         None,
     );
-    assert_eq!(
-        constant.var_type.value_type(&symbols.types),
-        ValueType::Constant
-    );
+    assert_eq!(constant.var_type.is_immutable(&symbols.types), true);
+    assert!(constant.constant);
     assert!(config.error_handle().errors.is_empty());
 
     Variable::new(

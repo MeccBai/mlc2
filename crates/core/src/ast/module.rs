@@ -98,6 +98,7 @@ impl AbstractSyntaxTree {
         }
         let declarations = self.declarations.take().expect("unprepared declarations");
         let symbols = package.file_mut(id).expect("registered file");
+        symbols.types.layout = self.config.target_layout();
         symbols.collect_names(&mut self.config, declarations.source_order().into_iter());
         if self.config.is_poisoned() {
             return;

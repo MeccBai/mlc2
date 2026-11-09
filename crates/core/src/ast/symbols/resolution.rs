@@ -275,6 +275,9 @@ impl<'a> ResolveContext<'a> {
     }
 }
 impl TypeLookup for ResolveContext<'_> {
+    fn target_layout(&self) -> crate::ast::config::TargetLayout {
+        self.local().types.layout
+    }
     fn get_type(&self, index: TypeIndex) -> &CompileType {
         self.package.get_type(index)
     }

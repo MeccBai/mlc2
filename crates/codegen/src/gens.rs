@@ -201,7 +201,7 @@ impl IrGenerator {
                 package,
                 generator.debug.is_some(),
             );
-            generator.add_resources(&generated.resources, &generated.intrinsics);
+            generator.add_resources(&generated.resources, &generated.intrinsics, package);
             let mut visited = HashSet::new();
             if let Some(ty) = abi.result().source {
                 generator.ensure_type(ty, package, &mut visited);

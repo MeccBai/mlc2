@@ -97,3 +97,11 @@ fn repository_sources_are_idempotent() {
     visit(&root.join("lib"));
     visit(&root.join("crates/examples/sources"));
 }
+
+#[test]
+fn const_function_declarations_share_the_formatting_pipeline() {
+    let output = stable(
+        "export const func<T> identity(x:T)->T{return x;}func main(){const a=identity<i32>(1);}",
+    );
+    assert!(output.starts_with("export const func<T> identity"));
+}

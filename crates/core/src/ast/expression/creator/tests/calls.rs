@@ -48,6 +48,7 @@ fn plain_function_call_resolves_symbol_arguments_and_return_type() {
     let index = symbols.functions.insert(
         "identity".into(),
         FuncSymbol {
+            constant: false,
             span: (0..0).into(),
             name: "identity".into(),
             params: vec![(i32_type, "value".into())],
@@ -89,6 +90,7 @@ fn regular_function_wins_over_generic_candidate_without_argument_fallback() {
         let span = (0..8).into();
         let i32_type = symbols.get_base(DataType::Integer, 32, true);
         let symbol = FuncSymbol {
+            constant: false,
             span: (0..0).into(),
             name: "choose".into(),
             params: vec![(i32_type, "x".into())],
@@ -142,6 +144,7 @@ fn member_call_resolves_interface_and_prepends_owner() {
         (
             0,
             Rc::new(Variable {
+                constant: false,
                 read_count: Default::default(),
                 declaration_span: (0..0).into(),
                 name: "point".into(),

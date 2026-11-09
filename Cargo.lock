@@ -466,6 +466,8 @@ dependencies = [
  "mlc_formatter",
  "mlc_optimizer",
  "mlc_syntax",
+ "serde",
+ "serde_json",
  "tempfile",
  "toml",
 ]

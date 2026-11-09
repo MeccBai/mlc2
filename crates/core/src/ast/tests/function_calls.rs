@@ -91,7 +91,7 @@ fn type_mismatch_submits_call_span() {
         "run(true)",
         CompileError::IllegalUse(IllegalUseError::TypeMismatched {
             expected: "i32".into(),
-            found: "const bool".into(),
+            found: "val bool".into(),
         }),
     );
 }

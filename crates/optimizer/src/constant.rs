@@ -5,7 +5,7 @@ use crate::ast::{
     expression::{CompAtom, Composite, Expression, UnaryExpr, operators::Operator},
     statement::{ForStatement, MatchPattern, MatchStatement, Statement, Variable},
     symbols::{EnumBool, PackageSymbolTable},
-    types::{CompileType, ValueType, base_type::DataType},
+    types::{CompileType, base_type::DataType},
 };
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -131,7 +131,7 @@ fn evaluate(
                     return Some(initial);
                 }
             }
-            (variable.var_type.value_type(package) == ValueType::Constant)
+            (variable.constant)
                 .then(|| evaluate(&variable.init_val, package, binding))
                 .flatten()
         }

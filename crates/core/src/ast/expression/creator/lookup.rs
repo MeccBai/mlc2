@@ -57,7 +57,7 @@ impl Expression {
                 if owner_type.is_empty() {
                     return None;
                 }
-                let owner_type = owner_type.into(types::ValueType::Flex, symbols);
+                let owner_type = owner_type.with_immutability(false, symbols);
                 let interface_name = SymbolName::callable(Some(&owner_type.format(symbols)), &name);
                 let candidate = symbols
                     .associated_interface(owner_type, &interface_name)

@@ -85,7 +85,7 @@ impl Expression {
                 );
                 return Self::Poison(span);
             }
-            let size_ty = symbols.get_base(DataType::Integer, 64, false);
+            let size_ty = symbols.get_base(DataType::Integer, config.ptr_size * 8, false);
             args[0].check_constant_range(size_ty, config, symbols, span);
             if config.is_poisoned() {
                 return Self::Poison(span);
@@ -108,7 +108,7 @@ impl Expression {
                         .insert(name, CompileType::Ref(reference)),
                 )
             }
-            Builtin::Cast => Some(target.into(ValueType::Flex, symbols)),
+            Builtin::Cast => Some(target.with_immutability(false, symbols)),
             Builtin::Dealloc => None,
         };
         let name = crate::ast::symbol_name::SymbolName::builtin(
@@ -119,6 +119,7 @@ impl Expression {
         let index = symbols.local_mut().functions.insert(
             name.clone(),
             FuncSymbol {
+                constant: false,
                 span: span,
                 name,
                 params: vec![(source, "input".into())],

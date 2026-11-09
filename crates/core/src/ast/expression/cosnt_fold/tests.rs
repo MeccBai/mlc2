@@ -110,10 +110,11 @@ fn only_const_variables_are_expanded() {
     let base = symbols.get_base(DataType::Integer, 32, true);
     for state in [ValueType::Flex, ValueType::Final, ValueType::Constant] {
         let variable = Rc::new(Variable {
+            constant: state == ValueType::Constant,
             read_count: Default::default(),
             declaration_span: (0..0).into(),
             name: "a".into(),
-            var_type: base.into(state, &mut symbols.types),
+            var_type: base.with_immutability(state != ValueType::Flex, &mut symbols.types),
             init_val: Box::new(literal("5", &symbols).to_expression()),
         });
         let expr = Expression::VarValueE(variable, (0..0).into());
@@ -198,10 +199,7 @@ fn variable_construction_preserves_runtime_initializer_for_optimizer() {
         panic!("initializer must remain foldable")
     };
     assert_eq!(value.value, "5");
-    assert_eq!(
-        variable.var_type.value_type(&symbols.types),
-        ValueType::Flex
-    );
+    assert_eq!(variable.var_type.is_immutable(&symbols.types), false);
     let reference = Expression::VarValueE(variable, (0..0).into());
     assert_eq!(
         reference.clone().const_fold(&mut config, &symbols),

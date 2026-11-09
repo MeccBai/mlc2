@@ -1,6 +1,6 @@
 # MLC examples
 
-The 25 files in `sources/` are independent programs, embedded in the compiler.
+The 26 files in `sources/` are independent programs, embedded in the compiler.
 Each source explains its topic, run command, and expected output in English.
 
 ```powershell
@@ -9,6 +9,8 @@ mlc example hello-world > hello.m2
 mlc run hello.m2
 mlc example formatting > formatting.m2
 mlc run formatting.m2
+mlc example const-functions > const_functions.m2
+mlc run const_functions.m2
 ```
 
 Listing and printing source need no project, configuration, or LLVM initialization.
@@ -25,3 +27,11 @@ ownership transfer. Floating-point narrowing uses an explicit `cast<f32>`.
 
 Tests parse every source, verify CLI source output, and build and run every
 example with exact expected stdout comparisons.
+
+The `const-functions` example evaluates loops, recursion and nested calls in
+`const` initializers. It also shows an immutable `val` binding initialized by a
+runtime function call. Const functions can call const functions and compiler
+intrinsics. Input parameters cannot contain pointers, including pointers nested
+in arrays, units or unions. Non-const calls, C function calls and access to global
+var or val bindings are errors. Global const bindings and local pointer operations
+are allowed.

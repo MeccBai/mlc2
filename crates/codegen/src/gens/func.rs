@@ -8,7 +8,7 @@ use crate::{
         attribute::FuncAttibute,
         function::{FuncSymbol, InterfaceSymbol},
         symbols::PackageSymbolTable,
-        types::{CompileType, ValueType},
+        types::{CompileType},
     },
     manifest::ABI_DIRECT_SIZE_LIMIT,
 };
@@ -172,7 +172,7 @@ impl LlvmFunc {
             check_c_type(*ty, c_abi, symbols)?;
             let mode = if c_abi || ty.size(symbols.arenas()) <= ABI_DIRECT_SIZE_LIMIT {
                 ParameterMode::Direct
-            } else if symbols.get_type(*ty).value_type() == ValueType::Flex {
+            } else if !symbols.get_type(*ty).is_immutable() {
                 ParameterMode::CopyPointer
             } else {
                 ParameterMode::ReadOnlyPointer
