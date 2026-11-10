@@ -105,10 +105,7 @@ fn body_locals_and_uses_share_concrete_unit_instance() {
     let Statement::VariableDecl(frozen) = &instance.body[1] else {
         panic!("val expected");
     };
-    assert_eq!(
-        frozen.var_type.is_immutable(&ast.symbols.types),
-        true
-    );
+    assert_eq!(frozen.var_type.is_immutable(&ast.symbols.types), true);
     let Statement::ReturnBlock(ret) = &instance.body[2] else {
         panic!("return expected");
     };

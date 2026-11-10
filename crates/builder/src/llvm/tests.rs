@@ -1,5 +1,6 @@
+use crate::manifest::DEFAULT_TRIPLET;
+
 use super::*;
-use crate::manifest::X86_64_PC_WINDOWS_MSVC;
 #[cfg(unix)]
 use std::os::unix::process::ExitStatusExt;
 #[cfg(windows)]
@@ -29,8 +30,8 @@ fn unsupported_triplet_returns_an_error() {
 #[test]
 fn preset_targets_initialize_repeatedly() {
     for triplet in [
-        X86_64_PC_WINDOWS_MSVC,
-        crate::manifest::X86_64_PC_WINDOWS_GNU,
+        manifest::X86_64_PC_WINDOWS_MSVC,
+        manifest::X86_64_PC_WINDOWS_GNU,
         "x86_64-unknown-linux-gnu",
         "aarch64-unknown-linux-gnu",
         "x86_64-apple-darwin",
@@ -62,7 +63,7 @@ fn linux_and_macos_targets_emit_objects() {
 
 #[test]
 fn verifier_failure_is_an_ice_result_not_a_panic() {
-    let compiler = IrCompiler::init(X86_64_PC_WINDOWS_MSVC).unwrap();
+    let compiler = IrCompiler::init(DEFAULT_TRIPLET).unwrap();
     let error = compiler
         .emit(
             "define i32 @main() { entry: br label %entry }".into(),
@@ -75,7 +76,7 @@ fn verifier_failure_is_an_ice_result_not_a_panic() {
 
 #[test]
 fn invalid_ir_is_recoverable_and_next_module_can_emit() {
-    let compiler = IrCompiler::init(X86_64_PC_WINDOWS_MSVC).unwrap();
+    let compiler = IrCompiler::init(DEFAULT_TRIPLET).unwrap();
     let output = std::env::temp_dir().join(format!("mlc2-backend-{}.obj", std::process::id()));
     assert!(matches!(
         compiler.emit("define broken".into(), &output),

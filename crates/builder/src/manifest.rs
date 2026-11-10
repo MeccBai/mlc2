@@ -19,6 +19,7 @@ pub const IR_BUFFER_NAME: &std::ffi::CStr = c"mlc";
 
 pub const X86_64_PC_WINDOWS_MSVC: &str = "x86_64-pc-windows-msvc";
 pub const X86_64_PC_WINDOWS_GNU: &str = "x86_64-pc-windows-gnu";
+pub const DEFAULT_TRIPLET: &str = X86_64_PC_WINDOWS_MSVC;
 pub const DEFAULT_WINDOWS_LINKER: &str = LLD_COFF;
 
 /// The compiler executable's platform, not the machine running Cargo.

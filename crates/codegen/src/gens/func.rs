@@ -8,7 +8,7 @@ use crate::{
         attribute::FuncAttibute,
         function::{FuncSymbol, InterfaceSymbol},
         symbols::PackageSymbolTable,
-        types::{CompileType},
+        types::CompileType,
     },
     manifest::ABI_DIRECT_SIZE_LIMIT,
 };

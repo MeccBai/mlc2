@@ -17,8 +17,8 @@ use crate::parser::Scope;
 use crate::parser::out::{TempFuncSymbol, TempInterfaceSymbol, TempType, TempVisibility};
 
 pub(crate) mod bindings;
-pub(crate) mod instantiate;
 pub(crate) mod constant;
+pub(crate) mod instantiate;
 pub use instantiate::InstantiationActives;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -140,7 +140,11 @@ impl FuncBody {
         };
 
         Statement::warn_unused(&body, config);
-        let result = Self { span: symbols.get_function_regular(index).span, symbol: index, body };
+        let result = Self {
+            span: symbols.get_function_regular(index).span,
+            symbol: index,
+            body,
+        };
         result.constant_check(symbols, config);
         result
     }

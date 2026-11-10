@@ -459,6 +459,7 @@ name = "mlc"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "colored",
  "mlc_builder",
  "mlc_codegen",
  "mlc_core",

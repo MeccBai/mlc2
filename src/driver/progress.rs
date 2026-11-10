@@ -1,4 +1,5 @@
 //! Terminal-only progress; summaries remain readable when output is redirected.
+use colored::Colorize;
 use mlc_builder::schedule::NodeResult;
 use std::{
     io::{self, IsTerminal, Write},
@@ -134,21 +135,65 @@ impl Progress {
         };
         self.clear();
         let state = self.state();
-        let status = if success { "completed" } else { "failed" };
+        let status = if success { &"completed".green() } else { &"failed".red() };
         let mut summary = format!(
-            "{operation} {status} in {:.3}s.",
-            self.started.elapsed().as_secs_f64()
+            "{} {status} in {}.",operation.bright_yellow(),
+            format!("{:.3}",self.started.elapsed().as_secs_f64()).underline()
+            
         );
         if operation == "Build" || operation == "Setup" {
+            let obj_hit_rate = {
+                let whole = state.hits == state.checks;
+                let rate = if whole {
+                    rate(state.hits, state.checks).green()
+                } else {
+                    rate(state.hits, state.checks).yellow()
+                };
+                let detail_num = if whole {
+                    format!("{}/{}", state.hits, state.checks).green()
+                } else {
+                    format!("{}/{}", state.hits, state.checks).yellow()
+                };
+                format!("{} ({})", rate, detail_num)
+            };
+
+            let link_hit_rate = {
+                let whole = state.link_hits == state.links;
+                let rate = if whole {
+                    rate(state.link_hits, state.links).green()
+                } else {
+                    rate(state.link_hits, state.links).yellow()
+                };
+                let detail_num = if whole {
+                    format!("{}/{}", state.link_hits, state.links).green()
+                } else {
+                    format!("{}/{}", state.link_hits, state.links).yellow()
+                };
+                format!("{} ({})", rate, detail_num)
+            };
+
             summary.push_str(&format!(
-                "\nCache hits: {} ({}/{} object checks); links reused: {}/{}; declarations: {}.",
-                rate(state.hits, state.checks),
-                state.hits,
-                state.checks,
-                state.link_hits,
-                state.links,
+                "\n{}: {},{}: {}; {}: {}.",
+                "Cache hits".bright_green(),
+                obj_hit_rate,
+                "links reused".bright_green(),
+                link_hit_rate,
+                "Declarations".bright_yellow(),
                 state.declarations
             ));
+        /*
+        summary.push_str(&format!(
+            "\n{}: {} ({}/{}); {}: {}/{}; declarations: {}.",
+            "Cache hits".bright_green(),
+            rate(state.hits, state.checks).yellow(),
+            state.hits,
+            state.checks,
+            "links reused".bright_green(),
+            state.link_hits,
+            state.links,
+            state.declarations
+        ));
+        */
         } else {
             summary.push_str(&format!(
                 " {} changed, {} unchanged.",

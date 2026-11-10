@@ -10,7 +10,6 @@ pub(super) fn run(cwd: &Path, project: &Path) -> Result<i32, String> {
         .filter(|name| !name.is_empty() && !name.contains(['/', '\\', ':']))
         .ok_or("Project must name a new directory")?;
 
-
     let config = ProjectFile {
         project: Project {
             mode: None,

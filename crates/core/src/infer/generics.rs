@@ -1,11 +1,8 @@
 //! Per-call structural matching; bindings never leak into another call.
 use super::TypeInfer;
 use crate::ast::{
-    GenericIndex, TypeIndex,
-    expression::Expression,
-    function::FuncSymbol,
-    symbols::Resolution,
-    types::{CompileType},
+    GenericIndex, TypeIndex, expression::Expression, function::FuncSymbol, symbols::Resolution,
+    types::CompileType,
 };
 use crate::diagnostic::error::{CompileError, IllegalUseError};
 use crate::parser::out::Span;

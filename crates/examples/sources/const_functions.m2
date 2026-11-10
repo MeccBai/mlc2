@@ -11,11 +11,17 @@ const func square(value: i32) -> i32 {
 }
 
 
+// Pointer parameters are allowed when called from another const function.
+const func add_square(total: $mut i32, value: i32) {
+    $total += square(value);
+}
+
+
 const func sum_squares(count: i32) -> i32 {
     var index = 0;
     var total = 0;
     while (index < count) {
-        total += square(index);
+        add_square(@mut total, index);
         index += 1;
     }
     return total;

@@ -64,3 +64,4 @@ mlc_examples.workspace = true
 toml.workspace = true
 clap.workspace = true
 tempfile.workspace = true
+colored.workspace = true

@@ -66,13 +66,28 @@ pub(crate) fn validate_call(
             span,
         ));
     }
+    Ok(())
+}
+pub(crate) fn check_call_boundary(
+    call: &FuncCall,
+    symbols: &dyn Resolution,
+    config: &mut Config,
+    context: Option<&StatementContext>,
+    span: Span,
+) {
+    let parent_is_const = context.is_some_and(|context| match *context.belong() {
+        EnumBool::False(index) if !index.is_empty() => symbols.get_function_regular(index).constant,
+        _ => false,
+    });
+    if parent_is_const {
+        return;
+    }
     if let EnumBool::False(index) = call.func {
         let function = symbols.get_function_regular(index);
-        if function.builtin().is_none() {
-            validate_inputs(function, symbols, span)?;
+        if function.constant && function.builtin().is_none() {
+            report(validate_inputs(function, symbols, span), config);
         }
     }
-    Ok(())
 }
 fn validate_inputs(
     symbol: &super::FuncSymbol,
@@ -86,7 +101,7 @@ fn validate_inputs(
     {
         return Err((
             format!(
-                "const function input parameter {name} cannot contain pointers: {}",
+                "const function input parameter {name} cannot contain pointers when called outside a const function: {}",
                 ty.format(symbols)
             ),
             span,
@@ -272,9 +287,6 @@ impl FuncBody {
             return true;
         }
         let mut names: HashSet<_> = symbol.params.iter().map(|p| p.1.clone()).collect();
-        if !report(validate_inputs(symbol, symbols, self.span), config) {
-            return false;
-        }
         local_names(&self.body, &mut names);
         if !report(
             statements(&self.body, symbols, &|v| names.contains(&v.name), self.span),

@@ -31,7 +31,8 @@ example with exact expected stdout comparisons.
 The `const-functions` example evaluates loops, recursion and nested calls in
 `const` initializers. It also shows an immutable `val` binding initialized by a
 runtime function call. Const functions can call const functions and compiler
-intrinsics. Input parameters cannot contain pointers, including pointers nested
-in arrays, units or unions. Non-const calls, C function calls and access to global
+intrinsics. Const functions can pass references to other const functions. Calls
+from ordinary functions or global initializers cannot pass pointer parameters,
+including pointers nested in arrays, units or unions. Non-const calls, C function calls and access to global
 var or val bindings are errors. Global const bindings and local pointer operations
 are allowed.

@@ -1,6 +1,6 @@
+use crate::manifest;
 use mlc_syntax::{ImportModule, manifest::SOURCE_SUFFIX};
 use std::path::{Component, Path, PathBuf};
-use crate::manifest;
 
 #[derive(Debug, Clone)]
 pub struct ImportResolver {

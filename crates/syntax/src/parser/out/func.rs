@@ -153,10 +153,18 @@ mod tests {
         };
         let mut value = serde_json::to_value(&function.symbol).unwrap();
         value.as_object_mut().unwrap().remove("constant");
-        assert!(!serde_json::from_value::<TempFuncSymbol>(value.clone()).unwrap().constant);
+        assert!(
+            !serde_json::from_value::<TempFuncSymbol>(value.clone())
+                .unwrap()
+                .constant
+        );
         value["constant"] = true.into();
         let symbol: TempFuncSymbol = serde_json::from_value(value).unwrap();
         let encoded = serde_json::to_string(&symbol).unwrap();
-        assert!(serde_json::from_str::<TempFuncSymbol>(&encoded).unwrap().constant);
+        assert!(
+            serde_json::from_str::<TempFuncSymbol>(&encoded)
+                .unwrap()
+                .constant
+        );
     }
 }

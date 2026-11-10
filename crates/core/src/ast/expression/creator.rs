@@ -52,6 +52,11 @@ impl Expression {
         }
         let expression = Self::create(config, temp_expr, symbols, context);
         if !config.is_poisoned() {
+            if let Self::FuncCallE(call, span) = &expression {
+                crate::ast::function::constant::check_call_boundary(
+                    call, symbols, config, context, *span,
+                );
+            }
             if let Some(context) = context {
                 expression.check_constant_context(symbols, config, context);
             }

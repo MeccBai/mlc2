@@ -99,7 +99,8 @@ pub fn function_parser<'tokens, I>()
 where
     I: ValueInput<'tokens, Token = TokenPack, Span = Span>,
 {
-    keyword(Token::Constant).or_not()
+    keyword(Token::Constant)
+        .or_not()
         .then_ignore(keyword(Token::Function))
         .then(signature_parser())
         .then(body_parser())

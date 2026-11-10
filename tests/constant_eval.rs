@@ -199,12 +199,12 @@ fn cached_nongeneric_constant_functions_keep_their_native_source_bodies() {
 }
 
 #[test]
-fn constant_functions_reject_pointer_inputs_including_nested_and_generic_types() {
+fn pointer_const_calls_are_rejected_outside_const_functions() {
     for source in [
-        "const func bad(p:$i32)->i32{return $p;}func main(){}",
-        "unit Box{pub p:$i32;};const func bad(x:Box)->i32{return 0;}func main(){}",
-        "unit Box<T>{pub value:T;};const func bad(x:[Box<$i32>:2])->i32{return 0;}func main(){}",
-        "union Input[i32,$i32];const func bad(x:Input)->i32{return 0;}func main(){}",
+        "const func bad(p:$i32)->i32{return $p;}func main(){var n=1;var result=bad(@n);}",
+        "unit Box{pub p:$i32;};const func bad(x:Box)->i32{return 0;}func main(){var n=1;var result=bad(Box{@n});}",
+        "unit Box<T>{pub value:T;};const func bad(x:[Box<$i32>:2])->i32{return 0;}func main(){var n=1;var result=bad([Box<$i32>{@n},Box<$i32>{@n}]);}",
+        "union Input[i32,$i32];const func bad(x:Input)->i32{return 0;}func main(){var result=bad(Input{1});}",
         "const func<T> bad(x:T)->i32{return 0;}func main(){var n=1;var result=bad<$i32>(@n);}",
     ] {
         let (_, output) = compile(source, HOST);
@@ -427,4 +427,30 @@ fn constant_functions_can_read_globals_initialized_by_constant_calls() {
     );
     success(&output);
     assert!(ir(&root, HOST).contains("store i32 42"));
+}
+
+#[test]
+fn const_functions_allow_reference_parameters_and_internal_aliasing() {
+    let (root, output) = compile(
+        "unit Box{pub p:$mut i32;};const func unused(p:$i32)->i32{return $p;}const func<T> write(a:$mut T,b:$T,value:T)->T{$a=value;return $b;}const func nested(box:Box)->i32{return write<i32>(box.p,cast<$i32>(box.p),17);}const func calculate()->i32{var a=9;return nested(Box{@mut a});}func main()->i32{const result=calculate();return result;}",
+        HOST,
+    );
+    success(&output);
+    assert!(ir(&root, HOST).contains("store i32 17"));
+}
+#[test]
+fn reference_const_calls_do_not_fall_back_to_runtime() {
+    for source in [
+        "const func read(p:$i32)->i32{return $p;}func runtime(p:$i32)->i32{return read(p);}func main(){}",
+        "const func update(p:$mut i32){$p+=1;}func main(){var n=1;update(@mut n);}",
+        "const func read(p:$i32)->i32{return $p;}global const n=1;global const result=read(@n);func main(){}",
+    ] {
+        let (_, output) = compile(source, HOST);
+        assert!(!output.status.success());
+        assert!(
+            String::from_utf8_lossy(&output.stderr).contains("outside a const function"),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
 }

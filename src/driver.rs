@@ -16,6 +16,7 @@ use mlc_builder::{
 };
 use progress::Progress;
 use std::{collections::HashMap, path::Path};
+use colored::{self, Colorize};
 
 pub fn run(cli: Cli) -> Result<i32, String> {
     let operation = match &cli.command {
@@ -359,7 +360,7 @@ fn build(
         eprintln!("warning: {warning}");
     }
     if !report.succeeded() {
-        return Err(format!("Build failed: {:?}", report.results));
+        return Err(format!("{}: {:?}", "Build failed".red(), report.results));
     }
     if objects_only {
         println!(
@@ -467,8 +468,10 @@ fn build(
     progress.link(link_hit);
     progress.advance();
     progress.clear();
-    println!("Built {}", artifact.display());
+    println!("{} {}", "Built".bright_green(), artifact.display().to_string().underline());
     Ok(Some(artifact))
 }
 
-pub(crate) fn constant_worker() -> Result<(), String> { frontend::ctfe::worker() }
+pub(crate) fn constant_worker() -> Result<(), String> {
+    frontend::ctfe::worker()
+}
