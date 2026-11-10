@@ -1,4 +1,5 @@
-//! Formatting owns file discovery and publication, never build/import resolution.
+use mlc_core::diagnostic::{Diagnostic, Report};
+// Formatting owns file discovery and publication, never build/import resolution.
 use mlc_builder::project::ProjectFile;
 use mlc_formatter::{FormatError, format};
 use std::{
@@ -11,7 +12,7 @@ pub(super) fn run(
     cwd: &Path,
     input: Option<&Path>,
     progress: &super::Progress,
-) -> Result<i32, String> {
+) -> Result<i32, Report> {
     progress.stage("Discovering sources", 0);
     let mut files = Vec::new();
     if let Some(input) = input {
@@ -21,7 +22,8 @@ pub(super) fn run(
             return Err(error(
                 &file,
                 "Expected a regular source file, not a directory or symlink",
-            ));
+            )
+            .into());
         }
         files.push(file);
     } else {
@@ -60,12 +62,12 @@ pub(super) fn run(
         match format(&source) {
             Ok(output) if output != source => changed.push((file, source, output)),
             Ok(_) => progress.formatted(false),
-            Err(issue) => diagnostics.push(render_error(&file, &source, issue)),
+            Err(issue) => diagnostics.extend(source_diagnostics(&file, &source, issue)),
         }
         progress.advance();
     }
     if !diagnostics.is_empty() {
-        return Err(diagnostics.join("\n"));
+        return Err(Report::new(diagnostics));
     }
 
     // Stage in the same directory, retaining permissions; never truncate originals.
@@ -84,10 +86,7 @@ pub(super) fn run(
             .set_permissions(permissions)
             .map_err(|e| error(file, e))?;
         if fs::read_to_string(file).map_err(|e| error(file, e))? != *source {
-            return Err(error(
-                file,
-                "File changed during formatting; not overwritten",
-            ));
+            return Err(error(file, "File changed during formatting; not overwritten").into());
         }
         staged.push((file, temp));
         progress.advance();
@@ -98,10 +97,10 @@ pub(super) fn run(
         progress.formatted(true);
         progress.advance();
         progress.clear();
-        println!("Formatted {}", file.display());
+        crate::output::info(format!("Formatted {}", file.display()));
     }
     progress.clear();
-    println!("{} file(s) formatted.", changed.len());
+    crate::output::info(format!("{} file(s) formatted.", changed.len()));
     Ok(0)
 }
 
@@ -148,18 +147,17 @@ fn error(path: &Path, message: impl std::fmt::Display) -> String {
     format!("{}: {message}", path.display())
 }
 
-fn render_error(file: &Path, source: &str, issue: FormatError) -> String {
-    use mlc_core::diagnostic::error::ErrorHandle;
-    let handle = ErrorHandle::new(file.to_string_lossy().into_owned());
+fn source_diagnostics(file: &Path, source: &str, issue: FormatError) -> Vec<Diagnostic> {
     let issues = match issue {
         FormatError::Lexical(issue) => vec![issue],
         FormatError::Syntax(issues) if !issues.is_empty() => issues,
-        other => return error(file, other),
+        other => return vec![Diagnostic::error(error(file, other))],
     };
-    let rendered = issues
-        .iter()
-        .map(|issue| handle.render_error(source, issue.span.clone(), &issue.message))
-        .collect::<Vec<_>>()
-        .join("\n");
-    ErrorHandle::summarize(&rendered, issues.len())
+    let source: std::sync::Arc<str> = source.into();
+    issues
+        .into_iter()
+        .map(|issue| {
+            Diagnostic::error(issue.message).at(file.to_string_lossy(), source.clone(), issue.span)
+        })
+        .collect()
 }

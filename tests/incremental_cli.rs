@@ -44,10 +44,7 @@ fn cli_implementation_change_rebuilds_only_its_object_and_relinks() {
     let first = run(root.path());
     let summary = String::from_utf8_lossy(&first.stdout);
     assert!(summary.contains("Build completed in "), "{summary}");
-    assert!(
-        summary.contains("Cache hits: 0.0% (0/2 object checks)"),
-        "{summary}"
-    );
+    assert!(summary.contains("Cache hits: 0.0% (0/2)"), "{summary}");
     assert!(!first.stderr.contains(&b'\r'));
     let objects = root
         .path()
@@ -62,11 +59,8 @@ fn cli_implementation_change_rebuilds_only_its_object_and_relinks() {
     let previous = artifacts::load(&objects.join("leaf.sym")).unwrap();
     let second = run(root.path());
     let summary = String::from_utf8_lossy(&second.stdout);
-    assert!(
-        summary.contains("Cache hits: 100.0% (2/2 object checks)"),
-        "{summary}"
-    );
-    assert!(summary.contains("links reused: 1/1"), "{summary}");
+    assert!(summary.contains("Cache hits: 100.0% (2/2)"), "{summary}");
+    assert!(summary.contains("links reused: 100.0% (1/1)"), "{summary}");
     assert_eq!(fs::metadata(&main).unwrap().modified().unwrap(), main_time);
     assert_eq!(fs::metadata(&leaf).unwrap().modified().unwrap(), leaf_time);
     assert_eq!(

@@ -25,7 +25,7 @@ impl PathResolver {
         executable: &Path,
         project_root: &Path,
         target: Option<&str>,
-    ) -> Result<Self, String> {
+    ) -> Result<Self, mlc_core::diagnostic::Report> {
         Self::new(
             executable,
             project_root,
@@ -39,9 +39,9 @@ impl PathResolver {
         project_root: &Path,
         target: Option<&str>,
         global: &GlobalConfig,
-    ) -> Result<Self, String> {
+    ) -> Result<Self, mlc_core::diagnostic::Report> {
         let project = ProjectFile::load(project_root)?;
-        Self::with_project(executable, project_root, target, global, project)
+        Self::with_project(executable, project_root, target, global, project).map_err(Into::into)
     }
 
     /// Resolve a standalone source without reading any project configuration.

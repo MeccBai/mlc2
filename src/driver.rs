@@ -1,3 +1,4 @@
+use mlc_core::diagnostic::Report;
 mod cache;
 mod clean;
 mod frontend;
@@ -7,6 +8,7 @@ mod link;
 mod progress;
 mod setup;
 use crate::cli::{Cli, Commands};
+use colored::{self, Colorize};
 use mlc_builder::{
     config::GlobalConfig,
     paths::PathResolver,
@@ -16,9 +18,8 @@ use mlc_builder::{
 };
 use progress::Progress;
 use std::{collections::HashMap, path::Path};
-use colored::{self, Colorize};
 
-pub fn run(cli: Cli) -> Result<i32, String> {
+pub fn run(cli: Cli) -> Result<i32, Report> {
     let operation = match &cli.command {
         Commands::Build { .. } => Some("Build"),
         Commands::Setup => Some("Setup"),
@@ -31,12 +32,12 @@ pub fn run(cli: Cli) -> Result<i32, String> {
     result
 }
 
-fn run_inner(cli: Cli, progress: &Progress) -> Result<i32, String> {
+fn run_inner(cli: Cli, progress: &Progress) -> Result<i32, Report> {
     let root = std::env::current_dir().map_err(|e| e.to_string())?;
     let targets = match &cli.command {
-        Commands::Clean => return clean::run(&root, cli.output.as_deref()),
+        Commands::Clean => return clean::run(&root, cli.output.as_deref()).map_err(Into::into),
         Commands::Setup => return setup::run(&cli, &root, progress),
-        Commands::Init { project } => return initialize::run(&root, project),
+        Commands::Init { project } => return initialize::run(&root, project).map_err(Into::into),
         Commands::Fmt { .. } => return Err("Use mlc fmt to invoke the formatting worker".into()),
         Commands::Ll { input } => {
             vec![(input.clone(), None, TargetKind::Bin)]
@@ -47,7 +48,8 @@ fn run_inner(cli: Cli, progress: &Progress) -> Result<i32, String> {
                 return Err(format!(
                     "Declaration input not found\nExpected path: {}",
                     input.display()
-                ));
+                )
+                .into());
             }
             let output = cli
                 .output
@@ -68,17 +70,22 @@ fn run_inner(cli: Cli, progress: &Progress) -> Result<i32, String> {
                 Some("toml") => mlc_builder::artifacts::convert_toml(&input, &output)?,
                 _ => return Err("symbols accepts only .h or .toml input".into()),
             }
-            println!("Written {}", output.display());
+            crate::output::artifact("symbols", &output);
+            crate::output::info(format!("Written {}", output.display()));
             return Ok(0);
         }
         Commands::Example { name } => {
             let output = mlc_examples::render(name)?;
+            if crate::output::enabled() {
+                crate::output::info(output);
+                return Ok(0);
+            }
             use std::io::Write;
             return std::io::stdout()
                 .lock()
                 .write_all(output.as_bytes())
                 .map(|()| 0)
-                .map_err(|error| error.to_string());
+                .map_err(|error| Report::from(error.to_string()));
         }
         Commands::Build {
             target: Some(target),
@@ -123,7 +130,8 @@ fn run_inner(cli: Cli, progress: &Progress) -> Result<i32, String> {
                 return Err(format!(
                     "Configuration file not found\nExpected path: {}",
                     path.display()
-                ));
+                )
+                .into());
             }
             GlobalConfig::load(&path)?
         }
@@ -148,6 +156,16 @@ fn run_inner(cli: Cli, progress: &Progress) -> Result<i32, String> {
         )?;
         if matches!(cli.command, Commands::Run { .. }) {
             let artifact = artifact.ok_or("Build did not produce an executable")?;
+            if crate::output::enabled() {
+                let output = std::process::Command::new(&artifact)
+                    .output()
+                    .map_err(|e| format!("Cannot run {}: {e}", artifact.display()))?;
+                crate::output::program(&output);
+                return output
+                    .status
+                    .code()
+                    .ok_or_else(|| "Program terminated without an exit code".into());
+            }
             let status = std::process::Command::new(&artifact)
                 .status()
                 .map_err(|e| format!("Cannot run {}: {e}", artifact.display()))?;
@@ -168,7 +186,7 @@ fn build(
     kind: TargetKind,
     progress: &Progress,
     objects_only: bool,
-) -> Result<Option<std::path::PathBuf>, String> {
+) -> Result<Option<std::path::PathBuf>, Report> {
     progress.stage("Discovering sources", 0);
     let executable = std::env::current_exe().map_err(|e| e.to_string())?;
     let mut paths = if name.is_none() {
@@ -357,18 +375,21 @@ fn build(
     )?;
     progress.clear();
     for warning in &report.warnings {
-        eprintln!("warning: {warning}");
+        crate::output::warning(warning.clone());
     }
     if !report.succeeded() {
-        return Err(format!("{}: {:?}", "Build failed".red(), report.results));
+        return Err(format!("{}: {:?}", "Build failed".red(), report.results).into());
     }
     if objects_only {
-        println!(
+        for path in &report.objects {
+            crate::output::artifact("object", path);
+        }
+        crate::output::info(format!(
             "Prepared {} ({}/{})",
             entry.display(),
             mode.directory(),
             paths.triplet
-        );
+        ));
         return Ok(None);
     }
     std::fs::create_dir_all(&paths.output).map_err(|e| e.to_string())?;
@@ -465,10 +486,15 @@ fn build(
         }
         cache::record(&artifact, &link_key)?;
     }
+    crate::output::artifact("linked", &artifact);
     progress.link(link_hit);
     progress.advance();
     progress.clear();
-    println!("{} {}", "Built".bright_green(), artifact.display().to_string().underline());
+    crate::output::info(format!(
+        "{} {}",
+        "Built".bright_green(),
+        artifact.display().to_string().underline()
+    ));
     Ok(Some(artifact))
 }
 

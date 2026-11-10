@@ -239,14 +239,14 @@ impl Executor {
             let mut ast = AbstractSyntaxTree::new(config, module);
             ast.export(&mut package);
             if ast.config.is_poisoned() {
-                super::checked(&ast)?;
+                super::checked(&ast).map_err(|report| report.to_string())?;
             }
             asts.push(ast);
         }
         for ast in &mut asts {
             ast.analysis(&mut package);
             if ast.config.is_poisoned() {
-                super::checked(ast)?;
+                super::checked(ast).map_err(|report| report.to_string())?;
             }
         }
         let wrapper_index = package

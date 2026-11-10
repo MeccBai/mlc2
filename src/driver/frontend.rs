@@ -1,4 +1,5 @@
-//! Package analysis stays local; only finished IR crosses build worker boundaries.
+use mlc_core::diagnostic::{Diagnostic, Report};
+// Package analysis stays local; only finished IR crosses build worker boundaries.
 use mlc_builder::{
     artifacts,
     plan::{BuildPlan, TargetInput},
@@ -87,6 +88,7 @@ pub fn generate_with_config(
         &HashMap::new(),
         None,
     )
+    .map_err(|report| report.to_string())
 }
 
 pub fn generate_with_module_configs(
@@ -103,7 +105,7 @@ pub fn generate_with_module_configs(
         ),
     >,
     cache_root: Option<std::path::PathBuf>,
-) -> Result<Generated, String> {
+) -> Result<Generated, Report> {
     let cache_root = cache_root.unwrap_or_else(|| {
         let mode = match (codegen.optimized, codegen.debug_info) {
             (false, false) => "default",
@@ -137,7 +139,8 @@ pub fn generate_with_module_configs(
                         target.file.display(),
                         manifest.config.target,
                         triplet
-                    ));
+                    )
+                    .into());
                 }
                 let artifact = artifacts::load(&target.file)?;
                 artifact
@@ -400,22 +403,18 @@ fn append_startup(ir: &mut String, initializers: &[String]) {
     ir.push_str("  ret void\n}\n");
 }
 
-fn checked(ast: &AbstractSyntaxTree) -> Result<(), String> {
+fn checked(ast: &AbstractSyntaxTree) -> Result<(), Report> {
+    let file = &ast.config.error_handle().file;
+    let source: std::sync::Arc<str> = std::fs::read_to_string(file).unwrap_or_default().into();
     for info in &ast.config.warning_handle().warnings {
-        let source = std::fs::read_to_string(&ast.config.warning_handle().file).unwrap_or_default();
-        let message = info.warning.to_string();
-        let diagnostic = ast.config.error_handle().render_warning(
-            &source,
+        crate::output::diagnostic(Diagnostic::warning(info.warning.to_string()).at(
+            file.clone(),
+            source.clone(),
             info.span.start..info.span.end,
-            &message,
-        );
-        eprintln!("{diagnostic}");
+        ));
     }
     if ast.config.is_poisoned() {
-        let handle = ast.config.error_handle();
-        let source = std::fs::read_to_string(&handle.file)
-            .map_err(|e| format!("Cannot read source file {}: {e}", handle.file))?;
-        Err(handle.render(&source))
+        Err(Report::new(ast.config.error_handle().diagnostics(source)))
     } else {
         Ok(())
     }

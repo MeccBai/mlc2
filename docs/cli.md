@@ -18,6 +18,44 @@ Build 的缓存命中率为 Cached / (Cached + Built)，包含泛型实例对象
 检查时显示 N/A。该指标不是前端分析缓存率，当前前端仍会执行分析和 IR 生成。
 Fmt 不存在缓存命中率，显示实际写回与无需修改的文件数。
 
+## 颜色与 JSON 输出
+
+普通终端输出为成功状态、产物路径、警告和错误添加颜色。重定向时默认不输出颜色；
+设置环境变量 `NO_COLOR=1` 可关闭颜色。
+
+`--json` 是全局参数，可放在子命令之前或之后：
+
+```powershell
+mlc build main.m2 --json
+mlc --json build
+mlc run main.m2 --json
+mlc fmt main.m2 --json
+```
+
+该模式向 stdout 输出一个 JSON 对象，关闭进度条、耗时摘要、ANSI 颜色和源码位置的
+文本渲染。词法、语法、语义错误及 warning 都进入 `diagnostics`，不再打印源码片段。
+成功构建同样输出 JSON；进程退出码仍保留成功、失败或被运行程序的退出状态。
+
+| 字段 | 内容 |
+| --- | --- |
+| `version` | 输出结构版本，当前为 1 |
+| `command` | 子命令名称；参数解析结果使用 cli |
+| `success` / `exit_code` | 是否成功及进程退出码 |
+| `artifacts` | 产物列表，每项包含 kind 和 path |
+| `diagnostics` | 诊断列表，每项包含 severity 和 message |
+| `messages` | 其他命令结果说明 |
+| `run` | run 命令的程序 stdout、stderr、exit_code；其他命令为 null |
+
+编译管线通过统一的 `Diagnostic` / `Report` 传递诊断，保留严重程度、消息、源码
+快照和字节范围。扫描、语义检查、格式化和声明导入阶段不渲染提示；最外层 CLI
+统一选择文本渲染或 JSON 序列化，warning 也遵循同一路径。
+
+源码诊断另含 `file`、`span.start`、`span.end`、`line`、`column`。
+span 是从 0 开始的 UTF-8 字节范围，结束位置不包含在内；行列从 1 开始，列按 Unicode
+字符计算。文件不存在、链接失败等没有源码范围的错误只提供 severity 和 message。
+`run --json` 将程序输出收进 run 字段，程序输出不会混入顶层 JSON；程序返回非零值时
+success 为 false，退出码保持该值。
+
 ## 格式化
 
 ```powershell

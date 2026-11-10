@@ -2,6 +2,7 @@
 mod cli;
 mod driver;
 pub mod manifest;
+mod output;
 
 fn main() {
     if std::env::args_os()
@@ -14,12 +15,8 @@ fn main() {
         }
         return;
     }
-    use clap::Parser;
-    match driver::run(cli::Cli::parse()) {
-        Ok(code) => std::process::exit(code),
-        Err(error) => {
-            eprintln!("{error}");
-            std::process::exit(1);
-        }
-    }
+    let cli = output::parse();
+    let command = output::command(&cli);
+    let result = driver::run(cli);
+    std::process::exit(output::finish(command, result));
 }

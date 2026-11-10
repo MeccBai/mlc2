@@ -208,25 +208,57 @@ impl ErrorHandle {
         )
     }
 
-    pub fn token_error(&self, token_error: TokenError, source: &str) {
-        let message = token_error.message();
-        eprintln!("{}", self.render_error(source, token_error.span, &message));
+    pub fn token_error(&self, token_error: TokenError, source: &str) -> super::Diagnostic {
+        super::Diagnostic::error(token_error.message()).at(
+            self.file.clone(),
+            std::sync::Arc::<str>::from(source),
+            token_error.span,
+        )
     }
-
-    pub fn parse_error(&self, parse_error: &ParseError<'_>, source: &str) {
-        let span = parse_error.span().into_range();
-        eprintln!(
-            "{}",
-            self.render_error(
-                source,
-                span,
-                &crate::parser::diagnostic::message(parse_error)
-            )
-        );
+    pub fn parse_error(&self, parse_error: &ParseError<'_>, source: &str) -> super::Diagnostic {
+        super::Diagnostic::error(crate::parser::diagnostic::message(parse_error)).at(
+            self.file.clone(),
+            std::sync::Arc::<str>::from(source),
+            parse_error.span().into_range(),
+        )
     }
 
     pub fn submit_error(&mut self, error: CompileError, span: Span) {
         let error_info = ErrorInfo::new(error, span);
         self.errors.insert(error_info);
+    }
+}
+
+pub(super) fn render_diagnostic(
+    file: &str,
+    source: &str,
+    span: Range<usize>,
+    message: &str,
+) -> String {
+    render::diagnostic(file, source, span, message)
+}
+pub(super) fn render_warning(
+    file: &str,
+    source: &str,
+    span: Range<usize>,
+    message: &str,
+) -> String {
+    render::warning(file, source, span, message)
+}
+impl ErrorHandle {
+    pub fn diagnostics(&self, source: impl Into<std::sync::Arc<str>>) -> Vec<super::Diagnostic> {
+        let source = source.into();
+        let mut errors: Vec<_> = self.errors.iter().collect();
+        errors.sort_by_key(|info| (info.span.start, info.span.end, info.error.to_string()));
+        errors
+            .into_iter()
+            .map(|info| {
+                super::Diagnostic::error(info.error.to_string()).at(
+                    self.file.clone(),
+                    source.clone(),
+                    info.span.into_range(),
+                )
+            })
+            .collect()
     }
 }

@@ -46,6 +46,10 @@ pub(super) fn run(cwd: &Path, project: &Path) -> Result<i32, String> {
         .map_err(|error| format!("{}: {error}", destination.join("Project.toml").display()))?;
     fs::write(source.join("main.m2"), "import std;\n\nfunc main()->i32 {\n    std::println!(\"Hello, world!\");\n    return 0;\n}\n")
         .map_err(|error| format!("{}: {error}", source.join("main.m2").display()))?;
-    println!("Created project {} at {}", name, destination.display());
+    crate::output::info(format!(
+        "Created project {} at {}",
+        name,
+        destination.display()
+    ));
     Ok(0)
 }

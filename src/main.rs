@@ -1,14 +1,13 @@
 #[allow(dead_code)]
 mod cli;
 mod dispatch;
-
+mod output;
 fn main() {
-    use clap::Parser;
-    match dispatch::run(cli::Cli::parse()) {
-        Ok(code) => std::process::exit(code),
-        Err(error) => {
-            eprintln!("{error}");
-            std::process::exit(1)
-        }
-    }
+    let cli = output::parse();
+    let command = output::command(&cli);
+    let code = match dispatch::run(cli) {
+        Ok(code) => code,
+        Err(error) => output::finish(command, Err(error.into())),
+    };
+    std::process::exit(code);
 }

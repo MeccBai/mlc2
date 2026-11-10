@@ -60,7 +60,8 @@ pub(super) fn write(
             .and_then(|_| file.as_file().sync_all())
             .map_err(|error| error.to_string())?;
         file.persist(&path).map_err(|error| error.to_string())?;
-        println!("Written {}", path.display());
+        crate::output::artifact("llvm-ir", &path);
+        crate::output::info(format!("Written {}", path.display()));
     }
     Ok(())
 }

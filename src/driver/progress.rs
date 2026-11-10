@@ -35,7 +35,9 @@ impl Progress {
             state: Arc::new(Mutex::new(State::default())),
             started: Instant::now(),
             operation,
-            terminal: operation.is_some() && io::stderr().is_terminal(),
+            terminal: !crate::output::enabled()
+                && operation.is_some()
+                && io::stderr().is_terminal(),
         }
     }
 
@@ -130,16 +132,23 @@ impl Progress {
     }
 
     pub fn finish(&self, success: bool) {
+        if crate::output::enabled() {
+            return;
+        }
         let Some(operation) = self.operation else {
             return;
         };
         self.clear();
         let state = self.state();
-        let status = if success { &"completed".green() } else { &"failed".red() };
+        let status = if success {
+            &"completed".green()
+        } else {
+            &"failed".red()
+        };
         let mut summary = format!(
-            "{} {status} in {}.",operation.bright_yellow(),
-            format!("{:.3}",self.started.elapsed().as_secs_f64()).underline()
-            
+            "{} {status} in {}.",
+            operation.bright_yellow(),
+            format!("{:.3}", self.started.elapsed().as_secs_f64()).underline()
         );
         if operation == "Build" || operation == "Setup" {
             let obj_hit_rate = {

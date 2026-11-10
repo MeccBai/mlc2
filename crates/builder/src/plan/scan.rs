@@ -22,7 +22,7 @@ pub(super) fn discover(
     entry: &Path,
     resolver: &ImportResolver,
     paths: Option<&PathResolver>,
-) -> Result<BuildPlan, String> {
+) -> Result<BuildPlan, mlc_core::diagnostic::Report> {
     let entry = entry.canonicalize().map_err(|e| {
         format!(
             "Cannot open source: {e}\nExpected path: {}",
@@ -50,7 +50,7 @@ pub(super) fn discover(
 }
 
 impl Scanner<'_> {
-    fn visit(&mut self, file: PathBuf) -> Result<TargetIndex, String> {
+    fn visit(&mut self, file: PathBuf) -> Result<TargetIndex, mlc_core::diagnostic::Report> {
         if let Some((id, state)) = self.known.get(&file) {
             if *state == State::Resolved {
                 return Ok(*id);
@@ -61,7 +61,7 @@ impl Scanner<'_> {
                 .chain(std::iter::once(&file))
                 .map(|p| p.display().to_string())
                 .collect();
-            return Err(format!("Import cycle: {}", cycle.join(" -> ")));
+            return Err(format!("Import cycle: {}", cycle.join(" -> ")).into());
         }
         let (input, imports, declared_name) = if file.extension().is_some_and(|ext| ext == "sym") {
             let manifest = crate::artifacts::load(&file)?.manifest;
@@ -72,31 +72,32 @@ impl Scanner<'_> {
             )
         } else {
             let text = fs::read_to_string(&file).map_err(|e| format!("{}: {e}", file.display()))?;
-            let diagnostics =
-                crate::diagnostic::error::ErrorHandle::new(file.to_string_lossy().into_owned());
+            let source: std::sync::Arc<str> = text.clone().into();
             let tokens = mlc_syntax::lexer::tokenize(&text).map_err(|e| {
-                let message = e.message();
-                crate::diagnostic::error::ErrorHandle::summarize(
-                    &diagnostics.render_error(&text, e.span, &message),
-                    1,
-                )
+                mlc_core::diagnostic::Report::new(vec![
+                    mlc_core::diagnostic::Diagnostic::error(e.message()).at(
+                        file.to_string_lossy(),
+                        source.clone(),
+                        e.span,
+                    ),
+                ])
             })?;
             let (module, errors) = mlc_syntax::parser::parse(&tokens.tokens, text.len());
             if !errors.is_empty() {
-                let rendered = errors
-                    .iter()
-                    .map(|e| {
-                        diagnostics.render_error(
-                            &text,
-                            e.span().into_range(),
-                            &mlc_syntax::parser::diagnostic::message(e),
-                        )
-                    })
-                    .collect::<Vec<_>>()
-                    .join("\n");
-                return Err(crate::diagnostic::error::ErrorHandle::summarize(
-                    &rendered,
-                    errors.len(),
+                return Err(mlc_core::diagnostic::Report::new(
+                    errors
+                        .iter()
+                        .map(|e| {
+                            mlc_core::diagnostic::Diagnostic::error(
+                                mlc_syntax::parser::diagnostic::message(e),
+                            )
+                            .at(
+                                file.to_string_lossy(),
+                                source.clone(),
+                                e.span().into_range(),
+                            )
+                        })
+                        .collect(),
                 ));
             }
             let module = module.ok_or("Parser returned no module")?;
@@ -123,7 +124,7 @@ impl Scanner<'_> {
             .iter()
             .any(|target| target.module_name == module_name)
         {
-            return Err(format!("Ambiguous module name: {module_name}"));
+            return Err(format!("Ambiguous module name: {module_name}").into());
         }
         let id = TargetIndex(self.targets.len());
         self.known.insert(file.clone(), (id, State::Resolving));

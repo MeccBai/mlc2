@@ -40,14 +40,17 @@ pub struct BuildPlan {
 }
 
 impl BuildPlan {
-    pub fn discover(entry: &Path, resolver: &ImportResolver) -> Result<Self, String> {
+    pub fn discover(
+        entry: &Path,
+        resolver: &ImportResolver,
+    ) -> Result<Self, mlc_core::diagnostic::Report> {
         scan::discover(entry, resolver, None)
     }
 
     pub fn discover_with_paths(
         entry: &Path,
         paths: &crate::paths::PathResolver,
-    ) -> Result<Self, String> {
+    ) -> Result<Self, mlc_core::diagnostic::Report> {
         scan::discover(entry, &paths.imports, Some(paths))
     }
 }

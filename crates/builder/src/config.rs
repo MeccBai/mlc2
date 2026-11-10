@@ -15,22 +15,29 @@ pub struct GlobalConfig {
 }
 
 impl GlobalConfig {
-    pub fn load_default() -> Result<Self, String> {
+    pub fn load_default() -> Result<Self, mlc_core::diagnostic::Report> {
         let home = std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" })
             .ok_or("Cannot locate user home directory")?;
         Self::load(&PathBuf::from(home).join(".mlc/config.toml"))
     }
 
-    pub fn load(path: &Path) -> Result<Self, String> {
+    pub fn load(path: &Path) -> Result<Self, mlc_core::diagnostic::Report> {
         let text = match fs::read_to_string(path) {
             Ok(text) => text,
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
                 return Ok(Self::default());
             }
-            Err(error) => return Err(format!("{}: {error}", path.display())),
+            Err(error) => return Err(format!("{}: {error}", path.display()).into()),
         };
-        let mut config: Self =
-            toml::from_str(&text).map_err(|e| format!("{}: {e}", path.display()))?;
+        let mut config: Self = toml::from_str(&text).map_err(|e: toml::de::Error| {
+            mlc_core::diagnostic::Report::new(vec![
+                mlc_core::diagnostic::Diagnostic::error(e.message()).at(
+                    path.to_string_lossy(),
+                    std::sync::Arc::<str>::from(text.as_str()),
+                    e.span().unwrap_or(0..0),
+                ),
+            ])
+        })?;
         if let Some(cache) = &mut config.lib_cache_dir {
             if cache.is_relative() {
                 *cache = path

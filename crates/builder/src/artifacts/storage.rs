@@ -186,7 +186,7 @@ pub fn convert_c_header(
     output: &Path,
     module: &str,
     target: &str,
-) -> Result<(), String> {
+) -> Result<(), mlc_core::diagnostic::Report> {
     if output
         .extension()
         .is_none_or(|extension| extension != "sym")
@@ -213,12 +213,13 @@ pub fn convert_c_header(
     }
     let text = fs::read_to_string(input).map_err(|e| format!("{}: {e}", input.display()))?;
     let declarations = ffi_parser::parse(&text, target).map_err(|issue| {
-        let handle =
-            mlc_core::diagnostic::error::ErrorHandle::new(input.to_string_lossy().into_owned());
-        mlc_core::diagnostic::error::ErrorHandle::summarize(
-            &handle.render_error(&text, issue.span, &issue.message),
-            1,
-        )
+        mlc_core::diagnostic::Report::new(vec![
+            mlc_core::diagnostic::Diagnostic::error(issue.message).at(
+                input.to_string_lossy(),
+                std::sync::Arc::<str>::from(text.as_str()),
+                issue.span,
+            ),
+        ])
     })?;
     let mut manifest = Manifest {
         config: Metadata {
@@ -236,11 +237,11 @@ pub fn convert_c_header(
         requires: vec![],
     };
     manifest.config.symbols_hash = manifest.computed_symbols_hash()?;
-    write_atomic(output, &to_binary(&manifest)?)
+    write_atomic(output, &to_binary(&manifest)?).map_err(Into::into)
 }
 
 /// Compile a hand-written, declaration-only TOML into a binary symbol artifact.
-pub fn convert_toml(input: &Path, output: &Path) -> Result<(), String> {
+pub fn convert_toml(input: &Path, output: &Path) -> Result<(), mlc_core::diagnostic::Report> {
     if output
         .extension()
         .is_none_or(|extension| extension != "sym")
@@ -248,6 +249,15 @@ pub fn convert_toml(input: &Path, output: &Path) -> Result<(), String> {
         return Err("Symbol output must use the .sym extension".into());
     }
     let text = fs::read_to_string(input).map_err(|e| format!("{}: {e}", input.display()))?;
+    toml::from_str::<toml::Value>(&text).map_err(|e| {
+        mlc_core::diagnostic::Report::new(vec![
+            mlc_core::diagnostic::Diagnostic::error(e.message()).at(
+                input.to_string_lossy(),
+                std::sync::Arc::<str>::from(text.as_str()),
+                e.span().unwrap_or(0..0),
+            ),
+        ])
+    })?;
     let mut manifest: Manifest = from_toml(&text)?;
     if !matches!(manifest.config.format_version, 2 | FORMAT_VERSION) {
         return Err("Unsupported artifact format version".into());
@@ -260,7 +270,7 @@ pub fn convert_toml(input: &Path, output: &Path) -> Result<(), String> {
         return Err("TOML conversion requires a declaration-only Object = None manifest".into());
     }
     manifest.config.format_version = FORMAT_VERSION;
-    write_atomic(output, &to_binary(&manifest)?)
+    write_atomic(output, &to_binary(&manifest)?).map_err(Into::into)
 }
 
 fn filename(path: &Path) -> Result<String, String> {

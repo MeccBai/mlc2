@@ -107,17 +107,25 @@ pub struct Target {
 }
 
 impl ProjectFile {
-    pub fn load(root: &std::path::Path) -> Result<Option<Self>, String> {
+    pub fn load(root: &std::path::Path) -> Result<Option<Self>, mlc_core::diagnostic::Report> {
         for name in ["Project.toml", "project.toml"] {
             let path = root.join(name);
             match std::fs::read_to_string(&path) {
                 Ok(text) => {
                     return toml::from_str(&text)
                         .map(Some)
-                        .map_err(|e| format!("{}: {e}", path.display()));
+                        .map_err(|e: toml::de::Error| {
+                            mlc_core::diagnostic::Report::new(vec![
+                                mlc_core::diagnostic::Diagnostic::error(e.message()).at(
+                                    path.to_string_lossy(),
+                                    std::sync::Arc::<str>::from(text.as_str()),
+                                    e.span().unwrap_or(0..0),
+                                ),
+                            ])
+                        });
                 }
                 Err(e) if e.kind() == std::io::ErrorKind::NotFound => (),
-                Err(e) => return Err(format!("{}: {e}", path.display())),
+                Err(e) => return Err(format!("{}: {e}", path.display()).into()),
             }
         }
         Ok(None)

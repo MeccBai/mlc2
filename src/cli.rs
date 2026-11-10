@@ -26,6 +26,9 @@ pub fn version() -> &'static str {
     about = "MLC compiler and project builder"
 )]
 pub struct Cli {
+    /// Emit one JSON result instead of human-readable output.
+    #[arg(long, global = true)]
+    pub json: bool,
     /// Build without optimization or debugging information.
     #[arg(long = "default", global = true, conflicts_with_all = ["debug", "release", "rel_with_info"])]
     pub default_mode: bool,
@@ -149,7 +152,7 @@ mod tests {
             assert_eq!(error.kind(), clap::error::ErrorKind::DisplayVersion);
             let banner = error.to_string();
             assert!(banner.contains(env!("CARGO_PKG_VERSION")));
-            assert!(banner.contains(&format!("Build: {}", mlc_builder::manifest::BUILD_NUMBER)));
+            assert!(banner.contains(&format!("Host: {}", mlc_builder::paths::HOST_TRIPLET)));
             assert!(banner.contains("Copyright (c) 2026 Mecc"));
             let executable = std::env::current_exe().unwrap();
             assert!(banner.contains(&executable.parent().unwrap().display().to_string()));

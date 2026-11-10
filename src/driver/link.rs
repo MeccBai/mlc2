@@ -143,7 +143,7 @@ pub fn link(
         ));
     }
     if !result.stderr.is_empty() {
-        eprint!("{}", String::from_utf8_lossy(&result.stderr));
+        crate::output::warning(String::from_utf8_lossy(&result.stderr).into_owned());
     }
     if debug && kind != TargetKind::Static {
         let published = tempfile::NamedTempFile::new_in(parent).map_err(|e| e.to_string())?;

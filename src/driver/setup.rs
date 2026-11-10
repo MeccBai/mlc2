@@ -1,4 +1,5 @@
-//! Bootstrap all library inputs; declaration conversion precedes source compilation.
+use mlc_core::diagnostic::Report;
+// Bootstrap all library inputs; declaration conversion precedes source compilation.
 use super::{Progress, build};
 use crate::cli::{Cli, Commands};
 use mlc_builder::{
@@ -44,7 +45,7 @@ struct Input {
     relative: PathBuf,
 }
 
-pub(super) fn run(cli: &Cli, cwd: &Path, progress: &Progress) -> Result<i32, String> {
+pub(super) fn run(cli: &Cli, cwd: &Path, progress: &Progress) -> Result<i32, Report> {
     let executable = std::env::current_exe().map_err(|error| error.to_string())?;
     let installation = executable
         .parent()
@@ -86,7 +87,8 @@ pub(super) fn run(cli: &Cli, cwd: &Path, progress: &Progress) -> Result<i32, Str
                 return Err(format!(
                     "Library inputs require lib/<triplet-or-universal>/<module> layout: {}",
                     path.display()
-                ));
+                )
+                .into());
             }
             if variant != "universal" {
                 validate_triplet(&variant)?;
@@ -126,7 +128,8 @@ pub(super) fn run(cli: &Cli, cwd: &Path, progress: &Progress) -> Result<i32, Str
                 ))
                 .collect::<Vec<_>>()
                 .join("\n")
-        ));
+        )
+        .into());
     }
     let output_override = cli.output.as_ref().map(|root| cwd.join(root));
     let destination = |input: &Input| {
@@ -152,17 +155,16 @@ pub(super) fn run(cli: &Cli, cwd: &Path, progress: &Progress) -> Result<i32, Str
             .join(&input.relative)
             .with_extension("sym");
         if !outputs.insert(output.clone()) {
-            return Err(format!(
-                "Duplicate library declaration output: {}",
-                output.display()
-            ));
+            return Err(
+                format!("Duplicate library declaration output: {}", output.display()).into(),
+            );
         }
         if input.path.extension().is_some_and(|ext| ext == "h") {
             artifacts::convert_c_header(&input.path, &output, &input.module, &input.variant)?;
         } else {
             artifacts::convert_toml(&input.path, &output)?;
         }
-        println!("Prepared {}", output.display());
+        crate::output::info(format!("Prepared {}", output.display()));
         progress.advance();
     }
     let modes = if cli.default_mode || cli.debug || cli.release || cli.rel_with_info {
@@ -210,9 +212,9 @@ pub(super) fn run(cli: &Cli, cwd: &Path, progress: &Progress) -> Result<i32, Str
             }
         }
     }
-    println!(
+    crate::output::info(format!(
         "Library setup complete: {} declarations, {count} source builds",
         declarations.len()
-    );
+    ));
     Ok(0)
 }
