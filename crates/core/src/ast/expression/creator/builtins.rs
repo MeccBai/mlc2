@@ -33,6 +33,45 @@ impl Expression {
             );
             return Self::Poison(span);
         }
+        if kind == Builtin::Todo {
+            let ty = symbols.get_base(DataType::Integer, 32, true);
+            let source = std::fs::read_to_string(config.current_file()).unwrap_or_default();
+            let lines = crate::lexer::LineTable::new(&source);
+            let position = lines.span_start(span);
+            let location = position
+                .map(|p| format!("{}:{}:{}", config.current_file(), p.line, p.column))
+                .unwrap_or_else(|| config.current_file().clone());
+            let index = symbols.local_mut().functions.insert(
+                format!(
+                    "__mlc_todo_{:?}_{}",
+                    context.map(|c| c.belong()),
+                    span.start
+                ),
+                FuncSymbol {
+                    constant: false,
+                    span,
+                    name: format!("__mlc_todo_{}", span.start),
+                    params: vec![],
+                    ret_type: Some(ty),
+                    generics: vec![],
+                    generic_map: HashMap::new(),
+                    attributes: HashSet::from([FuncAttibute::Builtin(kind)]),
+                    exported: false,
+                },
+            );
+            return Self::FuncCallE(
+                FuncCall {
+                    pipeline: false,
+                    callee: None,
+                    func: EnumBool::False(index),
+                    args: vec![Self::InitListE(
+                        InitialList::from_string(format!("{location}: not implemented (todo)")),
+                        span,
+                    )],
+                },
+                span,
+            );
+        }
         let target = if kind == Builtin::ConstCStr {
             symbols.get_base(DataType::Integer, 8, true)
         } else if kind == Builtin::StrLen {
@@ -52,6 +91,7 @@ impl Expression {
             return Self::invalid_builtin(config, definition.name, span);
         }
         let valid = match kind {
+            Builtin::Todo => unreachable!(),
             Builtin::ConstCStr => {
                 matches!(symbols.get_type(source).unqualified(), CompileType::Str)
             }
@@ -92,6 +132,7 @@ impl Expression {
             }
         }
         let result = match kind {
+            Builtin::Todo => unreachable!(),
             Builtin::StrLen => Some(symbols.get_base(DataType::Integer, 64, false)),
             Builtin::ConstCStr => Some(
                 symbols

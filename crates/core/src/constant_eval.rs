@@ -19,7 +19,7 @@ pub trait Executor {
 thread_local! { static EXECUTOR: RefCell<Option<Rc<dyn Executor>>> = RefCell::new(None); }
 pub struct Guard(Option<Rc<dyn Executor>>);
 pub fn install(executor: Rc<dyn Executor>) -> Guard {
-    Guard(EXECUTOR.with(|slot| slot.replace(Some(executor))))
+    Guard(EXECUTOR.replace(Some(executor)))
 }
 impl Drop for Guard {
     fn drop(&mut self) {
@@ -50,6 +50,9 @@ pub(crate) fn evaluate(
             span,
         );
         return Some(Expression::Poison(span));
+    }
+    if call.args.iter().any(|a| a.contains_todo(symbols)) {
+        return None;
     }
     let executor = EXECUTOR.with(|slot| slot.borrow().clone())?;
     match executor.evaluate(call, symbols, config, span) {

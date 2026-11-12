@@ -178,6 +178,14 @@ impl CompAtom {
     }
 
     pub fn is_condition(&self, config: &mut Config, symbols: &mut dyn Resolution) -> bool {
+        let boolean = symbols.get_base(DataType::Boolean, 8, true);
+        if self
+            .clone()
+            .to_expression()
+            .contextual_todo(boolean, symbols)
+        {
+            return true;
+        }
         self.clone().to_expression().is_condition(config, symbols)
     }
 
@@ -216,6 +224,10 @@ impl Expression {
     }
 
     pub fn is_condition(&self, config: &mut Config, symbols: &mut dyn Resolution) -> bool {
+        let boolean = symbols.get_base(DataType::Boolean, 8, true);
+        if self.contextual_todo(boolean, symbols) {
+            return true;
+        }
         let ty = self.type_inference(config, symbols);
         if ty.is_empty() {
             return false;

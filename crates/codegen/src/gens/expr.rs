@@ -79,6 +79,18 @@ impl IrGenerator {
 
 impl Expander<'_> {
     fn expression_expected(&mut self, expr: &Expression, expected: Option<TypeIndex>) -> Lowered {
+        if let Expression::FuncCallE(call, ..) = expr {
+            if let crate::ast::symbols::EnumBool::False(index) = call.func {
+                if self.symbols.get_function(index, false).builtin()
+                    == Some(crate::ast::builtins::Builtin::Todo)
+                {
+                    return self.todo(
+                        &call.args[0],
+                        expected.or(self.symbols.get_function(index, false).ret_type),
+                    );
+                }
+            }
+        }
         if expected.is_some_and(|ty| ty.has_res(self.symbols)) {
             if let Expression::VarValueE(variable, ..) = expr {
                 let mut value = self.expression(expr);

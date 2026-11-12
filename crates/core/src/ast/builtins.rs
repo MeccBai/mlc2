@@ -1,6 +1,7 @@
 //! Compiler-owned callable identities; these are not external function symbols.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Builtin {
+    Todo,
     Alloc,
     Cast,
     Dealloc,
@@ -16,6 +17,12 @@ pub struct BuiltinDefinition {
 }
 
 pub const FUNCTIONS: &[BuiltinDefinition] = &[
+    BuiltinDefinition {
+        name: "todo",
+        kind: Builtin::Todo,
+        type_arguments: 0,
+        arguments: 0,
+    },
     BuiltinDefinition {
         name: "str::len",
         kind: Builtin::StrLen,
@@ -136,4 +143,59 @@ pub(crate) fn numeric_constant(
         _ => return None,
     };
     Some((DataType::Float, bits, true, value.to_string()))
+}
+
+impl crate::ast::expression::Expression {
+    pub fn is_todo(&self, symbols: &dyn crate::ast::symbols::Resolution) -> bool {
+        matches!(self, Self::FuncCallE(call, ..) if call.callee.is_none() && matches!(call.func,crate::ast::symbols::EnumBool::False(i) if symbols.get_function_regular(i).builtin()==Some(Builtin::Todo)))
+    }
+}
+
+impl crate::ast::expression::Expression {
+    pub(crate) fn contextual_todo(
+        &self,
+        target: crate::ast::TypeIndex,
+        symbols: &mut dyn crate::ast::symbols::Resolution,
+    ) -> bool {
+        if !self.is_todo(symbols) {
+            return false;
+        }
+        if let Self::FuncCallE(call, ..) = self {
+            if let crate::ast::symbols::EnumBool::False(index) = call.func {
+                symbols.local_mut().functions.get_mut(index).ret_type = Some(target);
+            }
+        }
+        true
+    }
+}
+
+impl crate::ast::expression::Expression {
+    pub fn contains_todo(&self, symbols: &dyn crate::ast::symbols::Resolution) -> bool {
+        use crate::ast::expression::{Access, Expression as E, InitialList, UnaryExpr};
+        if self.is_todo(symbols) {
+            return true;
+        }
+        match self {
+            E::VarValueE(v, ..) => v.init_val.contains_todo(symbols),
+            E::CompositeE(c, ..) => c
+                .members
+                .iter()
+                .any(|a| a.clone().to_expression().contains_todo(symbols)),
+            E::FuncCallE(call, ..) => call.args.iter().any(|a| a.contains_todo(symbols)),
+            E::UnaryExprE(UnaryExpr::Operator { value, .. }, ..) => {
+                value.clone().to_expression().contains_todo(symbols)
+            }
+            E::UnaryExprE(UnaryExpr::Access(Access::Member { base, .. }), ..) => {
+                base.clone().to_expression().contains_todo(symbols)
+            }
+            E::UnaryExprE(UnaryExpr::Access(Access::Index { base, index }), ..) => {
+                base.contains_todo(symbols) || index.contains_todo(symbols)
+            }
+            E::InitListE(
+                InitialList::Array { values, .. } | InitialList::List { values, .. },
+                ..,
+            ) => values.iter().any(|a| a.contains_todo(symbols)),
+            _ => false,
+        }
+    }
 }

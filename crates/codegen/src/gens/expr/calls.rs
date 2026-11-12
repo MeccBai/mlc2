@@ -10,6 +10,9 @@ impl Expander<'_> {
         {
             let symbol = self.symbols.get_function(index, false);
             if let Some(kind) = symbol.builtin() {
+                if kind == crate::ast::builtins::Builtin::Todo {
+                    return self.todo(&call.args[0], symbol.ret_type);
+                }
                 return self.builtin(kind, symbol, &call.args[0]);
             }
         }

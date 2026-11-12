@@ -448,7 +448,9 @@ impl<'a> FunctionGenerator<'a> {
                     || name == super::memory::MEMCPY
                     || name == "malloc"
                     || name == "free"
-                    || name == "abort" =>
+                    || name == "abort"
+                    || name == "puts"
+                    || name == "exit" =>
                 {
                     Some(name.clone())
                 }

@@ -9,6 +9,7 @@ pub const HOST_TRIPLET: &str = env!("MLC_HOST_TRIPLET");
 
 #[derive(Debug, Clone)]
 pub struct PathResolver {
+    pub ctfe_max_time: std::time::Duration,
     pub mode: crate::project::BuildMode,
     pub std_type: Option<crate::project::StdType>,
     pub build_root: PathBuf,
@@ -113,6 +114,10 @@ impl PathResolver {
             .or_else(|| project.as_ref().and_then(|project| project.project.mode))
             .unwrap_or_default();
         let mut paths = Self {
+            ctfe_max_time: project
+                .as_ref()
+                .map(|p| p.ctfe.max_time)
+                .unwrap_or_else(|| crate::project::CtfeConfig::default().max_time),
             mode,
             std_type: selected.and_then(|target| target.std_type).or_else(|| {
                 project

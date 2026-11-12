@@ -57,6 +57,7 @@ impl GlobalConfig {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Config {
+    pub semantic: Option<Rc<std::cell::RefCell<Vec<super::semantic::Occurrence>>>>,
     pub ptr_size: usize,
     pub ptr_align: usize,
     suppress_pointer_warning: bool,
@@ -82,6 +83,7 @@ impl Config {
     ) -> Self {
         let poisoned = !err_h.errors.is_empty();
         Self {
+            semantic: None,
             ptr_size: std::mem::size_of::<usize>(),
             ptr_align: std::mem::align_of::<usize>(),
             suppress_pointer_warning: false,

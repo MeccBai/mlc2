@@ -12,6 +12,10 @@ path = "src/builder_main.rs"
 name = "mlc-fmt"
 path = "src/formatter_main.rs"
 
+[[bin]]
+name = "mlc-lsp"
+path = "src/lsp_main.rs"
+
 [workspace]
 members = [
     ".",

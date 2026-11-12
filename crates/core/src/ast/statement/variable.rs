@@ -256,6 +256,16 @@ impl Variable {
         if config.is_poisoned() {
             return Self::poison();
         }
+        if let Some(index) = &config.semantic {
+            index.borrow_mut().push(crate::ast::semantic::Occurrence {
+                symbol: None,
+                span: temp_var.name_span,
+                ty: ty.format(symbols),
+                kind: "variable",
+                definition: Some((config.file_id(), temp_var.name_span)),
+                parameters: vec![],
+            });
+        }
         Rc::new(Self {
             constant: (native_str && ctxt.is_some()) || temp_var.value_type == ValueType::Constant,
             read_count: Default::default(),

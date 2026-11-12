@@ -93,9 +93,14 @@ pub fn resolve_type_with_bindings(
     symbols: &mut dyn Resolution,
     bindings: &dyn TypeContext,
 ) -> Option<TypeIndex> {
-    crate::TypeInfer::new(config, symbols)
+    let span = temp.1;
+    let ty = crate::TypeInfer::new(config, symbols)
         .with_context(bindings)
-        .resolve_type(temp)
+        .resolve_type(temp);
+    if let Some(ty) = ty {
+        crate::ast::semantic::type_occurrence(config, span, ty, symbols);
+    }
+    ty
 }
 
 #[cfg(test)]

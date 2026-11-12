@@ -114,6 +114,7 @@ pub(super) struct Executor {
     target: String,
     layout: mlc_core::ast::config::TargetLayout,
     cache_root: PathBuf,
+    max_time: std::time::Duration,
     temp_ast_hash: OnceCell<Result<String, String>>,
     compiler_hash: OnceCell<Result<String, String>>,
     running: Cell<bool>,
@@ -126,6 +127,7 @@ impl Executor {
         target: String,
         layout: mlc_core::ast::config::TargetLayout,
         cache_root: PathBuf,
+        max_time: std::time::Duration,
     ) -> Self {
         Self {
             plan,
@@ -133,6 +135,7 @@ impl Executor {
             target,
             layout,
             cache_root,
+            max_time,
             temp_ast_hash: OnceCell::new(),
             compiler_hash: OnceCell::new(),
             running: Cell::new(false),
@@ -184,7 +187,7 @@ impl Executor {
             source,
         ))?;
         let fingerprint = cache::Fingerprint {
-            version: 1,
+            version: 2,
             compiler_build: mlc_builder::manifest::BUILD_NUMBER,
             compiler_hash,
             temp_ast_hash,
@@ -265,12 +268,27 @@ impl Executor {
                     .into(),
             );
         }
+        // The generated bridge calls this function outside the analyzed AST.
+        package
+            .file_mut(FileId::new(owner))
+            .unwrap()
+            .functions
+            .get_mut(wrapper_index)
+            .exported = true;
+        let asts = mlc_optimizer::Optimizer::new(mlc_optimizer::OptimizeConfig::enabled())
+            .optimize_all(asts, &mut package);
         super::names::qualify(&mut package, &self.plan);
         let abi = package
             .get_function(wrapper_index, false)
             .llvm_func(&package)
             .map_err(|e| e.to_string())?;
-        let mut generator = IrGenerator::new(host.into());
+        let mut generator = IrGenerator::with_config(
+            host.into(),
+            mlc_codegen::gens::CodegenConfig {
+                debug_info: false,
+                optimized: true,
+            },
+        );
         let mut seen = std::collections::HashSet::new();
         for ast in asts {
             for function in ast.body {
@@ -326,13 +344,35 @@ impl Executor {
         std::fs::write(&schema, serde_json::to_vec(expected).unwrap())
             .map_err(|e| e.to_string())?;
         let worker = root.join(format!("mlc-build{}", std::env::consts::EXE_SUFFIX));
-        let output = Command::new(&worker)
+        let mut child = Command::new(&worker)
             .arg("__mlc_ctfe_worker")
             .arg(&library)
             .arg(&schema)
             .arg(&result)
-            .output()
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
             .map_err(|e| format!("Cannot launch {}: {e}", worker.display()))?;
+        let started = std::time::Instant::now();
+        loop {
+            if child.try_wait().map_err(|e| e.to_string())?.is_some() {
+                break;
+            }
+            if started.elapsed() >= self.max_time {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(format!(
+                    "CTFE execution exceeded MaxTime ({:.3}s)",
+                    self.max_time.as_secs_f64()
+                ));
+            }
+            std::thread::sleep(
+                std::time::Duration::from_millis(5)
+                    .min(self.max_time.saturating_sub(started.elapsed())),
+            );
+        }
+        let output = child.wait_with_output().map_err(|e| e.to_string())?;
         if !output.status.success() {
             return Err(format!(
                 "Constant worker failed ({}): {}",

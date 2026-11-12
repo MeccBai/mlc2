@@ -11,6 +11,7 @@ pub(super) fn run(cwd: &Path, project: &Path) -> Result<i32, String> {
         .ok_or("Project must name a new directory")?;
 
     let config = ProjectFile {
+        ctfe: Default::default(),
         project: Project {
             mode: None,
             std_type: None,

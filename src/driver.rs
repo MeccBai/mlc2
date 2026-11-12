@@ -277,7 +277,8 @@ fn build(
             optimized,
         },
         &module_configs,
-        Some(paths.output.join("ctfe")),
+        Some(output_root.join("ctfe")),
+        paths.ctfe_max_time,
     )?;
     if matches!(cli.command, Commands::Ll { .. }) {
         let directory = output_root

@@ -66,7 +66,12 @@ impl IrGenerator {
             }
         }
         for name in intrinsics {
-            if name == "malloc" || name == "free" || name == "abort" {
+            if name == "malloc"
+                || name == "free"
+                || name == "abort"
+                || name == "puts"
+                || name == "exit"
+            {
                 if self.remember_symbol(name.clone()) {
                     let malloc = format!(
                         "declare ptr @malloc(i{})",
@@ -76,6 +81,10 @@ impl IrGenerator {
                         &malloc
                     } else if name == "free" {
                         "declare void @free(ptr)"
+                    } else if name == "puts" {
+                        "declare i32 @puts(ptr)"
+                    } else if name == "exit" {
+                        "declare void @exit(i32) noreturn"
                     } else {
                         "declare void @abort() noreturn nounwind"
                     };

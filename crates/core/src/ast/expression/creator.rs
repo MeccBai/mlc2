@@ -64,6 +64,7 @@ impl Expression {
         if config.is_poisoned() {
             Self::Poison(span)
         } else {
+            crate::ast::semantic::expression(config, &expression, symbols);
             expression.with_span(span)
         }
     }

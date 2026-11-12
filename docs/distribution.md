@@ -5,7 +5,8 @@ MLC/
   mlc.exe
   mlc-build.exe                 # 编译/构建工作进程
   mlc-fmt.exe                   # 格式化工作进程
-  LLVM-C.dll                    # 仅 mlc-build 的启动依赖
+  mlc-lsp.exe                   # 保存后分析的独立 stdio LSP
+  LLVM-C.dll                    # mlc-build 和 mlc-lsp 的启动依赖
   tools/                       # ld.lld.exe、lld-link.exe 等宿主机工具
   lib/
     universal/                 # 通用 .m2 源码
@@ -19,9 +20,10 @@ MLC/
 ```
 
 `mlc` 只解析参数并分发，`fmt` 启动同目录的 `mlc-fmt`，其他业务命令启动
-`mlc-build`。帮助和版本在分发器内直接完成。只有构建工作进程导入 LLVM-C.dll；
-分发器和格式化器不加载 LLVM。三个程序保持同目录，工作进程继承当前目录、
+`mlc-build`。帮助和版本在分发器内直接完成。构建工作进程和 LSP 导入 LLVM-C.dll；
+分发器和格式化器不加载 LLVM。四个程序保持同目录，工作进程继承当前目录、
 标准输入输出和环境，退出码回传。开发构建请使用 `cargo build --bins`。
+编辑器直接启动 `mlc-lsp`，不经过分发器；用法见 [LSP](lsp.md)。
 
 源码搜索顺序：导入文件所在目录 → 配置的目标专用 lib 目录（按配置顺序）
 → 对应的 universal 源码目录。任何位置找到源码，都走正常源码构建流程，

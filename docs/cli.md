@@ -281,3 +281,30 @@ mlc run hello
 Declarations go to `objects/universal/` or `objects/<triplet>/`; source artifacts go to `objects/debug/<triplet>/` and `objects/release/<triplet>/`. On targets without debug-line support, the debug library variant remains unoptimized without source line metadata. Explicit build-mode flags select one library variant. `--triplet` restricts the target. `-o` selects a destination root, with `objects/` beneath it. Repeated setup reuses valid object caches. Library source inputs retain the layout `lib/<triplet-or-universal>/<module>.m2`, `.h` or `.toml`.
 
 Missing imports report the actual source and symbol paths searched. Missing entries, declaration inputs, Project.toml, explicit config files and native tools/libraries include their expected paths. The optional default user configuration may still be absent.
+
+## CTFE 缓存
+
+编译期求值缓存独立放在 `build/ctfe/<host-triplet>/<call-hash>/`，
+与 `build/objects/` 和 `build/<profile>/` 并列。`-o custom` 时改用 `custom/ctfe/`。
+同一目标的 default、debug、release、rel-with-info 共用缓存，`--optimize` 和
+`--no-optimize` 也不改变 CTFE 的优化策略。
+
+CTFE 固定开启全部 AST 优化和 LLVM O3，关闭调试信息。目录只按实际执行 CTFE 的宿主分类；目标信息仍保留在缓存校验记录中，避免
+交叉编译时混用不同的数据布局。源码、参数、编译器或布局变化仍会使对应缓存失效。
+
+
+### CTFE 执行预算
+
+单次 CTFE 求值默认最多执行 3 秒，递归和内部 const 调用共享这次预算；编译、优化与
+链接动态库的时间不计入执行预算。超时会终止并回收求值子进程，报错定位到调用位置，
+不发布结果缓存。已命中的缓存无需执行，不消耗执行预算。
+
+项目构建可在 Project.toml 顶层配置秒数：
+
+~~~toml
+[CTFE]
+MaxTime = 3.0
+~~~
+
+必须是有限且大于零的秒数。3.0.0 不是合法 TOML 数值。显式 .m2 入口仍遵循原规则，
+忽略 Project.toml，使用默认 3 秒。LSP 不执行 CTFE，因此不消耗此预算。

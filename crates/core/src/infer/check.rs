@@ -16,6 +16,9 @@ impl TypeInfer<'_> {
         if self.config.is_poisoned() || expression.is_poisoned() {
             return false;
         }
+        if expression.contextual_todo(target, self.symbols) {
+            return true;
+        }
         if target.is_empty() {
             self.config.submit_error(
                 crate::diagnostic::error::CompileError::Resolve(
@@ -93,6 +96,9 @@ impl TypeInfer<'_> {
         let target = &target;
         if config.is_poisoned() || expression.is_poisoned() {
             return false;
+        }
+        if expression.contextual_todo(*target, symbols) {
+            return true;
         }
         if let Some(accepted) = expression.numeric_initialization(*target, config, symbols) {
             return accepted;

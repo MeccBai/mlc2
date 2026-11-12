@@ -72,6 +72,7 @@ impl Expander<'_> {
         };
         let operand = self.load(&mut input.value);
         match kind {
+            Builtin::Todo => unreachable!(),
             Builtin::ConstCStr | Builtin::StrLen => {
                 unreachable!("constant string handled before argument lowering")
             }
@@ -301,6 +302,69 @@ impl Expander<'_> {
                     signed: false,
                 }
             }
+        }
+    }
+}
+
+impl Expander<'_> {
+    pub(super) fn todo(&mut self, argument: &Expression, expected: Option<TypeIndex>) -> Lowered {
+        let Expression::InitListE(InitialList::String { value: message }, ..) = argument else {
+            unreachable!()
+        };
+        let mut bytes = message.as_bytes().to_vec();
+        bytes.push(0);
+        let name = super::super::memory::string_name(&bytes);
+        let ty = expected
+            .map(|t| IrGenerator::type_lowering(t, self.symbols))
+            .unwrap_or(LlvmType::Int(32));
+        let slot = self.allocate();
+        Lowered {
+            signed: false,
+            value: LlvmValue {
+                ty: ty.clone(),
+                reg: Some(slot),
+                in_reg: false,
+                code: vec![
+                    Instruction::StringConstant {
+                        name: name.clone(),
+                        bytes,
+                    },
+                    Instruction::Call {
+                        target: None,
+                        func: IrValue::Global("puts".into()),
+                        return_type: LlvmType::Int(32),
+                        args: vec![TypedValue {
+                            ty: LlvmType::Ptr,
+                            value: IrValue::Global(name),
+                        }],
+                        variadic_params: None,
+                    },
+                    Instruction::Call {
+                        target: None,
+                        func: IrValue::Global("exit".into()),
+                        return_type: LlvmType::Void,
+                        args: vec![TypedValue {
+                            ty: LlvmType::Int(32),
+                            value: IrValue::Integer(-1),
+                        }],
+                        variadic_params: None,
+                    },
+                    Instruction::Alloca {
+                        target: slot,
+                        ty: ty.clone(),
+                        count: None,
+                        align: None,
+                    },
+                    Instruction::Store {
+                        pointer: IrValue::Reg(slot),
+                        value: TypedValue {
+                            ty,
+                            value: IrValue::ZeroInitializer,
+                        },
+                        align: None,
+                    },
+                ],
+            },
         }
     }
 }

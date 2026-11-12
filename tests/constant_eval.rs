@@ -272,13 +272,8 @@ fn constant_arguments_support_boolean_expressions_and_aggregate_members() {
     assert!(ir(&root, HOST).contains("store i32 40"));
 }
 
-fn cache_directories(root: &std::path::Path, mode: &str) -> Vec<std::path::PathBuf> {
-    let directory = root
-        .join("build/objects")
-        .join(mode)
-        .join(HOST)
-        .join("ctfe")
-        .join(HOST);
+fn cache_directories(root: &std::path::Path) -> Vec<std::path::PathBuf> {
+    let directory = root.join("build/ctfe").join(HOST);
     let mut entries = fs::read_dir(directory)
         .unwrap()
         .map(|entry| entry.unwrap().path())
@@ -300,7 +295,7 @@ fn persistent_constant_cache_skips_codegen_linking_and_worker_on_hits() {
         "const func twice(x:i32)->i32{return x*2;}func main()->i32{const x=twice(21);return x;}";
     let (root, output) = compile(source, HOST);
     success(&output);
-    let directories = cache_directories(root.path(), "default");
+    let directories = cache_directories(root.path());
     assert_eq!(directories.len(), 1);
     let entry = &directories[0];
     let record: toml::Value =
@@ -338,7 +333,7 @@ fn persistent_constant_cache_skips_codegen_linking_and_worker_on_hits() {
     let source = source.replace("return x;}", "const y=twice(22);return x+y;}");
     fs::write(root.path().join("main.m2"), &source).unwrap();
     success(&invoke_cached(root.path(), &["ll", "main.m2"]));
-    assert_eq!(cache_directories(root.path(), "default").len(), 2);
+    assert_eq!(cache_directories(root.path()).len(), 2);
     assert_eq!(
         fs::metadata(entry.join("cache.toml"))
             .unwrap()
@@ -355,13 +350,13 @@ fn persistent_constant_cache_skips_codegen_linking_and_worker_on_hits() {
     assert!(ir(&root, HOST).contains("store i32 66"));
 }
 #[test]
-fn persistent_constant_cache_rebuilds_corruption_and_respects_output_profiles() {
+fn persistent_constant_cache_rebuilds_corruption_and_respects_output_roots() {
     let (root, output) = compile(
         "const func answer()->i32{return 42;}func main()->i32{const x=answer();return x;}",
         HOST,
     );
     success(&output);
-    let entry = cache_directories(root.path(), "default").pop().unwrap();
+    let entry = cache_directories(root.path()).pop().unwrap();
     for name in ["constant.dll", "result.json", "cache.toml"] {
         fs::write(entry.join(name), "broken").unwrap();
         success(&invoke_cached(root.path(), &["ll", "main.m2"]));
@@ -378,12 +373,7 @@ fn persistent_constant_cache_rebuilds_corruption_and_respects_output_profiles() 
         root.path(),
         &["ll", "main.m2", "--release", "-o", "custom"],
     ));
-    let directory = root
-        .path()
-        .join("custom/objects/release")
-        .join(HOST)
-        .join("ctfe")
-        .join(HOST);
+    let directory = root.path().join("custom/ctfe").join(HOST);
     assert_eq!(fs::read_dir(directory).unwrap().count(), 1);
 }
 
@@ -453,4 +443,68 @@ fn reference_const_calls_do_not_fall_back_to_runtime() {
             String::from_utf8_lossy(&output.stderr)
         );
     }
+}
+
+#[test]
+fn ctfe_cache_is_shared_across_all_profiles_and_optimization_overrides() {
+    let (root, output) = compile(
+        "const func twice(x:i32)->i32{return x*2;}func main()->i32{const result=twice(21);return result;}",
+        HOST,
+    );
+    success(&output);
+    let entries = cache_directories(root.path());
+    assert_eq!(entries.len(), 1);
+    let entry = &entries[0];
+    let old = std::time::UNIX_EPOCH + std::time::Duration::from_secs(1_000_000);
+    for name in ["constant.dll", "result.json", "cache.toml"] {
+        fs::OpenOptions::new()
+            .write(true)
+            .open(entry.join(name))
+            .unwrap()
+            .set_modified(old)
+            .unwrap();
+    }
+    let times = ["constant.dll", "result.json", "cache.toml"]
+        .map(|name| fs::metadata(entry.join(name)).unwrap().modified().unwrap());
+    for flag in [
+        "--debug",
+        "--release",
+        "--rel-with-info",
+        "--default",
+        "--no-optimize",
+        "--optimize",
+    ] {
+        success(&invoke_cached(root.path(), &["ll", "main.m2", flag]));
+        assert_eq!(cache_directories(root.path()), entries);
+        assert_eq!(
+            times,
+            ["constant.dll", "result.json", "cache.toml"].map(|name| fs::metadata(
+                entry.join(name)
+            )
+            .unwrap()
+            .modified()
+            .unwrap()),
+            "{flag}"
+        );
+    }
+    assert!(
+        !root
+            .path()
+            .join("build/objects/default")
+            .join(HOST)
+            .join("ctfe")
+            .exists()
+    );
+    let target = "i686-pc-windows-msvc";
+    success(&invoke_cached(
+        root.path(),
+        &["ll", "main.m2", "--triplet", target],
+    ));
+    assert_eq!(
+        fs::read_dir(root.path().join("build/ctfe").join(HOST))
+            .unwrap()
+            .count(),
+        1
+    );
+    assert!(!root.path().join("build/ctfe").join(target).exists());
 }

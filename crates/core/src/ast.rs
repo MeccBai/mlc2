@@ -17,6 +17,7 @@ pub use arena::{FuncIndex, GenericIndex, TypeArena, TypeIndex};
 pub use config::Config;
 use function::{FuncBody, Interface};
 use generic::GenericRequire;
+use mlc_syntax::parser::out;
 use statement::Variable;
 pub use symbols::{EnumBool, SymbolTable};
 use types::{EnumType, UnitType};
@@ -38,7 +39,7 @@ pub enum Function {
 }
 
 impl Function {
-    pub fn span(&self) -> crate::parser::out::Span {
+    pub fn span(&self) -> out::Span {
         match self {
             Self::Func(function) => function.span,
             Self::Interface(function) => function.span,
@@ -52,3 +53,5 @@ pub use symbols::{ExportSymbol, ExportTable, ImportModule};
 
 #[cfg(test)]
 pub(crate) use tests::support::AnalyzedAst;
+
+pub mod semantic;

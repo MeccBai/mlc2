@@ -168,6 +168,7 @@ Windows 默认目标为 `x86_64-pc-windows-msvc`，GNU 目标可显式选择。�
 
 - [完整语法与示例](docs/language.md)
 - [CLI 与构建模式](docs/cli.md)
+- [简易 LSP 与 todo()](docs/lsp.md)
 - [示例指南](docs/examples.md)
 - [标准 C API 声明模块](docs/c_std.md)
 - [构建管线与缓存](docs/build_pipeline.md)

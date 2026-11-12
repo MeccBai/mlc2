@@ -77,30 +77,30 @@ macro_rules! spelling {
         }
     };
 }
-spelling!(Operator, 
-    Add=>"add", Sub=>"sub", Mul=>"mul", 
-    SDiv=>"sdiv", UDiv=>"udiv", SRem=>"srem", URem=>"urem", 
-    FAdd=>"fadd", FSub=>"fsub", FMul=>"fmul", FDiv=>"fdiv", 
-    FRem=>"frem", And=>"and", Or=>"or", Xor=>"xor", Shl=>"shl", 
+spelling!(Operator,
+    Add=>"add", Sub=>"sub", Mul=>"mul",
+    SDiv=>"sdiv", UDiv=>"udiv", SRem=>"srem", URem=>"urem",
+    FAdd=>"fadd", FSub=>"fsub", FMul=>"fmul", FDiv=>"fdiv",
+    FRem=>"frem", And=>"and", Or=>"or", Xor=>"xor", Shl=>"shl",
     LShr=>"lshr", AShr=>"ashr"
 );
-spelling!(Condition, 
-    Eq=>"eq", Ne=>"ne", SLt=>"slt", SLe=>"sle", 
-    SGt=>"sgt", SGe=>"sge", ULt=>"ult", ULe=>"ule", 
+spelling!(Condition,
+    Eq=>"eq", Ne=>"ne", SLt=>"slt", SLe=>"sle",
+    SGt=>"sgt", SGe=>"sge", ULt=>"ult", ULe=>"ule",
     UGt=>"ugt", UGe=>"uge"
 );
 
-spelling!(FloatCondition, 
+spelling!(FloatCondition,
     OEq=>"oeq", ONe=>"one", OLt=>"olt",
     OLe=>"ole", OGt=>"ogt", OGe=>"oge",
     UEq=>"ueq", UNe=>"une", ULt=>"ult",
-    ULe=>"ule", UGt=>"ugt", UGe=>"uge", 
+    ULe=>"ule", UGt=>"ugt", UGe=>"uge",
     Ord=>"ord", Uno=>"uno"
 );
-spelling!(Cast, 
-    Trunc=>"trunc", ZExt=>"zext", SExt=>"sext", 
-    FPTrunc=>"fptrunc", FPExt=>"fpext", FPToUI=>"fptoui", 
-    FPToSI=>"fptosi", UIToFP=>"uitofp", SIToFP=>"sitofp", 
+spelling!(Cast,
+    Trunc=>"trunc", ZExt=>"zext", SExt=>"sext",
+    FPTrunc=>"fptrunc", FPExt=>"fpext", FPToUI=>"fptoui",
+    FPToSI=>"fptosi", UIToFP=>"uitofp", SIToFP=>"sitofp",
     PtrToInt=>"ptrtoint", IntToPtr=>"inttoptr", Bitcast=>"bitcast"
 );
 

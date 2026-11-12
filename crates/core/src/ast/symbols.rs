@@ -35,6 +35,9 @@ pub struct SymbolTable {
 }
 
 impl SymbolTable {
+    pub fn declaration_span(&self, name: &str) -> Option<crate::parser::out::Span> {
+        self.declaration_spans.get(name).copied()
+    }
     pub fn new() -> Self {
         Self::for_file(crate::ast::config::FileId::new(0))
     }

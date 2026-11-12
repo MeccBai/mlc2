@@ -87,6 +87,7 @@ pub fn generate_with_config(
         codegen,
         &HashMap::new(),
         None,
+        std::time::Duration::from_secs(3),
     )
     .map_err(|report| report.to_string())
 }
@@ -105,22 +106,14 @@ pub fn generate_with_module_configs(
         ),
     >,
     cache_root: Option<std::path::PathBuf>,
+    ctfe_max_time: std::time::Duration,
 ) -> Result<Generated, Report> {
     let cache_root = cache_root.unwrap_or_else(|| {
-        let mode = match (codegen.optimized, codegen.debug_info) {
-            (false, false) => "default",
-            (false, true) => "debug",
-            (true, false) => "release",
-            (true, true) => "rel-with-info",
-        };
         plan.targets[plan.entry.0]
             .file
             .parent()
             .unwrap_or_else(|| std::path::Path::new("."))
-            .join("build/objects")
-            .join(mode)
-            .join(triplet)
-            .join("ctfe")
+            .join("build/ctfe")
     });
     let target_layout = mlc_builder::llvm::IrCompiler::init(triplet)
         .map_err(|error| error.to_string())?
@@ -159,6 +152,7 @@ pub fn generate_with_module_configs(
             triplet.into(),
             target_layout,
             cache_root,
+            ctfe_max_time,
         )));
     for id in &plan.order {
         let target = &plan.targets[id.0];

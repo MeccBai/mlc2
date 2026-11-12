@@ -63,6 +63,8 @@ impl StdType {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase", deny_unknown_fields)]
 pub struct ProjectFile {
+    #[serde(default, rename = "CTFE")]
+    pub ctfe: CtfeConfig,
     pub project: Project,
 }
 
@@ -151,5 +153,49 @@ mod tests {
             assert_eq!(project.project.targets[0].kind, expected);
             assert!(toml::from_str::<ProjectFile>(&text.replace(kind, "lib")).is_err());
         }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase", deny_unknown_fields)]
+pub struct CtfeConfig {
+    #[serde(default = "default_ctfe_time", with = "ctfe_seconds")]
+    pub max_time: std::time::Duration,
+}
+fn default_ctfe_time() -> std::time::Duration {
+    std::time::Duration::from_secs(3)
+}
+impl Default for CtfeConfig {
+    fn default() -> Self {
+        Self {
+            max_time: default_ctfe_time(),
+        }
+    }
+}
+mod ctfe_seconds {
+    use serde::{Deserialize, Deserializer, Serializer};
+    pub fn serialize<S: Serializer>(
+        value: &std::time::Duration,
+        serializer: S,
+    ) -> Result<S::Ok, S::Error> {
+        serializer.serialize_f64(value.as_secs_f64())
+    }
+    pub fn deserialize<'de, D: Deserializer<'de>>(
+        deserializer: D,
+    ) -> Result<std::time::Duration, D::Error> {
+        let seconds = f64::deserialize(deserializer)?;
+        if !seconds.is_finite() || seconds <= 0.0 {
+            return Err(serde::de::Error::custom(
+                "CTFE.MaxTime must be a finite positive number of seconds",
+            ));
+        }
+        let duration =
+            std::time::Duration::try_from_secs_f64(seconds).map_err(serde::de::Error::custom)?;
+        if duration.is_zero() {
+            return Err(serde::de::Error::custom(
+                "CTFE.MaxTime is below timer resolution",
+            ));
+        }
+        Ok(duration)
     }
 }

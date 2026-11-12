@@ -19,6 +19,7 @@ impl TypeInfer<'_> {
             _ => false,
         }
     }
+
     pub fn is_constant(expression: &Expression, symbols: &dyn Resolution) -> bool {
         match expression {
             Expression::ConstValueE(_, ..) => true,
@@ -37,6 +38,7 @@ impl TypeInfer<'_> {
             _ => false,
         }
     }
+
     pub(crate) fn unary_is_constant(expression: &UnaryExpr, symbols: &dyn Resolution) -> bool {
         match expression {
             UnaryExpr::Function { .. } => true,
@@ -44,16 +46,18 @@ impl TypeInfer<'_> {
             UnaryExpr::Access(access) => access.is_const(symbols),
         }
     }
+
     pub(crate) fn access_is_constant(expression: &Access, symbols: &dyn Resolution) -> bool {
         match expression {
             Access::Member { base, .. } => base.is_const(symbols),
             Access::Index { base, index } => base.is_const(symbols) && index.is_const(symbols),
         }
     }
+
     pub(crate) fn call_is_constant(expression: &FuncCall, symbols: &dyn Resolution) -> bool {
         expression.callee.is_none()
             && matches!(expression.func, crate::ast::symbols::EnumBool::False(index)
-            if (symbols.get_function_regular(index).constant || matches!(symbols.get_function_regular(index).builtin(), Some(Builtin::Cast | Builtin::ConstCStr | Builtin::StrLen)))
+            if (symbols.get_function_regular(index).constant || matches!(symbols.get_function_regular(index).builtin(), Some(Builtin::Todo | Builtin::Cast | Builtin::ConstCStr | Builtin::StrLen)))
                 && expression.args.iter().all(|argument| argument.is_const(symbols)))
     }
 }
