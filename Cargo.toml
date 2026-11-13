@@ -19,6 +19,7 @@ path = "src/lsp_main.rs"
 [workspace]
 members = [
     ".",
+    "crates/manifest",
     "crates/syntax",
     "crates/core",
     "crates/codegen",
@@ -35,6 +36,7 @@ version = "0.2.0"
 edition = "2024"
 
 [workspace.dependencies]
+mlc_manifest = { path = "crates/manifest" }
 mlc_syntax = { path = "crates/syntax" }
 mlc_core = { path = "crates/core" }
 mlc_codegen = { path = "crates/codegen" }
@@ -56,6 +58,7 @@ tempfile = "3"
 clap = { version = "4.6", features = ["derive"] }
 
 [dependencies]
+mlc_manifest.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 mlc_formatter.workspace = true

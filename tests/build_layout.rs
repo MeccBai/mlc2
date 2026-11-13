@@ -17,7 +17,7 @@ fn invoke(root: &Path, args: &[&str]) {
 #[ignore = "Requires bundled linker and MSVC/UCRT libraries"]
 fn modes_isolate_outputs_and_share_only_the_selected_std_variant() {
     let root = tempfile::tempdir().unwrap();
-    let triplet = "x86_64-pc-windows-msvc";
+    let triplet = mlc_manifest::Target::default().triplet();
     fs::create_dir_all(root.path().join("lib").join(triplet)).unwrap();
     fs::write(
         root.path().join("lib").join(triplet).join("std.m2"),

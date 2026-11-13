@@ -104,7 +104,7 @@ CLI 不再把整个计划的 IR 指纹混入所有文件的 compiler_options；�
 额外 link-arg 可能引用未跟踪的库或脚本，存在这些参数时保守地每次重新链接。
 缓存标记保存在产物旁的 `.cache` 文件，损坏或丢失会自动重新生成。
 
-缓存和产物兼容性统一由 `mlc_builder::manifest::BUILD_NUMBER` 决定，不使用 Cargo 版本号。
+缓存和产物兼容性统一由 `mlc_manifest::BUILD_NUMBER` 决定，不使用 Cargo 版本号。
 历史名称 `FORMAT_VERSION` / `FormatVersion` 仅作为该 build 号的常量别名和序列化字段名，
 没有独立的版本计数器。修改编译语义或序列化布局时递增 build 号，并重新生成 `.sym` / `.mg`。
 `Object` 表示 `Source`、`None` 或 `Only` 模式，

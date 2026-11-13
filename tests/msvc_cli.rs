@@ -17,7 +17,7 @@ fn all_examples_link_and_run_with_msvc_ucrt() {
                 "build",
                 &input,
                 "--triplet",
-                "x86_64-pc-windows-msvc",
+                mlc_manifest::Target::default().triplet(),
                 "--config",
                 "config.toml",
                 "--lib-dir",

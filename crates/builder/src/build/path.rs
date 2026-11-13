@@ -3,7 +3,7 @@ use crate::diagnostic::ice::ice;
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 
-use crate::manifest::{EXE_SUFFIX, EXECUTABLE_NAME, LIB_DIR};
+use mlc_manifest::{EXE_SUFFIX, EXECUTABLE_NAME, LIB_DIR};
 
 pub struct PathResolver {
     self_path: PathBuf,

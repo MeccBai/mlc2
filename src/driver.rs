@@ -340,7 +340,7 @@ fn build(
         optimize: optimized,
         output: paths.output.clone(),
         target: paths.triplet.clone(),
-        compiler_id: format!("mlc-build-{}", mlc_builder::manifest::BUILD_NUMBER),
+        compiler_id: format!("mlc-build-{}", mlc_manifest::BUILD_NUMBER),
         compiler_options: vec![
             format!("kind={kind:?}"),
             format!("optimizer={optimize:?}"),
@@ -400,7 +400,7 @@ fn build(
         let object = paths.output.join("__mlc_instances.obj");
         let key = mlc_builder::artifacts::semantic_hash(&(
             &paths.triplet,
-            mlc_builder::manifest::BUILD_NUMBER,
+            mlc_manifest::BUILD_NUMBER,
             &ir,
             optimized,
         ))?;

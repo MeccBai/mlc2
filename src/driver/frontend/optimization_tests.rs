@@ -7,14 +7,19 @@ fn optimizer_switches_control_ir_without_changing_required_calls() {
     let entry = root.path().join("main.m2");
     std::fs::write(&entry, "global var hits=0+0;func touch()->i32{hits=hits+1;return hits;}func unused(){}func main()->i32{var discarded=touch();var arithmetic=1+2;if(true){hits=hits+1;}else{hits=hits+10;}return hits-2;}").unwrap();
     let plan = BuildPlan::discover(&entry, &ImportResolver { lib_dirs: vec![] }).unwrap();
-    let compiler = mlc_builder::llvm::IrCompiler::init("x86_64-pc-windows-msvc").unwrap();
+    let compiler =
+        mlc_builder::llvm::IrCompiler::init(mlc_manifest::Target::default().triplet()).unwrap();
     for (label, options) in [
         ("off", mlc_optimizer::OptimizeConfig::disabled()),
         ("on", mlc_optimizer::OptimizeConfig::enabled()),
     ] {
-        let generated =
-            generate_with_options(&plan, "x86_64-pc-windows-msvc", TargetKind::Bin, options)
-                .unwrap();
+        let generated = generate_with_options(
+            &plan,
+            mlc_manifest::Target::default().triplet(),
+            TargetKind::Bin,
+            options,
+        )
+        .unwrap();
         let mut objects = vec![];
         for (id, ir) in generated
             .modules
@@ -80,8 +85,14 @@ fn pruned_control_flow_preserves_side_effects_and_unmatched_match_fallthrough() 
     )
     .unwrap();
     let plan = BuildPlan::discover(&entry, &ImportResolver { lib_dirs: vec![] }).unwrap();
-    let generated = generate(&plan, "x86_64-pc-windows-msvc", TargetKind::Bin).unwrap();
-    let compiler = mlc_builder::llvm::IrCompiler::init("x86_64-pc-windows-msvc").unwrap();
+    let generated = generate(
+        &plan,
+        mlc_manifest::Target::default().triplet(),
+        TargetKind::Bin,
+    )
+    .unwrap();
+    let compiler =
+        mlc_builder::llvm::IrCompiler::init(mlc_manifest::Target::default().triplet()).unwrap();
     let mut objects = Vec::new();
     let mut modules = generated.modules;
     if let Some(ir) = generated.supplement {

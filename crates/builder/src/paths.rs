@@ -5,7 +5,7 @@ use std::path::{Component, Path, PathBuf};
 mod tests;
 
 /// Default target follows the platform this compiler executable was built for.
-pub const HOST_TRIPLET: &str = env!("MLC_HOST_TRIPLET");
+pub const HOST_TRIPLET: &str = mlc_manifest::Target::host().triplet();
 
 #[derive(Debug, Clone)]
 pub struct PathResolver {
@@ -98,7 +98,7 @@ impl PathResolver {
         } else if let Some(dirs) = &global.lib_dirs {
             dirs.iter().map(|dir| dir.join(triplet)).collect()
         } else {
-            vec![installation.join(crate::manifest::LIB_DIR).join(triplet)]
+            vec![installation.join(mlc_manifest::LIB_DIR).join(triplet)]
         };
         let cache = selected.and_then(|t| t.lib_cache_dir.as_ref()).or_else(|| {
             project

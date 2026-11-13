@@ -4,20 +4,25 @@ use mlc_builder::plan::ImportResolver;
 
 #[test]
 fn all_bundled_examples_build_and_run() {
-    let compiler = mlc_builder::llvm::IrCompiler::init("x86_64-pc-windows-msvc").unwrap();
+    let compiler =
+        mlc_builder::llvm::IrCompiler::init(mlc_manifest::Target::default().triplet()).unwrap();
     for example in mlc_examples::EXAMPLES {
         let root = tempfile::tempdir().unwrap();
         let entry = root.path().join("main.m2");
         std::fs::write(&entry, example.source).unwrap();
         let resolver = ImportResolver {
             lib_dirs: vec![
-                super::test_support::library().join("x86_64-pc-windows-msvc"),
+                super::test_support::library().join(mlc_manifest::Target::default().triplet()),
                 super::test_support::library().join("universal"),
             ],
         };
         let plan = BuildPlan::discover(&entry, &resolver).unwrap();
-        let generated = generate(&plan, "x86_64-pc-windows-msvc", TargetKind::Bin)
-            .unwrap_or_else(|error| panic!("{}: {error}", example.name));
+        let generated = generate(
+            &plan,
+            mlc_manifest::Target::default().triplet(),
+            TargetKind::Bin,
+        )
+        .unwrap_or_else(|error| panic!("{}: {error}", example.name));
         let mut objects = Vec::new();
         for (id, ir) in generated.modules {
             let object = root.path().join(format!("module{id}.obj"));

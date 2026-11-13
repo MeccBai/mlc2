@@ -335,10 +335,38 @@ mod cross_link_tests {
         let root = tempfile::tempdir().unwrap();
         let repository = Path::new(env!("CARGO_MANIFEST_DIR"));
         for (os, triple, arch) in [
-            (HostOs::Linux, "x86_64-unknown-linux-gnu", "x86_64"),
-            (HostOs::Linux, "aarch64-unknown-linux-gnu", "aarch64"),
-            (HostOs::Macos, "x86_64-apple-darwin", "x86_64"),
-            (HostOs::Macos, "aarch64-apple-darwin", "aarch64"),
+            (
+                HostOs::Linux,
+                mlc_manifest::Target::default()
+                    .with_system(mlc_manifest::System::Linux)
+                    .with_arch(mlc_manifest::Arch::X86_64)
+                    .triplet(),
+                "x86_64",
+            ),
+            (
+                HostOs::Linux,
+                mlc_manifest::Target::default()
+                    .with_system(mlc_manifest::System::Linux)
+                    .with_arch(mlc_manifest::Arch::Aarch64)
+                    .triplet(),
+                "aarch64",
+            ),
+            (
+                HostOs::Macos,
+                mlc_manifest::Target::default()
+                    .with_arch(mlc_manifest::Arch::X86_64)
+                    .with_system(mlc_manifest::System::Macos)
+                    .triplet(),
+                "x86_64",
+            ),
+            (
+                HostOs::Macos,
+                mlc_manifest::Target::default()
+                    .with_arch(mlc_manifest::Arch::Aarch64)
+                    .with_system(mlc_manifest::System::Macos)
+                    .triplet(),
+                "aarch64",
+            ),
         ] {
             let compiler = mlc_builder::llvm::IrCompiler::with_o3(triple).unwrap();
             let object = root.path().join(os.object());

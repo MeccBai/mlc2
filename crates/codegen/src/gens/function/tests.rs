@@ -1,4 +1,4 @@
-use mlc_syntax::manifest::SOURCE_SUFFIX;
+use mlc_manifest::SOURCE_SUFFIX;
 mod constant_control;
 mod function_pointer;
 mod numeric_initialization;
@@ -34,14 +34,15 @@ fn parse(source: &str) -> (AbstractSyntaxTree, PackageSymbolTable) {
 
 fn emit(source: &str, suffix: &str) -> String {
     let (ast, package) = parse(source);
-    let mut generator = IrGenerator::new(crate::manifest::X86_64_PC_WINDOWS_MSVC.into());
+    let mut generator = IrGenerator::new(mlc_manifest::Target::default().triplet().into());
     for function in &ast.body {
         generator.add_func_decl(function, &package);
         generator.generate(&package, function.clone());
         generator.generate(&package, function.clone());
     }
     let ir = generator.finish().unwrap();
-    let compiler = crate::llvm::IrCompiler::init(crate::manifest::X86_64_PC_WINDOWS_MSVC).unwrap();
+    let compiler =
+        crate::llvm::IrCompiler::init(mlc_manifest::Target::default().triplet()).unwrap();
     let path =
         std::env::temp_dir().join(format!("mlc2-function-{suffix}-{}.obj", std::process::id()));
     compiler.emit(ir.clone(), &path).unwrap();
@@ -231,7 +232,7 @@ fn split_parameter_definition_and_return_roundtrip_validate_in_llvm() {
             value: IrValue::Reg(next),
         }),
     });
-    let mut generator = IrGenerator::new(crate::manifest::X86_64_PC_WINDOWS_MSVC.into());
+    let mut generator = IrGenerator::new(mlc_manifest::Target::default().triplet().into());
     generator.ensure_type(
         abi.params()[0].source,
         &package,
@@ -246,7 +247,8 @@ fn split_parameter_definition_and_return_roundtrip_validate_in_llvm() {
     .write_to(&mut ir)
     .unwrap();
     ir.push_str("}\n");
-    let compiler = crate::llvm::IrCompiler::init(crate::manifest::X86_64_PC_WINDOWS_MSVC).unwrap();
+    let compiler =
+        crate::llvm::IrCompiler::init(mlc_manifest::Target::default().triplet()).unwrap();
     let path = std::env::temp_dir().join(format!("mlc2-split-{}.obj", std::process::id()));
     compiler.emit(ir, &path).unwrap();
     std::fs::remove_file(path).unwrap();

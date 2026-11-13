@@ -1,5 +1,3 @@
-use mlc_builder::manifest::DEFAULT_TRIPLET;
-
 use super::*;
 use crate::ast::{
     config::FileId,
@@ -69,7 +67,8 @@ fn indirect_call_instructions_pass_llvm_verification() {
         "{func}\ndefine i32 @main() {{\n{}  ret i32 0\n}}",
         buffer.format()
     );
-    let compiler = crate::llvm::IrCompiler::init(DEFAULT_TRIPLET).unwrap();
+    let compiler =
+        crate::llvm::IrCompiler::init(mlc_manifest::Target::default().triplet()).unwrap();
     let output = std::env::temp_dir().join(format!("mlc2-call-value-{}.obj", std::process::id()));
     compiler.emit(ir, &output).unwrap();
     std::fs::remove_file(output).unwrap();
@@ -242,7 +241,7 @@ fn large_return_precedes_readonly_and_copy_parameters() {
 fn eight_bytes_stays_direct_and_declarations_are_deduplicated() {
     let (package, small, _, _) = setup();
     let func = symbol(vec![small], Some(small));
-    let mut generator = IrGenerator::new(DEFAULT_TRIPLET.into());
+    let mut generator = IrGenerator::new(mlc_manifest::Target::default().triplet().into());
     generator.add_function_decl(&func, &package);
     generator.add_function_decl(&func, &package);
     assert_eq!(generator.defines, "declare i64 @\"unnamed::test\"(i64)\n");
@@ -337,7 +336,8 @@ fn llvm_accepts_generated_declaration_attributes() {
         &package,
     )
     .unwrap();
-    let compiler = crate::llvm::IrCompiler::init(DEFAULT_TRIPLET).unwrap();
+    let compiler =
+        crate::llvm::IrCompiler::init(mlc_manifest::Target::default().triplet()).unwrap();
     let output = std::env::temp_dir().join(format!("mlc2-declaration-{}.obj", std::process::id()));
     compiler
         .emit(

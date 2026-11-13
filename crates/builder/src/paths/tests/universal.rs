@@ -78,7 +78,10 @@ fn target_library_wins_over_universal() {
 #[test]
 fn all_target_directories_precede_universal_fallback() {
     let (root, mut paths, entry) = fixture();
-    let second = root.path().join("other-lib").join(HOST_TRIPLET);
+    let second = root
+        .path()
+        .join("other-lib")
+        .join(mlc_manifest::Target::default().triplet());
     fs::create_dir_all(second.join("c_std")).unwrap();
     fs::write(second.join("c_std/io.m2"), "export func platform() {}").unwrap();
     paths.imports.lib_dirs.push(second.clone());
@@ -135,7 +138,7 @@ fn library_source_beats_local_binary_and_uses_separate_cache() {
         plan.targets[1].artifact_stems[0],
         root.path()
             .join("objects/default")
-            .join(HOST_TRIPLET)
+            .join(mlc_manifest::Target::default().triplet())
             .join("c_std/io")
     );
 }
@@ -146,7 +149,7 @@ fn universal_source_precedes_target_binary_and_caches_for_target() {
     let target = root
         .path()
         .join("objects")
-        .join(HOST_TRIPLET)
+        .join(mlc_manifest::Target::default().triplet())
         .join("c_std/io.sym");
     fs::create_dir_all(target.parent().unwrap()).unwrap();
     fs::copy(root.path().join("objects/universal/c_std/io.sym"), &target).unwrap();
@@ -164,7 +167,7 @@ fn universal_source_precedes_target_binary_and_caches_for_target() {
         plan.targets[1].artifact_stems[0],
         root.path()
             .join("objects/default")
-            .join(HOST_TRIPLET)
+            .join(mlc_manifest::Target::default().triplet())
             .join("c_std/io")
     );
 }

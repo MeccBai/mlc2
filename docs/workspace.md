@@ -2,6 +2,7 @@
 
 | Package | 位置 | 职责 |
 | --- | --- | --- |
+| `mlc_manifest` | `crates/manifest` | 公共常量、目录布局、目标架构、系统、默认 ABI、triplet 和 linker |
 | `mlc_syntax` | `crates/syntax` | lexer、Chumsky parser、Temp AST、共享语法定义 |
 | `mlc_core` | `crates/core` | Temp → AST、语义诊断、符号表和导出表 |
 | `mlc_codegen` | `crates/codegen` | AST → IR、ABI 映射与生成诊断 |
@@ -12,7 +13,8 @@
 | `ffi_parser` | `crates/ffi_parser` | 受限 C 头文件声明 → Temp AST |
 | `mlc` | 根 package 的 `src` | mlc 参数路由、mlc-build 编译构建、mlc-fmt 格式化三个独立入口 |
 
-生产依赖没有环：core → syntax；codegen → core / syntax；builder → core / syntax / ffi_parser；
+生产依赖没有环：manifest 无外部依赖；syntax、core、codegen、builder 和 ffi_parser 直接依赖 manifest。
+core → syntax；codegen → core / syntax；builder → core / syntax / ffi_parser；
 optimizer → core；formatter 和 ffi_parser → syntax；mlc 使用各层。
 codegen 的开发依赖使用 builder 验证生成的 IR，但 codegen 的生产依赖没有 LLVM。
 examples 没有生产依赖，开发依赖 syntax 验证语法；顶层 mlc 测试负责示例的编译运行验证。
@@ -35,7 +37,10 @@ use mlc_builder::plan::BuildPlan;
 各模块、泛型实例和初始化入口。import 的递归发现与依赖校验由 BuildPlan 负责，
 加载预编译产物由 builder 的 artifacts 模块负责，不再保留未实现的扩展接口。
 
-常量按职责分别放在各 crate 的 manifest.rs，顶层 `src/manifest.rs` 统一重新导出。
+公共常量和平台配置统一放在 `mlc_manifest`，使用方直接引用该 crate，不再通过各层重新导出。
+默认目标通过 `mlc_manifest::Target::default()` 获取；架构和系统由编译期 cfg 确定，系统选择内置默认 ABI，
+再正向生成 triplet、linker 和工具路径。需要跨目标时从默认配置覆盖架构、系统或 ABI。
+builder 的构建脚本也正常依赖 `mlc_manifest`，不再通过路径包含其他模块的源码。
 LLVM 的链接脚本仅属于 builder。原模块测试跟随模块迁移，parser 测试拆分在自己的 tests 目录。
 
 ## 验证

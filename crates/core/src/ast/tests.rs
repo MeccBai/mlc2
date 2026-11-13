@@ -12,7 +12,7 @@ mod usage;
 
 use std::panic::{AssertUnwindSafe, catch_unwind};
 
-use mlc_syntax::manifest::SOURCE_SUFFIX;
+use mlc_manifest::SOURCE_SUFFIX;
 
 use super::{AnalyzedAst, Function, config::Config};
 use crate::diagnostic::{

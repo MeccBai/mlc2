@@ -61,7 +61,7 @@ fn text_to_ast_to_ir_to_object_and_incremental_cache() {
         optimize: false,
         module_options: Default::default(),
         output: root.path().join("out"),
-        target: "x86_64-pc-windows-msvc".into(),
+        target: mlc_manifest::Target::default().triplet().into(),
         compiler_id: "integration-test".into(),
         compiler_options: vec![],
         module_fingerprints: Default::default(),
@@ -96,7 +96,7 @@ fn semantic_error_is_a_node_result_and_publishes_no_manifest() {
         optimize: false,
         module_options: Default::default(),
         output: root.path().join("out"),
-        target: "x86_64-pc-windows-msvc".into(),
+        target: mlc_manifest::Target::default().triplet().into(),
         compiler_id: "integration-test".into(),
         compiler_options: vec![],
         module_fingerprints: Default::default(),
@@ -145,7 +145,7 @@ fn package_backed_cross_file_ast_and_generic_instances_emit_valid_llvm_object() 
         assert!(!ast.config.is_poisoned(), "{:?}", ast.config.error_handle());
         asts.push(ast);
     }
-    let target = "x86_64-pc-windows-msvc";
+    let target = mlc_manifest::Target::default().triplet();
     let mut generator = IrGenerator::new(target.into());
     for ast in asts {
         for function in ast.body {

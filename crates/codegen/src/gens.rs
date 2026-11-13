@@ -35,7 +35,7 @@ pub struct IrGenerator {
     errors: error::GenerationErrorHandle,
 }
 
-use crate::manifest::IR_RESERVE_SIZE;
+use mlc_manifest::IR_RESERVE_SIZE;
 
 impl IrGenerator {
     pub fn new(tiplet: String) -> IrGenerator {

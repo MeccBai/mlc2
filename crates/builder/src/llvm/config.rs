@@ -1,5 +1,5 @@
 use super::BackendError;
-use crate::manifest::LIB_DIR;
+use mlc_manifest::LIB_DIR;
 use std::path::PathBuf;
 
 #[derive(Debug, Clone)]
@@ -26,7 +26,7 @@ impl BackendConfig {
             })?;
         Ok(Self {
             lib: root.join(LIB_DIR),
-            tools: root.join(crate::manifest::TOOLS_DIR),
+            tools: root.join(mlc_manifest::TOOLS_DIR),
             executable,
         })
     }

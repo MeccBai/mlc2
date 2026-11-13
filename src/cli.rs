@@ -152,7 +152,10 @@ mod tests {
             assert_eq!(error.kind(), clap::error::ErrorKind::DisplayVersion);
             let banner = error.to_string();
             assert!(banner.contains(env!("CARGO_PKG_VERSION")));
-            assert!(banner.contains(&format!("Host: {}", mlc_builder::paths::HOST_TRIPLET)));
+            assert!(banner.contains(&format!(
+                "Host: {}",
+                mlc_manifest::Target::default().triplet()
+            )));
             assert!(banner.contains("Copyright (c) 2026 Mecc"));
             let executable = std::env::current_exe().unwrap();
             assert!(banner.contains(&executable.parent().unwrap().display().to_string()));

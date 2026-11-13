@@ -26,11 +26,17 @@ fn static_initializers_follow_dependencies_and_run_only_once() {
     )
     .unwrap();
     let plan = BuildPlan::discover(&entry, &ImportResolver { lib_dirs: vec![] }).unwrap();
-    let generated = generate(&plan, "x86_64-pc-windows-msvc", TargetKind::Static).unwrap();
+    let generated = generate(
+        &plan,
+        mlc_manifest::Target::default().triplet(),
+        TargetKind::Static,
+    )
+    .unwrap();
     assert!(generated.supplement.is_none());
     let root_init = SymbolName::module_initializer("library");
     let dep_init = SymbolName::module_initializer("dep");
-    let compiler = mlc_builder::llvm::IrCompiler::init("x86_64-pc-windows-msvc").unwrap();
+    let compiler =
+        mlc_builder::llvm::IrCompiler::init(mlc_manifest::Target::default().triplet()).unwrap();
     let mut objects = vec![];
     for (id, ir) in generated.modules {
         assert!(!ir.contains("@llvm.global_ctors"));
@@ -102,7 +108,12 @@ fn prebuilt_imports_keep_global_init_metadata_and_startup_calls() {
     .unwrap();
     let resolver = ImportResolver { lib_dirs: vec![] };
     let plan = BuildPlan::discover(&source, &resolver).unwrap();
-    let generated = generate(&plan, "x86_64-pc-windows-msvc", TargetKind::Static).unwrap();
+    let generated = generate(
+        &plan,
+        mlc_manifest::Target::default().triplet(),
+        TargetKind::Static,
+    )
+    .unwrap();
     let modules: HashMap<_, _> = generated.modules.into_iter().collect();
     let inits: HashMap<_, _> = generated.global_inits.into_iter().collect();
     let output = root.path().join("objects");
@@ -112,7 +123,7 @@ fn prebuilt_imports_keep_global_init_metadata_and_startup_calls() {
             optimize: false,
             module_options: Default::default(),
             output: output.clone(),
-            target: "x86_64-pc-windows-msvc".into(),
+            target: mlc_manifest::Target::default().triplet().into(),
             compiler_id: "startup-test".into(),
             compiler_options: vec![],
             module_fingerprints: Default::default(),
@@ -138,11 +149,17 @@ fn prebuilt_imports_keep_global_init_metadata_and_startup_calls() {
     )
     .unwrap();
     let plan = BuildPlan::discover(&entry, &resolver).unwrap();
-    let generated = generate(&plan, "x86_64-pc-windows-msvc", TargetKind::Bin).unwrap();
+    let generated = generate(
+        &plan,
+        mlc_manifest::Target::default().triplet(),
+        TargetKind::Bin,
+    )
+    .unwrap();
     assert_eq!(generated.modules.len(), 1);
     let ir = &generated.modules[0].1;
     assert!(ir.contains(&format!("call void @\"{init}\"()")), "{ir}");
-    let compiler = mlc_builder::llvm::IrCompiler::init("x86_64-pc-windows-msvc").unwrap();
+    let compiler =
+        mlc_builder::llvm::IrCompiler::init(mlc_manifest::Target::default().triplet()).unwrap();
     compiler
         .emit(ir.clone(), &root.path().join("consumer.obj"))
         .unwrap();

@@ -188,7 +188,7 @@ impl Executor {
         ))?;
         let fingerprint = cache::Fingerprint {
             version: 2,
-            compiler_build: mlc_builder::manifest::BUILD_NUMBER,
+            compiler_build: mlc_manifest::BUILD_NUMBER,
             compiler_hash,
             temp_ast_hash,
             call_hash,

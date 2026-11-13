@@ -1,5 +1,3 @@
-use mlc_builder::manifest::DEFAULT_TRIPLET;
-
 use super::*;
 use crate::ast::{
     config::FileId,
@@ -299,7 +297,8 @@ fn nested_short_circuit_and_float_pass_llvm_verification() {
         "{bool_ir}\ndefine float @floating() {{\n{}\n}}",
         buffer.format()
     );
-    let compiler = crate::llvm::IrCompiler::init(DEFAULT_TRIPLET).unwrap();
+    let compiler =
+        crate::llvm::IrCompiler::init(mlc_manifest::Target::default().triplet()).unwrap();
     let path = std::env::temp_dir().join(format!("mlc2-expr-control-{}.obj", std::process::id()));
     compiler.emit(ir, &path).unwrap();
     std::fs::remove_file(path).unwrap();
@@ -325,7 +324,8 @@ fn generated_arithmetic_passes_llvm_verification() {
         }),
     });
     let ir = format!("define i32 @main() {{\n{}\n}}", buffer.format());
-    let compiler = crate::llvm::IrCompiler::init(DEFAULT_TRIPLET).unwrap();
+    let compiler =
+        crate::llvm::IrCompiler::init(mlc_manifest::Target::default().triplet()).unwrap();
     let path = std::env::temp_dir().join(format!("mlc2-expr-{}.obj", std::process::id()));
     compiler.emit(ir, &path).unwrap();
     std::fs::remove_file(path).unwrap();
@@ -404,7 +404,8 @@ fn array_index_and_call_pass_llvm_verification() {
         .llvm_func(&package)
         .unwrap();
     let ir = format!("{decl}\ndefine i32 @main() {{\n{}\n}}", buffer.format());
-    let compiler = crate::llvm::IrCompiler::init(DEFAULT_TRIPLET).unwrap();
+    let compiler =
+        crate::llvm::IrCompiler::init(mlc_manifest::Target::default().triplet()).unwrap();
     let path = std::env::temp_dir().join(format!("mlc2-expr-array-{}.obj", std::process::id()));
     compiler.emit(ir, &path).unwrap();
     std::fs::remove_file(path).unwrap();

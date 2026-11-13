@@ -1,5 +1,3 @@
-use crate::manifest::DEFAULT_TRIPLET;
-
 use super::*;
 #[cfg(unix)]
 use std::os::unix::process::ExitStatusExt;
@@ -30,12 +28,28 @@ fn unsupported_triplet_returns_an_error() {
 #[test]
 fn preset_targets_initialize_repeatedly() {
     for triplet in [
-        manifest::X86_64_PC_WINDOWS_MSVC,
-        manifest::X86_64_PC_WINDOWS_GNU,
-        "x86_64-unknown-linux-gnu",
-        "aarch64-unknown-linux-gnu",
-        "x86_64-apple-darwin",
-        "aarch64-apple-darwin",
+        mlc_manifest::Target::default().triplet(),
+        mlc_manifest::Target::default()
+            .with_system(mlc_manifest::System::Windows)
+            .with_arch(mlc_manifest::Arch::X86_64)
+            .with_abi(mlc_manifest::Abi::Gnu)
+            .triplet(),
+        mlc_manifest::Target::default()
+            .with_system(mlc_manifest::System::Linux)
+            .with_arch(mlc_manifest::Arch::X86_64)
+            .triplet(),
+        mlc_manifest::Target::default()
+            .with_system(mlc_manifest::System::Linux)
+            .with_arch(mlc_manifest::Arch::Aarch64)
+            .triplet(),
+        mlc_manifest::Target::default()
+            .with_arch(mlc_manifest::Arch::X86_64)
+            .with_system(mlc_manifest::System::Macos)
+            .triplet(),
+        mlc_manifest::Target::default()
+            .with_arch(mlc_manifest::Arch::Aarch64)
+            .with_system(mlc_manifest::System::Macos)
+            .triplet(),
     ] {
         for _ in 0..2 {
             IrCompiler::init(triplet).unwrap();
@@ -46,10 +60,22 @@ fn preset_targets_initialize_repeatedly() {
 #[test]
 fn linux_and_macos_targets_emit_objects() {
     for triplet in [
-        "x86_64-unknown-linux-gnu",
-        "aarch64-unknown-linux-gnu",
-        "x86_64-apple-darwin",
-        "aarch64-apple-darwin",
+        mlc_manifest::Target::default()
+            .with_system(mlc_manifest::System::Linux)
+            .with_arch(mlc_manifest::Arch::X86_64)
+            .triplet(),
+        mlc_manifest::Target::default()
+            .with_system(mlc_manifest::System::Linux)
+            .with_arch(mlc_manifest::Arch::Aarch64)
+            .triplet(),
+        mlc_manifest::Target::default()
+            .with_arch(mlc_manifest::Arch::X86_64)
+            .with_system(mlc_manifest::System::Macos)
+            .triplet(),
+        mlc_manifest::Target::default()
+            .with_arch(mlc_manifest::Arch::Aarch64)
+            .with_system(mlc_manifest::System::Macos)
+            .triplet(),
     ] {
         let root = tempfile::tempdir().unwrap();
         let output = root.path().join("sample.o");
@@ -63,7 +89,7 @@ fn linux_and_macos_targets_emit_objects() {
 
 #[test]
 fn verifier_failure_is_an_ice_result_not_a_panic() {
-    let compiler = IrCompiler::init(DEFAULT_TRIPLET).unwrap();
+    let compiler = IrCompiler::init(mlc_manifest::Target::default().triplet()).unwrap();
     let error = compiler
         .emit(
             "define i32 @main() { entry: br label %entry }".into(),
@@ -76,7 +102,7 @@ fn verifier_failure_is_an_ice_result_not_a_panic() {
 
 #[test]
 fn invalid_ir_is_recoverable_and_next_module_can_emit() {
-    let compiler = IrCompiler::init(DEFAULT_TRIPLET).unwrap();
+    let compiler = IrCompiler::init(mlc_manifest::Target::default().triplet()).unwrap();
     let output = std::env::temp_dir().join(format!("mlc2-backend-{}.obj", std::process::id()));
     assert!(matches!(
         compiler.emit("define broken".into(), &output),
@@ -92,11 +118,14 @@ fn invalid_ir_is_recoverable_and_next_module_can_emit() {
 #[test]
 fn diagnostic_text_keeps_continuations() {
     let diagnostic = LinkDiagnostic {
-        program: "lld-link".into(),
+        program: mlc_manifest::Target::default().linker().into(),
         exit_code: Some(1),
         stdout: vec![],
-        stderr: b"lld-link: error: undefined symbol\n>>> referenced by a.obj\nwarning: detail\n"
-            .to_vec(),
+        stderr: format!(
+            "{}: error: undefined symbol\n>>> referenced by a.obj\nwarning: detail\n",
+            mlc_manifest::Target::default().linker()
+        )
+        .into_bytes(),
     };
     let lines = diagnostic.diagnostics();
     assert_eq!(lines.len(), 3);
@@ -113,7 +142,7 @@ fn linker_failure_preserves_status_and_both_raw_streams() {
         stderr: b"lld: undefined symbol: missing\n".to_vec(),
     };
     let Err(BackendError::LinkerFailed(diagnostic)) =
-        link::completion(Path::new("lld-link"), output)
+        link::completion(Path::new(mlc_manifest::Target::default().linker()), output)
     else {
         panic!("link error expected")
     };
@@ -126,7 +155,7 @@ fn linker_failure_preserves_status_and_both_raw_streams() {
 fn successful_linker_completion_is_not_an_error_even_with_warnings() {
     assert!(
         link::completion(
-            Path::new("lld-link"),
+            Path::new(mlc_manifest::Target::default().linker()),
             Output {
                 status: ExitStatus::from_raw(0),
                 stdout: Vec::new(),
@@ -141,7 +170,11 @@ fn successful_linker_completion_is_not_an_error_even_with_warnings() {
 fn linker_launch_error_preserves_io_cause() {
     let program = std::env::temp_dir()
         .join("mlc2-nonexistent-linker")
-        .join("lld-link.exe");
+        .join(format!(
+            "{}{}",
+            mlc_manifest::Target::default().linker(),
+            mlc_manifest::EXE_SUFFIX
+        ));
     assert!(
         matches!(link::link(&program, &[]), Err(BackendError::LinkerLaunch { source, .. }) if source.kind() == std::io::ErrorKind::NotFound)
     );

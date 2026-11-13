@@ -5,10 +5,10 @@ mod error;
 mod link;
 mod target;
 
-use crate::manifest;
 pub use config::BackendConfig;
 pub use error::{BackendError, DiagnosticLine, DiagnosticSeverity, LinkDiagnostic};
 use llvm_sys::target_machine::*;
+use mlc_manifest as manifest;
 use std::{
     ffi::{CString, OsString},
     path::Path,
@@ -132,13 +132,23 @@ impl IrCompiler {
 
     /// Arguments include objects, output path, SDK libraries and any linker script.
     pub fn link(&self, arguments: &[OsString]) -> Result<LinkDiagnostic, BackendError> {
-        let windows = self
-            .triplet
-            .to_bytes()
-            .windows(12)
-            .any(|s| s == b"windows-msvc");
-        let program = manifest::lld_path(&self.config.executable, windows)
-            .ok_or_else(|| BackendError::Config("executable has no parent directory".into()))?;
+        // Explicit LLVM triples stay at the backend boundary; manifest only maps enums forward.
+        let triple = self.triplet.to_bytes();
+        let abi = if triple.ends_with(b"-windows-msvc") {
+            manifest::Abi::Msvc
+        } else if triple.ends_with(b"-darwin") {
+            manifest::Abi::Darwin
+        } else {
+            manifest::Abi::Gnu
+        };
+        let windows = abi == manifest::Abi::Msvc;
+        let program = self
+            .config
+            .executable
+            .parent()
+            .ok_or_else(|| BackendError::Config("executable has no parent directory".into()))?
+            .join(manifest::TOOLS_DIR)
+            .join(format!("{}{}", abi.linker(), manifest::EXE_SUFFIX));
         let mut args = vec![if windows {
             OsString::from(format!("/libpath:{}", self.config.lib.display()))
         } else {

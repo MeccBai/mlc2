@@ -9,7 +9,11 @@ fn generate_source(source: &str) -> (tempfile::TempDir, Result<Generated, String
         lib_dirs: vec![super::test_support::library().join("universal")],
     };
     let plan = BuildPlan::discover(&entry, &resolver).unwrap();
-    let generated = generate(&plan, "x86_64-pc-windows-msvc", TargetKind::Bin);
+    let generated = generate(
+        &plan,
+        mlc_manifest::Target::default().triplet(),
+        TargetKind::Bin,
+    );
     (root, generated)
 }
 
@@ -73,7 +77,7 @@ fn const_c_str_static_utf8_empty_and_deduplicated_strings_print() {
     assert!(!ir.contains("@malloc"), "{ir}");
     assert!(!ir.contains("alloca [14 x i8]"), "{ir}");
     let object = root.path().join("main.obj");
-    mlc_builder::llvm::IrCompiler::init("x86_64-pc-windows-msvc")
+    mlc_builder::llvm::IrCompiler::init(mlc_manifest::Target::default().triplet())
         .unwrap()
         .emit(ir.clone(), &object)
         .unwrap();

@@ -2,16 +2,14 @@ use super::{
     IrGenerator,
     instruction::{IrValue, LlvmType, TypedValue},
 };
-use crate::{
-    ast::{
-        arena::TypeIndex,
-        attribute::FuncAttibute,
-        function::{FuncSymbol, InterfaceSymbol},
-        symbols::PackageSymbolTable,
-        types::CompileType,
-    },
-    manifest::ABI_DIRECT_SIZE_LIMIT,
+use crate::ast::{
+    arena::TypeIndex,
+    attribute::FuncAttibute,
+    function::{FuncSymbol, InterfaceSymbol},
+    symbols::PackageSymbolTable,
+    types::CompileType,
 };
+use mlc_manifest::ABI_DIRECT_SIZE_LIMIT;
 use std::{collections::HashSet, fmt};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

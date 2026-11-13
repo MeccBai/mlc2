@@ -16,14 +16,20 @@ fn standalone_ignores_even_malformed_project_configuration() {
     fs::write(root.path().join("Project.toml"), "invalid toml [").unwrap();
     let exe = root.path().join("install/mlc.exe");
     let paths = PathResolver::standalone(&exe, root.path(), &GlobalConfig::default()).unwrap();
-    assert_eq!(paths.triplet, HOST_TRIPLET);
+    assert_eq!(paths.triplet, mlc_manifest::Target::default().triplet());
     assert_eq!(
         paths.output,
-        root.path().join("build/objects/default").join(HOST_TRIPLET)
+        root.path()
+            .join("build/objects/default")
+            .join(mlc_manifest::Target::default().triplet())
     );
     assert_eq!(
         paths.imports.lib_dirs,
-        vec![root.path().join("install/lib").join(HOST_TRIPLET)]
+        vec![
+            root.path()
+                .join("install/lib")
+                .join(mlc_manifest::Target::default().triplet())
+        ]
     );
 }
 
@@ -68,14 +74,22 @@ fn global_config_paths_are_relative_to_config_file() {
     let global = GlobalConfig::load(&path).unwrap();
     let paths =
         PathResolver::new(&root.path().join("mlc.exe"), root.path(), None, &global).unwrap();
-    assert_eq!(paths.triplet, HOST_TRIPLET);
+    assert_eq!(paths.triplet, mlc_manifest::Target::default().triplet());
     assert_eq!(
         paths.imports.lib_dirs,
-        vec![root.path().join("lib").join(HOST_TRIPLET)]
+        vec![
+            root.path()
+                .join("lib")
+                .join(mlc_manifest::Target::default().triplet())
+        ]
     );
     assert_eq!(
         paths.lib_cache,
-        Some(root.path().join("cache/debug").join(HOST_TRIPLET))
+        Some(
+            root.path()
+                .join("cache/debug")
+                .join(mlc_manifest::Target::default().triplet())
+        )
     );
     fs::write(path, "LibDirs=42").unwrap();
     assert!(GlobalConfig::load(&root.path().join("config.toml")).is_err());
@@ -93,13 +107,17 @@ fn default_layout_and_triplet_validation() {
     .unwrap();
     assert_eq!(
         paths.imports.lib_dirs,
-        vec![root.path().join("lib").join(HOST_TRIPLET)]
+        vec![
+            root.path()
+                .join("lib")
+                .join(mlc_manifest::Target::default().triplet())
+        ]
     );
     assert_eq!(
         paths.lib_fallback,
         root.path()
             .join("build/objects/default")
-            .join(HOST_TRIPLET)
+            .join(mlc_manifest::Target::default().triplet())
             .join("lib")
     );
     for value in ["", "..", "../../bad", "x\\bad", "C:bad"] {

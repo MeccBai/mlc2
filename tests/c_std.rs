@@ -18,7 +18,7 @@ fn declarations(target: &str) -> Vec<artifacts::Manifest> {
 }
 #[test]
 fn common_c_declarations_are_universal_and_windows_layouts_are_targeted() {
-    let manifests = declarations("x86_64-pc-windows-msvc");
+    let manifests = declarations(mlc_manifest::Target::default().triplet());
     let mut count = 0;
     for manifest in &manifests {
         assert_eq!(manifest.config.object, artifacts::ObjectMode::None);
@@ -31,7 +31,10 @@ fn common_c_declarations_are_universal_and_windows_layouts_are_targeted() {
         ]
         .contains(&module.as_str())
         {
-            assert_eq!(manifest.config.target, "x86_64-pc-windows-msvc");
+            assert_eq!(
+                manifest.config.target,
+                mlc_manifest::Target::default().triplet()
+            );
         } else {
             assert!(manifest.config.target.is_empty(), "{module}");
         }
@@ -78,7 +81,7 @@ fn common_c_declarations_are_universal_and_windows_layouts_are_targeted() {
 #[test]
 fn every_declared_function_links_to_ucrt() {
     use mlc_builder::llvm::IrCompiler;
-    let symbols: BTreeSet<_> = declarations("x86_64-pc-windows-msvc")
+    let symbols: BTreeSet<_> = declarations(mlc_manifest::Target::default().triplet())
         .iter()
         .flat_map(|m| m.symbols.functions.iter().map(|f| f.name.clone()))
         .collect();
@@ -95,7 +98,7 @@ fn every_declared_function_links_to_ucrt() {
     let root = tempfile::tempdir().unwrap();
     let object = root.path().join("all.obj");
     let exe = root.path().join("all.exe");
-    IrCompiler::init("x86_64-pc-windows-msvc")
+    IrCompiler::init(mlc_manifest::Target::default().triplet())
         .unwrap()
         .emit(ir, &object)
         .unwrap();
@@ -111,18 +114,24 @@ fn every_declared_function_links_to_ucrt() {
 #[cfg(windows)]
 #[test]
 fn common_functions_import_compile_and_run() {
-    run_common_functions("x86_64-pc-windows-msvc");
+    run_common_functions(mlc_manifest::Target::default());
 }
 
 #[cfg(windows)]
 #[test]
 #[ignore = "Requires repository tools/ld.lld.exe and runtimes/x86_64-pc-windows-gnu"]
 fn common_functions_run_with_gnu_runtime() {
-    run_common_functions("x86_64-pc-windows-gnu");
+    run_common_functions(
+        mlc_manifest::Target::default()
+            .with_system(mlc_manifest::System::Windows)
+            .with_arch(mlc_manifest::Arch::X86_64)
+            .with_abi(mlc_manifest::Abi::Gnu),
+    );
 }
 
 #[cfg(windows)]
-fn run_common_functions(target: &str) {
+fn run_common_functions(config: mlc_manifest::Target) {
+    let target = config.triplet();
     let root = tempfile::tempdir().unwrap();
     fs::write(
         root.path().join("main.m2"),
@@ -176,11 +185,7 @@ func main()->i32 {
         .arg(
             std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
                 .join("tools")
-                .join(if target.ends_with("msvc") {
-                    "lld-link.exe"
-                } else {
-                    "ld.lld.exe"
-                }),
+                .join(format!("{}{}", config.linker(), mlc_manifest::EXE_SUFFIX)),
         )
         .arg("--runtime-dir")
         .arg(

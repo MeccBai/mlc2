@@ -16,7 +16,7 @@ pub(crate) use symbols::has_templates;
 
 /// Existing metadata/header field name; compatibility is governed only by the
 /// compiler build number, not an independently maintained format version.
-pub const FORMAT_VERSION: u32 = crate::manifest::BUILD_NUMBER;
+pub const FORMAT_VERSION: u32 = mlc_manifest::BUILD_NUMBER;
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ObjectMode {

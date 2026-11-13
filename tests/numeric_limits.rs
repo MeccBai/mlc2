@@ -18,7 +18,7 @@ fn ll(source: &str, expected: bool) -> (tempfile::TempDir, String) {
         fs::read_to_string(
             root.path()
                 .join("build/ll/default")
-                .join(mlc_builder::paths::HOST_TRIPLET)
+                .join(mlc_manifest::Target::default().triplet())
                 .join("main.ll"),
         )
         .unwrap()
@@ -63,7 +63,7 @@ fn numeric_limits_are_typed_compile_time_literals_without_optimization() {
     }
     assert!(!ir.lines().any(|line| line.contains("call ")
         && (line.contains("::max") || line.contains("::min") || line.contains("::epsilon"))));
-    mlc_builder::llvm::IrCompiler::init(mlc_builder::paths::HOST_TRIPLET)
+    mlc_builder::llvm::IrCompiler::init(mlc_manifest::Target::default().triplet())
         .unwrap()
         .emit(ir, &root.path().join("limits.obj"))
         .unwrap();

@@ -45,10 +45,10 @@ fn line_tables_share_generic_sources_hide_macros_and_mark_pipeline_calls() {
             "ir",
         ],
     );
-    let ir = fs::read_to_string(
-        root.path()
-            .join("ir/ll/debug/x86_64-pc-windows-msvc/main.ll"),
-    )
+    let ir = fs::read_to_string(root.path().join(format!(
+        "ir/ll/debug/{}/main.ll",
+        mlc_manifest::Target::default().triplet()
+    )))
     .unwrap();
     assert!(ir.contains("DICompileUnit"));
     assert!(ir.contains("line: 8,"));
@@ -64,10 +64,10 @@ fn line_tables_share_generic_sources_hide_macros_and_mark_pipeline_calls() {
     let pipe_id = debug_id(pipe);
     assert!(ir.contains(&format!("!{normal_id} = !DILocation(line: 8,")));
     assert!(ir.contains(&format!("!{pipe_id} = !DILocation(line: 15728639,")));
-    let supplementary = fs::read_to_string(
-        root.path()
-            .join("ir/ll/debug/x86_64-pc-windows-msvc/__mlc_instances.ll"),
-    )
+    let supplementary = fs::read_to_string(root.path().join(format!(
+        "ir/ll/debug/{}/__mlc_instances.ll",
+        mlc_manifest::Target::default().triplet()
+    )))
     .unwrap();
     assert_eq!(
         supplementary
@@ -109,10 +109,10 @@ fn line_tables_share_generic_sources_hide_macros_and_mark_pipeline_calls() {
         ],
     );
     assert!(
-        !fs::read_to_string(
-            root.path()
-                .join("release/ll/release/x86_64-pc-windows-msvc/main.ll")
-        )
+        !fs::read_to_string(root.path().join(format!(
+            "release/ll/release/{}/main.ll",
+            mlc_manifest::Target::default().triplet()
+        )))
         .unwrap()
         .contains("!dbg")
     );
@@ -313,7 +313,10 @@ fn four_modes_control_ast_optimization_and_debug_metadata_independently() {
             root.path()
                 .join("ir/ll")
                 .join(flag.trim_start_matches('-'))
-                .join("x86_64-pc-windows-msvc/main.ll"),
+                .join(format!(
+                    "{}/main.ll",
+                    mlc_manifest::Target::default().triplet()
+                )),
         )
         .unwrap();
         assert_eq!(ir.contains("!llvm.dbg.cu"), debug, "{flag}: {ir}");
@@ -329,10 +332,10 @@ fn four_modes_control_ast_optimization_and_debug_metadata_independently() {
         root.path(),
         &["ll", "main.m2", "--config", "config.toml", "-o", "ir"],
     );
-    let ir = fs::read_to_string(
-        root.path()
-            .join("ir/ll/default/x86_64-pc-windows-msvc/main.ll"),
-    )
+    let ir = fs::read_to_string(root.path().join(format!(
+        "ir/ll/default/{}/main.ll",
+        mlc_manifest::Target::default().triplet()
+    )))
     .unwrap();
     assert!(!ir.contains("!dbg") && ir.contains(" = add i32"), "{ir}");
 }
@@ -379,7 +382,10 @@ fn all_four_modes_build_run_and_invalidate_object_cache() {
             .join(directory)
             .join("objects")
             .join(directory)
-            .join("x86_64-pc-windows-msvc/main.sym");
+            .join(format!(
+                "{}/main.sym",
+                mlc_manifest::Target::default().triplet()
+            ));
         let manifest = mlc_builder::artifacts::load(&object).unwrap();
         let key = manifest.manifest.config.build_key;
         assert_ne!(previous.as_ref(), Some(&key));

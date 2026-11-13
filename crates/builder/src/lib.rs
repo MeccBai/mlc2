@@ -4,7 +4,6 @@ pub mod artifacts;
 pub mod build;
 pub mod config;
 pub mod llvm;
-pub mod manifest;
 pub mod paths;
 pub mod plan;
 pub mod project;

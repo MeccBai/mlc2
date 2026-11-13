@@ -108,7 +108,7 @@ func main()->i32{
     let ir = fs::read_to_string(
         root.path()
             .join("build/ll/debug")
-            .join(mlc_builder::paths::HOST_TRIPLET)
+            .join(mlc_manifest::Target::default().triplet())
             .join("std/fmt.ll"),
     )
     .unwrap();

@@ -1,4 +1,4 @@
-use mlc_syntax::manifest::SOURCE_SUFFIX;
+use mlc_manifest::SOURCE_SUFFIX;
 
 use super::*;
 

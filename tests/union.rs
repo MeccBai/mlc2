@@ -1,6 +1,7 @@
 #![cfg(windows)]
 mod support;
-use mlc_builder::{llvm::IrCompiler, manifest::X86_64_PC_WINDOWS_MSVC};
+use mlc_builder::llvm::IrCompiler;
+use mlc_manifest::Target;
 use std::{fs, process::Command};
 
 #[test]
@@ -61,12 +62,12 @@ func main()->i32 {
         "{}",
         String::from_utf8_lossy(&output.stderr)
     );
-    let compiler = IrCompiler::init(X86_64_PC_WINDOWS_MSVC).unwrap();
+    let compiler = IrCompiler::init(Target::default().triplet()).unwrap();
     let mut objects = Vec::new();
     for file in fs::read_dir(
         root.path()
             .join("build/ll/default")
-            .join(mlc_builder::paths::HOST_TRIPLET),
+            .join(mlc_manifest::Target::default().triplet()),
     )
     .unwrap()
     {

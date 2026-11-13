@@ -92,10 +92,17 @@ func main()->i32 {
                 mode,
                 "--linker",
             ])
-            .arg(repository.join("tools/lld-link.exe"))
+            .arg(repository.join("tools").join(format!(
+                "{}{}",
+                mlc_manifest::Target::default().linker(),
+                mlc_manifest::EXE_SUFFIX
+            )))
             .arg("--runtime-dir")
-            .arg(repository.join("runtimes/x86_64-pc-windows-msvc"))
-            .args(["--triplet", "x86_64-pc-windows-msvc"])
+            .arg(repository.join(format!(
+                "runtimes/{}",
+                mlc_manifest::Target::default().triplet()
+            )))
+            .args(["--triplet", mlc_manifest::Target::default().triplet()])
             .output()
             .unwrap();
         assert!(

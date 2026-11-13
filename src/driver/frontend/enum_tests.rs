@@ -14,7 +14,7 @@ fn generate_source(
     let plan = BuildPlan::discover(&entry, &ImportResolver { lib_dirs: vec![] }).unwrap();
     let result = generate(
         &plan,
-        mlc_builder::manifest::X86_64_PC_WINDOWS_MSVC,
+        mlc_manifest::Target::default().triplet(),
         TargetKind::Bin,
     );
     (root, result)
@@ -22,7 +22,7 @@ fn generate_source(
 
 fn verify_and_run(root: &std::path::Path, generated: Generated) {
     let compiler =
-        mlc_builder::llvm::IrCompiler::init(mlc_builder::manifest::X86_64_PC_WINDOWS_MSVC).unwrap();
+        mlc_builder::llvm::IrCompiler::init(mlc_manifest::Target::default().triplet()).unwrap();
     let mut objects = Vec::new();
     let mut modules = generated.modules;
     if let Some(ir) = generated.supplement {

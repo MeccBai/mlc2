@@ -65,7 +65,7 @@ fn hello_world_array_printf_compiles_links_runs_and_matches_stdout() {
         assert!(!ast.config.is_poisoned(), "{:?}", ast.config.error_handle());
         asts.push(ast);
     }
-    let triplet = mlc_builder::manifest::X86_64_PC_WINDOWS_MSVC;
+    let triplet = mlc_manifest::Target::default().triplet();
     let mut generator = IrGenerator::new(triplet.into());
     for ast in asts {
         generator.generate_globals(ast.config.file_id(), &package);

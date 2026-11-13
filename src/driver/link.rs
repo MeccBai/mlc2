@@ -15,7 +15,7 @@ pub fn archiver_path(cli: &Cli) -> Result<PathBuf, String> {
     Ok(exe
         .parent()
         .ok_or("Compiler has no parent")?
-        .join(mlc_builder::manifest::TOOLS_DIR)
+        .join(mlc_manifest::TOOLS_DIR)
         .join(format!("llvm-ar{}", std::env::consts::EXE_SUFFIX)))
 }
 
@@ -24,7 +24,7 @@ pub fn linker_path(cli: &Cli, triplet: &str) -> Result<PathBuf, String> {
     Ok(cli.linker.clone().unwrap_or(
         root.parent()
             .ok_or("Compiler has no parent")?
-            .join(mlc_builder::manifest::TOOLS_DIR)
+            .join(mlc_manifest::TOOLS_DIR)
             .join(format!(
                 "{}{}",
                 targets::profile(triplet)?.linker,
@@ -41,7 +41,7 @@ fn runtime_path(cli: &Cli, triplet: &str) -> Result<PathBuf, String> {
     Ok(exe
         .parent()
         .ok_or("Compiler has no parent")?
-        .join(mlc_builder::manifest::RUNTIMES_DIR)
+        .join(mlc_manifest::RUNTIMES_DIR)
         .join(triplet))
 }
 

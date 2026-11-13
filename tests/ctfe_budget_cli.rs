@@ -31,7 +31,7 @@ fn project_ctfe_budget_terminates_infinite_evaluation_without_publishing_cache()
                 .contains("exceeded MaxTime (0.050s)")),
         "{doc}"
     );
-    let host = mlc_builder::paths::HOST_TRIPLET;
+    let host = mlc_manifest::Target::default().triplet();
     let directory = root.path().join("build/ctfe").join(host);
     for entry in fs::read_dir(directory).unwrap() {
         assert!(!entry.unwrap().path().join("cache.toml").exists());

@@ -2,7 +2,8 @@
 #![cfg(windows)]
 
 mod support;
-use mlc_builder::{llvm::IrCompiler, manifest::X86_64_PC_WINDOWS_MSVC};
+use mlc_builder::llvm::IrCompiler;
+use mlc_manifest::Target;
 use std::{
     io::Write,
     process::{Command, Stdio},
@@ -29,7 +30,7 @@ entry:
   ret i32 %exit
 }
 "#;
-    IrCompiler::init(X86_64_PC_WINDOWS_MSVC)
+    IrCompiler::init(Target::default().triplet())
         .unwrap()
         .emit(ir.into(), &object)
         .unwrap();

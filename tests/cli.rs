@@ -47,7 +47,7 @@ fn cli_hello_world_builds_runs_and_reuses_objects() {
     let object = output
         .path()
         .join("objects/default")
-        .join(mlc_builder::paths::HOST_TRIPLET)
+        .join(mlc_manifest::Target::default().triplet())
         .join("hello_world.obj");
     let before = fs::metadata(&object).unwrap().modified().unwrap();
     success(&mlc(&root, &args));

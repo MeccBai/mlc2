@@ -4,5 +4,6 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
+mlc_manifest.workspace = true
 mlc_syntax.workspace = true
 colored.workspace = true

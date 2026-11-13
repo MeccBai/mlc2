@@ -295,6 +295,7 @@ checksum = "da7c62ceae207dd37ea5b845da6a0696c799f85e97da1ab5b7910be3c1c80223"
 name = "ffi_parser"
 version = "0.2.0"
 dependencies = [
+ "mlc_manifest",
  "mlc_syntax",
 ]
 
@@ -465,6 +466,7 @@ dependencies = [
  "mlc_core",
  "mlc_examples",
  "mlc_formatter",
+ "mlc_manifest",
  "mlc_optimizer",
  "mlc_syntax",
  "serde",
@@ -481,6 +483,7 @@ dependencies = [
  "ffi_parser",
  "llvm-sys",
  "mlc_core",
+ "mlc_manifest",
  "mlc_syntax",
  "rmp-serde",
  "serde",
@@ -496,6 +499,7 @@ version = "0.2.0"
 dependencies = [
  "mlc_builder",
  "mlc_core",
+ "mlc_manifest",
  "mlc_optimizer",
  "mlc_syntax",
 ]
@@ -505,6 +509,7 @@ name = "mlc_core"
 version = "0.2.0"
 dependencies = [
  "colored",
+ "mlc_manifest",
  "mlc_syntax",
 ]
 
@@ -523,6 +528,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "mlc_manifest"
+version = "0.2.0"
+
+[[package]]
 name = "mlc_optimizer"
 version = "0.2.0"
 dependencies = [
@@ -536,6 +545,7 @@ version = "0.2.0"
 dependencies = [
  "chumsky",
  "logos",
+ "mlc_manifest",
  "serde",
  "serde_json",
  "toml",

@@ -139,7 +139,13 @@ fn setup_prepares_every_library_without_linking_and_reuses_objects() {
         "export func isolated()->i32{return 7;}",
     )
     .unwrap();
-    for target in ["x86_64-pc-windows-msvc", "aarch64-unknown-linux-gnu"] {
+    for target in [
+        mlc_manifest::Target::default().triplet(),
+        mlc_manifest::Target::default()
+            .with_system(mlc_manifest::System::Linux)
+            .with_arch(mlc_manifest::Arch::Aarch64)
+            .triplet(),
+    ] {
         fs::create_dir_all(library.join(target)).unwrap();
         fs::write(
             library.join(target).join("api.m2"),
@@ -152,11 +158,12 @@ fn setup_prepares_every_library_without_linking_and_reuses_objects() {
     fs::write(&old_header, "int32_t obsolete(void);").unwrap();
     artifacts::convert_c_header(
         &old_header,
-        &root
-            .path()
-            .join("objects/debug/x86_64-pc-windows-msvc/c_std/native.sym"),
+        &root.path().join(format!(
+            "objects/debug/{}/c_std/native.sym",
+            mlc_manifest::Target::default().triplet()
+        )),
         "c_std::native",
-        "x86_64-pc-windows-msvc",
+        mlc_manifest::Target::default().triplet(),
     )
     .unwrap();
     let args = [
@@ -174,7 +181,13 @@ fn setup_prepares_every_library_without_linking_and_reuses_objects() {
     assert!(decl.manifest.config.target.is_empty());
     assert!(root.path().join("objects/universal/decl.sym").is_file());
     let mut timestamps = Vec::new();
-    for target in ["x86_64-pc-windows-msvc", "aarch64-unknown-linux-gnu"] {
+    for target in [
+        mlc_manifest::Target::default().triplet(),
+        mlc_manifest::Target::default()
+            .with_system(mlc_manifest::System::Linux)
+            .with_arch(mlc_manifest::Arch::Aarch64)
+            .triplet(),
+    ] {
         for mode in ["debug", "release"] {
             let objects = root.path().join("objects").join(mode).join(target);
             for module in ["api", "shared", "unreferenced"] {
@@ -224,7 +237,7 @@ fn setup_missing_library_path_is_reported_and_flags_select_output_layout() {
             "--lib-dir",
             "lib",
             "--triplet",
-            "x86_64-pc-windows-msvc",
+            mlc_manifest::Target::default().triplet(),
             "--release",
             "-o",
             "cache",
@@ -232,7 +245,10 @@ fn setup_missing_library_path_is_reported_and_flags_select_output_layout() {
     ));
     assert!(
         root.path()
-            .join("cache/objects/release/x86_64-pc-windows-msvc/value.obj")
+            .join(format!(
+                "cache/objects/release/{}/value.obj",
+                mlc_manifest::Target::default().triplet()
+            ))
             .is_file()
     );
     assert!(!root.path().join("cache/objects/debug").exists());
