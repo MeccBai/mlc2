@@ -44,7 +44,7 @@ pub fn type_occurrence(config: &mut Config, span: Span, ty: TypeIndex, symbols: 
         .push(Occurrence {
             symbol: None,
             span,
-            ty: ty.format(symbols),
+            ty: display_type(ty, symbols),
             kind,
             definition,
             parameters: vec![],
@@ -61,7 +61,7 @@ pub fn expression(config: &mut Config, value: &Expression, symbols: &mut dyn Res
         ty: if ty.is_empty() {
             "void".into()
         } else {
-            ty.format(symbols)
+            display_type(ty, symbols)
         },
         kind: "variable",
         definition: None,
@@ -79,10 +79,28 @@ pub fn expression(config: &mut Config, value: &Expression, symbols: &mut dyn Res
             let (params, definition, offset) = match call.func {
                 EnumBool::False(i) => {
                     let f = symbols.get_function_regular(i);
+                    occurrence.symbol = Some(f.name.clone());
+                    occurrence.ty = function_signature(
+                        &f.name,
+                        f.constant,
+                        &f.generics,
+                        &f.params,
+                        f.ret_type,
+                        symbols,
+                    );
                     (&f.params, Some((i.file_id(), f.span)), 0)
                 }
                 EnumBool::True(i) => {
                     let f = symbols.get_interface(i, false);
+                    occurrence.symbol = Some(f.name.clone());
+                    occurrence.ty = function_signature(
+                        &f.name,
+                        false,
+                        &f.generics,
+                        &f.params,
+                        f.ret_type,
+                        symbols,
+                    );
                     (
                         &f.params,
                         Some((i.file_id(), f.span)),
@@ -140,4 +158,86 @@ pub fn expression(config: &mut Config, value: &Expression, symbols: &mut dyn Res
         .unwrap()
         .borrow_mut()
         .push(occurrence);
+}
+
+/// Source-facing names omit module qualifiers; internal identity remains unchanged.
+pub fn short_name(text: &str) -> String {
+    let mut out = String::new();
+    let mut chars = text.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c == '\0' {
+            continue;
+        }
+        if c.is_alphanumeric() || c == '_' {
+            let mut word = String::from(c);
+            while chars
+                .peek()
+                .is_some_and(|c| c.is_alphanumeric() || *c == '_')
+            {
+                word.push(chars.next().unwrap());
+            }
+            loop {
+                let mut look = chars.clone();
+                if look.next() != Some(':')
+                    || look.next() != Some(':')
+                    || !look
+                        .peek()
+                        .is_some_and(|c| c.is_alphanumeric() || *c == '_')
+                {
+                    break;
+                }
+                chars = look;
+                word.clear();
+                while chars
+                    .peek()
+                    .is_some_and(|c| c.is_alphanumeric() || *c == '_')
+                {
+                    word.push(chars.next().unwrap());
+                }
+            }
+            out.push_str(&word);
+        } else {
+            out.push(c);
+        }
+    }
+    out
+}
+pub fn display_type(ty: TypeIndex, symbols: &(impl TypeLookup + ?Sized)) -> String {
+    if ty.is_empty() {
+        return "void".into();
+    }
+    short_name(&symbols.get_type(ty).unqualified().format(symbols))
+}
+pub fn function_signature(
+    name: &str,
+    constant: bool,
+    generics: &[String],
+    params: &[(TypeIndex, String)],
+    returns: Option<TypeIndex>,
+    symbols: &(impl TypeLookup + ?Sized),
+) -> String {
+    let parameters = params
+        .iter()
+        .map(|(ty, name)| {
+            if name == "..." {
+                "...".into()
+            } else {
+                format!("{name}: {}", display_type(*ty, symbols))
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(", ");
+    let generic = if generics.is_empty() {
+        String::new()
+    } else {
+        format!("<{}>", generics.join(", "))
+    };
+    let returns = returns
+        .map(|ty| format!(" -> {}", display_type(ty, symbols)))
+        .unwrap_or_default();
+    format!(
+        "{}func {}{generic}({parameters}){returns}",
+        if constant { "const " } else { "" },
+        short_name(name)
+    )
 }

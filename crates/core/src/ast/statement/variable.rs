@@ -260,7 +260,15 @@ impl Variable {
             index.borrow_mut().push(crate::ast::semantic::Occurrence {
                 symbol: None,
                 span: temp_var.name_span,
-                ty: ty.format(symbols),
+                ty: format!(
+                    "{}{}",
+                    if temp_var.value_type == ValueType::Constant {
+                        "const "
+                    } else {
+                        ""
+                    },
+                    crate::ast::semantic::display_type(ty, symbols)
+                ),
                 kind: "variable",
                 definition: Some((config.file_id(), temp_var.name_span)),
                 parameters: vec![],

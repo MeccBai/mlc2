@@ -67,6 +67,7 @@ pub fn run() -> Result<(), String> {
     let mut initialized = false;
     let mut refresh_tokens = false;
     let mut refresh_hints = false;
+    let mut refresh_diagnostics = false;
     let mut refresh_id = 0u64;
     while let Some(message) = read(&mut reader)? {
         let id = message.get("id").cloned();
@@ -84,6 +85,10 @@ pub fn run() -> Result<(), String> {
         }
         if method == "initialize" {
             initialized = true;
+            refresh_diagnostics =
+                params["capabilities"]["workspace"]["diagnostics"]["refreshSupport"]
+                    .as_bool()
+                    .unwrap_or(false);
             refresh_tokens =
                 params["capabilities"]["workspace"]["semanticTokens"]["refreshSupport"]
                     .as_bool()
@@ -94,7 +99,7 @@ pub fn run() -> Result<(), String> {
             if let Some(id) = id {
                 send(
                     &mut writer,
-                    json!({"jsonrpc":"2.0","id":id,"result":{"capabilities":{"positionEncoding":"utf-16","textDocumentSync":{"openClose":true,"change":1,"save":true},"hoverProvider":true,"definitionProvider":true,"inlayHintProvider":true,"semanticTokensProvider":{"legend":{"tokenTypes":LEGEND,"tokenModifiers":[]},"full":true}},"serverInfo":{"name":"mlc-lsp","version":env!("CARGO_PKG_VERSION")}}}),
+                    json!({"jsonrpc":"2.0","id":id,"result":{"capabilities":{"positionEncoding":"utf-16","textDocumentSync":{"openClose":true,"change":1,"save":true},"hoverProvider":true,"diagnosticProvider":{"identifier":"mlc","interFileDependencies":true,"workspaceDiagnostics":false},"definitionProvider":true,"inlayHintProvider":true,"semanticTokensProvider":{"legend":{"tokenTypes":LEGEND,"tokenModifiers":[]},"full":true}},"serverInfo":{"name":"mlc-lsp","version":env!("CARGO_PKG_VERSION")}}}),
                 )?;
             }
             continue;
@@ -117,6 +122,7 @@ pub fn run() -> Result<(), String> {
             for (enabled, method) in [
                 (refresh_tokens, "workspace/semanticTokens/refresh"),
                 (refresh_hints, "workspace/inlayHint/refresh"),
+                (refresh_diagnostics, "workspace/diagnostic/refresh"),
             ] {
                 if enabled {
                     refresh_id += 1;
@@ -154,7 +160,8 @@ pub fn run() -> Result<(), String> {
         }
         if !matches!(
             method,
-            "textDocument/hover"
+            "textDocument/diagnostic"
+                | "textDocument/hover"
                 | "textDocument/definition"
                 | "textDocument/inlayHint"
                 | "textDocument/semanticTokens/full"
@@ -166,14 +173,20 @@ pub fn run() -> Result<(), String> {
             continue;
         }
         let uri = params["textDocument"]["uri"].as_str().unwrap_or("");
+        let mut analysis_error = None;
         if !dirty.contains(uri) && !snapshots.get(uri).is_some_and(|s| s.fresh()) {
             snapshots.remove(uri);
-            if let Some(snapshot) = positions::path(uri).and_then(|path| {
-                std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| analysis::analyze(&path)))
-                    .ok()
-                    .and_then(Result::ok)
-            }) {
-                snapshots.insert(uri.into(), snapshot);
+            if let Some(path) = positions::path(uri) {
+                let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    analysis::analyze(&path)
+                }))
+                .unwrap_or_else(|_| Err("Semantic analysis failed".into()));
+                match result {
+                    Ok(snapshot) => {
+                        snapshots.insert(uri.into(), snapshot);
+                    }
+                    Err(report) => analysis_error = Some(report),
+                }
             }
         }
         let snapshot = snapshots
@@ -182,6 +195,18 @@ pub fn run() -> Result<(), String> {
         let result = match snapshot {
             Some(snapshot) => snapshot.query(method, params),
             None => match method {
+                "textDocument/diagnostic" => analysis_error
+                    .as_ref()
+                    .and_then(|r| {
+                        positions::path(uri).map(|p| {
+                            analysis::diagnostic_report(
+                                r,
+                                &p,
+                                &std::fs::read_to_string(&p).unwrap_or_default(),
+                            )
+                        })
+                    })
+                    .unwrap_or_else(|| json!({"kind":"full","items":[]})),
                 "textDocument/semanticTokens/full" => json!({"data":[]}),
                 "textDocument/inlayHint" => json!([]),
                 _ => Value::Null,

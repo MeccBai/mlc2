@@ -12,7 +12,7 @@ use mlc_core::{
         semantic::Occurrence,
         symbols::PackageSymbolTable,
     },
-    diagnostic::{error::ErrorHandle, warning::WarningHandle},
+    diagnostic::{Diagnostic, Report, error::ErrorHandle, warning::WarningHandle},
     parser::out::*,
 };
 use mlc_syntax::lexer::{self, Lexed, TokenPack};
@@ -39,6 +39,7 @@ struct File {
     lexed: Lexed,
     module: String,
     params: Vec<(Span, TempParam)>,
+    generics: Vec<(Span, TempGenericParam)>,
 }
 pub struct Snapshot {
     stamps: Vec<(PathBuf, std::time::SystemTime, u64)>,
@@ -46,6 +47,8 @@ pub struct Snapshot {
     files: HashMap<usize, File>,
     occurrences: HashMap<usize, Vec<Occurrence>>,
     declarations: HashMap<String, Declaration>,
+    diagnostics: Vec<Diagnostic>,
+    aliases: HashMap<String, String>,
 }
 fn declaration(
     map: &mut HashMap<String, Declaration>,
@@ -65,7 +68,7 @@ fn declaration(
         },
     );
 }
-pub fn analyze(entry: &Path) -> Result<Snapshot, String> {
+pub fn analyze(entry: &Path) -> Result<Snapshot, Report> {
     let _recovery = mlc_core::diagnostic::ice::recoverable();
     let entry = entry.canonicalize().map_err(|e| e.to_string())?;
     let root = entry
@@ -75,20 +78,15 @@ pub fn analyze(entry: &Path) -> Result<Snapshot, String> {
         .find(|p| p.join("Project.toml").is_file() || p.join("project.toml").is_file())
         .unwrap_or(entry.parent().unwrap());
     let exe = std::env::current_exe().map_err(|e| e.to_string())?;
-    let paths = PathResolver::new(
-        &exe,
-        root,
-        None,
-        &GlobalConfig::load_default().map_err(|e| e.to_string())?,
-    )
-    .map_err(|e| e.to_string())?;
-    let plan = BuildPlan::discover_with_paths(&entry, &paths).map_err(|e| e.to_string())?;
+    let paths = PathResolver::new(&exe, root, None, &GlobalConfig::load_default()?)?;
+    let plan = BuildPlan::discover_with_paths(&entry, &paths)?;
     let layout = mlc_builder::llvm::IrCompiler::init(&paths.triplet)
         .map_err(|e| e.to_string())?
         .target_layout();
     let mut files = HashMap::new();
     let mut parsed_modules = HashMap::new();
     let mut declarations = HashMap::new();
+    let mut aliases = HashMap::new();
     for id in &plan.order {
         let target = &plan.targets[id.0];
         let (module, text, path) = match &target.input {
@@ -114,9 +112,12 @@ pub fn analyze(entry: &Path) -> Result<Snapshot, String> {
             }
         };
         let mut params = vec![];
+        let mut generics = vec![];
+        let mut receivers = vec![];
         for (item, span) in &module {
             match item {
                 TempGlobalStmt::Unit(unit) => {
+                    generics.extend(unit.generics.iter().cloned().map(|g| (*span, g)));
                     declaration(
                         &mut declarations,
                         id.0,
@@ -157,6 +158,7 @@ pub fn analyze(entry: &Path) -> Result<Snapshot, String> {
                     }
                 }
                 TempGlobalStmt::Func(f) => {
+                    generics.extend(f.symbol.generics.iter().cloned().map(|g| (*span, g)));
                     declaration(
                         &mut declarations,
                         id.0,
@@ -165,10 +167,60 @@ pub fn analyze(entry: &Path) -> Result<Snapshot, String> {
                         f.symbol.name_span,
                         "function",
                     );
+                    if let Some(d) =
+                        declarations.get_mut(&format!("{}::{}", target.module_name, f.symbol.name))
+                    {
+                        d.ty = source_signature(&f.symbol, &text);
+                    }
                     params.extend(f.symbol.params.iter().cloned().map(|p| (*span, p)));
                 }
                 TempGlobalStmt::Interface(f) => {
+                    if f.symbol.has_self {
+                        receivers.push((*span, f.symbol.name_span));
+                    }
+                    generics.extend(f.symbol.generics.iter().cloned().map(|g| (*span, g)));
+                    let name = f
+                        .symbol
+                        .owner
+                        .as_ref()
+                        .map(|(p, _)| format!("{}::{}", p.segments.join("::"), f.symbol.name))
+                        .unwrap_or_else(|| f.symbol.name.clone());
+                    declaration(
+                        &mut declarations,
+                        id.0,
+                        &target.module_name,
+                        &name,
+                        f.symbol.name_span,
+                        "method",
+                    );
                     params.extend(f.symbol.params.iter().cloned().map(|p| (*span, p)));
+                }
+                TempGlobalStmt::MacroFunc(f) => {
+                    declaration(
+                        &mut declarations,
+                        id.0,
+                        &target.module_name,
+                        &f.name,
+                        f.name_span,
+                        "function",
+                    );
+                    params.extend(f.params.iter().cloned().map(|p| (*span, p)));
+                }
+                TempGlobalStmt::Using(u) => {
+                    declaration(
+                        &mut declarations,
+                        id.0,
+                        &target.module_name,
+                        &u.name,
+                        u.name_span,
+                        "type",
+                    );
+                    if let TempType::Path(target) = &u.target.0 {
+                        aliases.insert(
+                            format!("{}::{}", target_module_name(&plan, id.0), u.name),
+                            target.segments.join("::"),
+                        );
+                    }
                 }
                 _ => {}
             }
@@ -178,6 +230,26 @@ pub fn analyze(entry: &Path) -> Result<Snapshot, String> {
         } else {
             lexer::tokenize(&text).map_err(|e| e.message())?
         };
+        // Receivers live in has_self/mutable rather than symbol.params.
+        // Keep their real declaration token, including for uninstantiated methods.
+        for (scope, name) in receivers {
+            if let Some((_, span)) = lexed
+                .tokens
+                .iter()
+                .skip_while(|(_, s)| s.start < name.end)
+                .take_while(|(_, s)| s.end <= scope.end)
+                .find(|(token, _)| matches!(token,TokenPack::Ident(name) if name=="self"))
+            {
+                params.push((
+                    scope,
+                    TempParam {
+                        name: "self".into(),
+                        name_span: *span,
+                        ty: None,
+                    },
+                ));
+            }
+        }
         files.insert(
             id.0,
             File {
@@ -186,11 +258,13 @@ pub fn analyze(entry: &Path) -> Result<Snapshot, String> {
                 lexed,
                 module: target.module_name.clone(),
                 params,
+                generics,
             },
         );
         parsed_modules.insert(id.0, module);
     }
-    macros::expand(&plan, &mut parsed_modules)?;
+    let macro_calls = macros::expand_indexed(&plan, &mut parsed_modules)?;
+    let mut diagnostics = vec![];
     let mut package = PackageSymbolTable::new();
     let mut asts = vec![];
     let mut indexes = HashMap::new();
@@ -216,22 +290,53 @@ pub fn analyze(entry: &Path) -> Result<Snapshot, String> {
         );
         let mut ast = AbstractSyntaxTree::new(config, parsed_modules.remove(&id.0).unwrap());
         ast.export(&mut package);
-        if ast.config.is_poisoned() {
-            return Err("Declaration analysis failed".into());
-        }
         asts.push((id.0, ast));
     }
     // There is deliberately no constant executor, optimizer or IR generation here.
-    for (_, ast) in &mut asts {
-        ast.analysis(&mut package);
-        if ast.config.is_poisoned() {
-            return Err("Semantic analysis failed".into());
+    for (id, ast) in &mut asts {
+        if !ast.config.is_poisoned() {
+            if let Err(panic) = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                ast.analysis(&mut package)
+            })) {
+                let message = panic
+                    .downcast_ref::<String>()
+                    .cloned()
+                    .or_else(|| panic.downcast_ref::<&str>().map(|s| s.to_string()))
+                    .unwrap_or_else(|| "Semantic analysis failed".into());
+                diagnostics.push(Diagnostic::error(message).at(
+                    files[id].path.to_string_lossy(),
+                    std::sync::Arc::<str>::from(files[id].text.as_str()),
+                    0..0,
+                ));
+            }
         }
+        let source: std::sync::Arc<str> = files[id].text.as_str().into();
+        diagnostics.extend(ast.config.error_handle().diagnostics(source.clone()));
+        diagnostics.extend(ast.config.warning_handle().warnings.iter().map(|w| {
+            Diagnostic::warning(w.warning.to_string()).at(
+                files[id].path.to_string_lossy(),
+                source.clone(),
+                w.span.start..w.span.end,
+            )
+        }));
     }
-    let occurrences = indexes
+    let mut occurrences: HashMap<usize, Vec<Occurrence>> = indexes
         .into_iter()
         .map(|(id, index)| (id, index.borrow().clone()))
         .collect();
+    for call in macro_calls {
+        occurrences.entry(call.owner).or_default().insert(
+            0,
+            Occurrence {
+                symbol: None,
+                span: call.span,
+                ty: call.signature,
+                kind: "function",
+                definition: Some((FileId::new(call.definition.0), call.definition.1)),
+                parameters: call.parameters,
+            },
+        );
+    }
     let stamps = plan
         .targets
         .iter()
@@ -248,6 +353,8 @@ pub fn analyze(entry: &Path) -> Result<Snapshot, String> {
         files,
         occurrences,
         declarations,
+        diagnostics,
+        aliases,
     })
 }
 impl Snapshot {
@@ -331,12 +438,25 @@ impl Snapshot {
     }
     pub fn query(&self, method: &str, params: &Value) -> Value {
         let file = &self.files[&self.file];
+        if method == "textDocument/diagnostic" {
+            return diagnostic_report(
+                &Report::new(self.diagnostics.clone()),
+                &file.path,
+                &file.text,
+            );
+        }
         if method == "textDocument/inlayHint" {
             let mut hints = vec![];
             let range_start = positions::offset(&file.text, &params["range"]["start"]).unwrap_or(0);
             let range_end =
                 positions::offset(&file.text, &params["range"]["end"]).unwrap_or(file.text.len());
             for o in self.occurrences.get(&self.file).into_iter().flatten() {
+                if o.symbol
+                    .as_deref()
+                    .is_some_and(|name| name.contains("__mlc_macro_"))
+                {
+                    continue;
+                }
                 for (span, name) in &o.parameters {
                     if span.start > file.text.len() {
                         continue;
@@ -399,7 +519,24 @@ impl Snapshot {
             return self.definition(index, occurrence).unwrap_or(Value::Null);
         }
         let ty = occurrence
-            .map(|o| o.ty.clone())
+            .map(|o| {
+                if matches!(o.kind, "variable" | "parameter") {
+                    if let Some((file, span)) = o.definition {
+                        if let Some(declaration) =
+                            self.occurrences.get(&file.index()).and_then(|items| {
+                                items.iter().find(|d| {
+                                    d.span == span
+                                        && d.kind == "variable"
+                                        && d.definition == Some((file, span))
+                                })
+                            })
+                        {
+                            return declaration.ty.clone();
+                        }
+                    }
+                }
+                o.ty.clone()
+            })
             .or_else(|| {
                 file.params
                     .iter()
@@ -407,10 +544,122 @@ impl Snapshot {
                         p.name_span.start <= token.1.start && p.name_span.end >= token.1.end
                     })
                     .and_then(|(_, p)| p.ty.as_ref())
-                    .map(|(_, span)| file.text[span.start..span.end].to_owned())
+                    .map(|(_, span)| {
+                        mlc_core::ast::semantic::short_name(&file.text[span.start..span.end])
+                    })
             })
             .or_else(|| self.named(index).map(|d| d.ty.clone()));
         ty.map(|ty|json!({"contents":{"kind":"plaintext","value":ty},"range":positions::range(&file.text,token.1.start,token.1.end)})).unwrap_or(Value::Null)
+    }
+    fn alias_kind(&self, name: &str) -> Option<&'static str> {
+        let mut name = name.to_owned();
+        for _ in 0..64 {
+            if let Some(target) = self.aliases.get(&name) {
+                let module = name.rsplit_once("::").map(|p| p.0).unwrap_or("");
+                let local = format!("{module}::{target}");
+                name = if self.declarations.contains_key(&local)
+                    || self.aliases.contains_key(&local)
+                {
+                    local
+                } else {
+                    target.clone()
+                };
+            } else {
+                return self.declarations.get(&name).map(|d| d.kind);
+            }
+        }
+        None
+    }
+    fn identifier_kind(&self, index: usize) -> &'static str {
+        let file = &self.files[&self.file];
+        let (token, span) = &file.lexed.tokens[index];
+        if let Some((name, d)) = self
+            .declarations
+            .iter()
+            .find(|(_, d)| d.file == self.file && d.span == *span)
+        {
+            return self.alias_kind(name).unwrap_or(d.kind);
+        }
+        if file.params.iter().any(|(_, p)| p.name_span == *span) {
+            return "parameter";
+        }
+        let name = token.to_string();
+        if file
+            .generics
+            .iter()
+            .any(|(scope, g)| g.name == name && scope.start <= span.start && scope.end >= span.end)
+        {
+            return "typeParameter";
+        }
+        if !file
+            .lexed
+            .tokens
+            .get(index + 1)
+            .is_some_and(|t| t.0.to_string() == "::")
+            && file.params.iter().any(|(scope, p)| {
+                p.name == name && scope.start <= span.start && scope.end >= span.end
+            })
+        {
+            return "parameter";
+        }
+        if let Some(d) = self.named(index) {
+            if let Some((name, _)) = self
+                .declarations
+                .iter()
+                .find(|(_, entry)| std::ptr::eq(*entry, d))
+            {
+                return self.alias_kind(name).unwrap_or(d.kind);
+            }
+            return d.kind;
+        }
+        if matches!(
+            name.as_str(),
+            "i8" | "i16"
+                | "i32"
+                | "i64"
+                | "u8"
+                | "u16"
+                | "u32"
+                | "u64"
+                | "f32"
+                | "f64"
+                | "bool"
+                | "str"
+        ) {
+            return "type";
+        }
+        if file
+            .lexed
+            .tokens
+            .get(index + 1)
+            .is_some_and(|t| t.0.to_string() == "::")
+        {
+            return "namespace";
+        }
+        if let Some(o) = self.occurrence(span.start, span.end) {
+            if let Some(symbol) = &o.symbol {
+                if let Some(kind) = self.alias_kind(symbol) {
+                    return kind;
+                }
+            }
+            if o.span == *span
+                || matches!(
+                    o.kind,
+                    "function" | "method" | "type" | "class" | "enum" | "enumMember" | "property"
+                )
+            {
+                return o.kind;
+            }
+        }
+        if file
+            .lexed
+            .tokens
+            .get(index + 1)
+            .is_some_and(|t| t.0.to_string() == "::")
+        {
+            return "namespace";
+        }
+        "variable"
     }
     fn tokens(&self) -> Value {
         let file = &self.files[&self.file];
@@ -428,11 +677,7 @@ impl Snapshot {
                         "number"
                     }
                 }
-                TokenPack::Ident(_) => self
-                    .named(index)
-                    .map(|d| d.kind)
-                    .or_else(|| self.occurrence(span.start, span.end).map(|o| o.kind))
-                    .unwrap_or("variable"),
+                TokenPack::Ident(_) => self.identifier_kind(index),
             };
             tokens.push((*span, kind));
         }
@@ -469,4 +714,77 @@ impl Snapshot {
         }
         json!({"data":data})
     }
+}
+
+fn source_signature(symbol: &TempFuncSymbol, text: &str) -> String {
+    let type_text = |ty: &Option<Spanned<TempType>>| {
+        ty.as_ref()
+            .map(|(_, span)| {
+                mlc_core::ast::semantic::short_name(text.get(span.start..span.end).unwrap_or("?"))
+            })
+            .unwrap_or_else(|| "?".into())
+    };
+    let generic = if symbol.generics.is_empty() {
+        String::new()
+    } else {
+        format!(
+            "<{}>",
+            symbol
+                .generics
+                .iter()
+                .map(|g| g.name.as_str())
+                .collect::<Vec<_>>()
+                .join(", ")
+        )
+    };
+    let returns = symbol
+        .return_type
+        .as_ref()
+        .map(|ty| format!(" -> {}", type_text(&Some(ty.clone()))))
+        .unwrap_or_default();
+    format!(
+        "{}func {}{generic}({}){returns}",
+        if symbol.constant { "const " } else { "" },
+        symbol.name,
+        symbol
+            .params
+            .iter()
+            .map(|p| format!("{}: {}", p.name, type_text(&p.ty)))
+            .collect::<Vec<_>>()
+            .join(", ")
+    )
+}
+pub fn diagnostic_report(report: &Report, path: &Path, text: &str) -> Value {
+    let mut items = vec![];
+    for d in &report.diagnostics {
+        let (range, related) = if let Some(source) = &d.source {
+            if positions::uri(Path::new(&source.file)) == positions::uri(path) {
+                (
+                    positions::range(&source.text, source.span.start, source.span.end),
+                    None,
+                )
+            } else {
+                (
+                    positions::range(text, 0, 0),
+                    Some(
+                        json!([{"location":{"uri":positions::uri(Path::new(&source.file)),"range":positions::range(&source.text,source.span.start,source.span.end)},"message":d.message}]),
+                    ),
+                )
+            }
+        } else {
+            (positions::range(text, 0, 0), None)
+        };
+        let mut item = json!({"range":range,"severity":if d.severity==mlc_core::diagnostic::Severity::Error{1}else{2},"source":"mlc","message":d.message});
+        if let Some(related) = related {
+            item["relatedInformation"] = related;
+        }
+        if !items.contains(&item) {
+            items.push(item);
+        }
+    }
+    json!({"kind":"full","items":items})
+}
+
+fn target_module_name(plan: &BuildPlan, id: usize) -> &str {
+    &plan.targets[id].module_name
 }

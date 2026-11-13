@@ -1,3 +1,4 @@
+mod support;
 use serde_json::{Value, json};
 use std::{
     fs,
@@ -223,5 +224,257 @@ fn utf16_positions_and_percent_encoded_paths_match_source_tokens() {
     assert!(
         hover["contents"]["value"].as_str().unwrap().contains("i32"),
         "{hover}"
+    );
+}
+
+fn hover_value(client: &mut Client, uri: &str, text: &str, needle: &str) -> String {
+    let value = client.request(
+        "textDocument/hover",
+        json!({"textDocument":{"uri":uri},"position":position(text,needle)}),
+    );
+    value["contents"]["value"]
+        .as_str()
+        .unwrap_or_else(|| panic!("Missing hover for {needle}: {value}"))
+        .to_string()
+}
+#[test]
+fn display_short_types_const_bindings_and_complete_function_signatures() {
+    let root = tempfile::tempdir().unwrap();
+    let path = root.path().join("main.m2");
+    fs::write(
+        root.path().join("types.m2"),
+        "export unit Point{pub x:i32;};",
+    )
+    .unwrap();
+    let text = "import types;func magnitude(point:types::Point)->i32{return point.x;}func main()->i32{const fixed=50;val immutable=50;var p:types::Point=types::Point{1};var array:[types::Point:1]=[p];return magnitude(p)+fixed+immutable;}";
+    fs::write(&path, text).unwrap();
+    let uri = uri(&path);
+    let mut client = Client::new();
+    assert_eq!(hover_value(&mut client, &uri, text, "fixed="), "const i32");
+    assert_eq!(hover_value(&mut client, &uri, text, "fixed+"), "const i32");
+    assert_eq!(hover_value(&mut client, &uri, text, "immutable="), "i32");
+    assert_eq!(hover_value(&mut client, &uri, text, "immutable;}"), "i32");
+    assert_eq!(hover_value(&mut client, &uri, text, "p:types"), "Point");
+    let array = hover_value(&mut client, &uri, text, "array:");
+    assert!(
+        array.contains("Point") && !array.contains("types::"),
+        "{array}"
+    );
+    assert_eq!(
+        hover_value(&mut client, &uri, text, "magnitude(point"),
+        "func magnitude(point: Point) -> i32"
+    );
+    assert_eq!(
+        hover_value(&mut client, &uri, text, "magnitude(p)"),
+        "func magnitude(point: Point) -> i32"
+    );
+}
+#[test]
+fn semantic_errors_return_diagnostics_without_discarding_all_results() {
+    let root = tempfile::tempdir().unwrap();
+    let path = root.path().join("main.m2");
+    let text = "func helper()->i32{return 1;}func main()->i32{var good=50;return unknown;}";
+    fs::write(&path, text).unwrap();
+    let uri = uri(&path);
+    let mut client = Client::new();
+    let diagnostics = client.request(
+        "textDocument/diagnostic",
+        json!({"textDocument":{"uri":uri}}),
+    );
+    assert_eq!(diagnostics["kind"], "full");
+    assert!(
+        diagnostics["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|d| d["severity"] == 1),
+        "{diagnostics}"
+    );
+    assert_eq!(hover_value(&mut client, &uri, text, "good="), "i32");
+    assert_eq!(
+        hover_value(&mut client, &uri, text, "helper()"),
+        "func helper() -> i32"
+    );
+    let fixed = text.replace("unknown", "good");
+    fs::write(&path, &fixed).unwrap();
+    client.notify("textDocument/didSave", json!({"textDocument":{"uri":uri}}));
+    let clean = client.request(
+        "textDocument/diagnostic",
+        json!({"textDocument":{"uri":uri}}),
+    );
+    assert!(
+        !clean["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|d| d["severity"] == 1),
+        "{clean}"
+    );
+    fs::write(&path, "unit A{};unit A{};func main(){}").unwrap();
+    client.notify("textDocument/didSave", json!({"textDocument":{"uri":uri}}));
+    let duplicate = client.request(
+        "textDocument/diagnostic",
+        json!({"textDocument":{"uri":uri}}),
+    );
+    assert!(
+        duplicate["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|d| d["severity"] == 1),
+        "{duplicate}"
+    );
+}
+#[test]
+fn println_uses_source_macro_parameter_names_and_signature() {
+    let root = tempfile::tempdir().unwrap();
+    let path = root.path().join("main.m2");
+    fs::write(root.path().join("Project.toml"),format!("[Project]\nName='lsp'\nVersion='0.1.0'\nOutputDir='build'\nTargets=[]\nLibDirs=['{}']\n",support::library().display())).unwrap();
+    let text = "import std;using println=std::println;func main(){println!(\"value={}\",50);}";
+    fs::write(&path, text).unwrap();
+    let uri = uri(&path);
+    let mut client = Client::new();
+    let hover = hover_value(&mut client, &uri, text, "println!(");
+    assert!(hover.starts_with("macro func println!(str: str"), "{hover}");
+    let hints=client.request("textDocument/inlayHint",json!({"textDocument":{"uri":uri},"range":{"start":{"line":0,"character":0},"end":{"line":0,"character":text.len()}}}));
+    assert!(
+        hints
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|h| h["label"] == "str:"),
+        "{hints}"
+    );
+    assert!(
+        !hints.to_string().contains("__macro_arg") && !hints.to_string().contains("arg0:"),
+        "{hints}"
+    );
+}
+
+#[test]
+fn semantic_tokens_distinguish_declarations_parameters_and_using_aliases() {
+    let root = tempfile::tempdir().unwrap();
+    let path = root.path().join("main.m2");
+    let text = "unit Point{pub x:i32;};enum Color{Red,Blue};union Number[i32,f64];using P=Point;using callback=distance;func distance(point:P)->i32{return point.x;}func<T> identity(item:T)->T{return item;}func main()->i32{var p=P{1};return callback(p);}";
+    fs::write(&path, text).unwrap();
+    let uri = uri(&path);
+    let mut client = Client::new();
+    let result = client.request(
+        "textDocument/semanticTokens/full",
+        json!({"textDocument":{"uri":uri}}),
+    );
+    let data = result["data"].as_array().unwrap();
+    assert!(!data.is_empty(), "{result}");
+    let legend = [
+        "namespace",
+        "type",
+        "class",
+        "enum",
+        "enumMember",
+        "function",
+        "method",
+        "variable",
+        "parameter",
+        "property",
+        "keyword",
+        "string",
+        "number",
+        "comment",
+        "operator",
+        "typeParameter",
+    ];
+    let mut tokens = vec![];
+    let (mut line, mut column) = (0u64, 0u64);
+    for item in data.chunks_exact(5) {
+        let delta = item[0].as_u64().unwrap();
+        line += delta;
+        column = if delta == 0 {
+            column + item[1].as_u64().unwrap()
+        } else {
+            item[1].as_u64().unwrap()
+        };
+        tokens.push((
+            line,
+            column,
+            item[2].as_u64().unwrap(),
+            legend[item[3].as_u64().unwrap() as usize],
+        ));
+    }
+    for (needle, expected) in [
+        ("Point{", "class"),
+        ("Color{", "enum"),
+        ("Red,", "enumMember"),
+        ("Number[", "type"),
+        ("P=Point", "class"),
+        ("callback=", "function"),
+        ("distance(point", "function"),
+        ("point:P", "parameter"),
+        ("point.x", "parameter"),
+        ("x:i32", "property"),
+        ("identity(item", "function"),
+        ("item:T", "parameter"),
+        ("item;", "parameter"),
+        ("T> identity", "typeParameter"),
+        ("T)->T", "typeParameter"),
+        ("callback(p)", "function"),
+        ("p=P", "variable"),
+        ("P{1}", "class"),
+    ] {
+        let position = position(text, needle);
+        let token = tokens
+            .iter()
+            .find(|t| {
+                t.0 == position["line"].as_u64().unwrap()
+                    && t.1 == position["character"].as_u64().unwrap()
+            })
+            .unwrap_or_else(|| panic!("Missing token for {needle}: {result}"));
+        assert_eq!(token.3, expected, "{needle}");
+    }
+}
+
+#[test]
+fn implicit_self_receivers_are_parameters_at_declarations_and_references() {
+    let root = tempfile::tempdir().unwrap();
+    let path = root.path().join("main.m2");
+    let text = "export unit Point{pub x:i32;};api Point::func sq(mut self)->i32{return self->x*self->x;}api Point::func get(self)->i32{return self->x;}api Point::func<T> templated(mut self,value:T)->i32{return self->x;}func main(){}";
+    fs::write(&path, text).unwrap();
+    let uri = uri(&path);
+    let mut client = Client::new();
+    let response = client.request(
+        "textDocument/semanticTokens/full",
+        json!({"textDocument":{"uri":uri}}),
+    );
+    let data = response["data"].as_array().unwrap();
+    assert!(!data.is_empty(), "{response}");
+    let mut tokens = vec![];
+    let (mut line, mut column) = (0u64, 0u64);
+    for item in data.chunks_exact(5) {
+        let delta = item[0].as_u64().unwrap();
+        line += delta;
+        column = if delta == 0 {
+            column + item[1].as_u64().unwrap()
+        } else {
+            item[1].as_u64().unwrap()
+        };
+        tokens.push((line, column, item[3].as_u64().unwrap()));
+    }
+    for (offset, _) in text.match_indices("self") {
+        let token = tokens
+            .iter()
+            .find(|t| t.0 == 0 && t.1 == offset as u64)
+            .unwrap_or_else(|| panic!("Missing self token at {offset}"));
+        assert_eq!(
+            token.2, 8,
+            "self at {offset} must be parameter, not variable"
+        );
+    }
+    let reference = text.find("return self").unwrap() + 7;
+    let definition = client.request(
+        "textDocument/definition",
+        json!({"textDocument":{"uri":uri},"position":{"line":0,"character":reference}}),
+    );
+    assert_eq!(
+        definition["range"]["start"]["character"],
+        text.find("self").unwrap() as u64
     );
 }

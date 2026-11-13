@@ -293,7 +293,7 @@ checksum = "da7c62ceae207dd37ea5b845da6a0696c799f85e97da1ab5b7910be3c1c80223"
 
 [[package]]
 name = "ffi_parser"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "mlc_syntax",
 ]
@@ -456,7 +456,7 @@ checksum = "cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98"
 
 [[package]]
 name = "mlc"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "clap",
  "colored",
@@ -475,7 +475,7 @@ dependencies = [
 
 [[package]]
 name = "mlc_builder"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "blake3",
  "ffi_parser",
@@ -492,7 +492,7 @@ dependencies = [
 
 [[package]]
 name = "mlc_codegen"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "mlc_builder",
  "mlc_core",
@@ -502,7 +502,7 @@ dependencies = [
 
 [[package]]
 name = "mlc_core"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "colored",
  "mlc_syntax",
@@ -510,21 +510,21 @@ dependencies = [
 
 [[package]]
 name = "mlc_examples"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "mlc_syntax",
 ]
 
 [[package]]
 name = "mlc_formatter"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "mlc_syntax",
 ]
 
 [[package]]
 name = "mlc_optimizer"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "mlc_core",
  "mlc_syntax",
@@ -532,7 +532,7 @@ dependencies = [
 
 [[package]]
 name = "mlc_syntax"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "chumsky",
  "logos",

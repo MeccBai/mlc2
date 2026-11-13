@@ -15,6 +15,7 @@ struct Expander<'a> {
     visible: HashMap<usize, HashSet<usize>>,
     generated: Vec<(usize, TempGlobalStmt)>,
     serial: usize,
+    calls: Vec<MacroCallInfo>,
 }
 fn path(name: &str) -> TempPath {
     TempPath {
@@ -28,10 +29,26 @@ fn expr(name: &str, span: Span) -> Spanned<TempExpr> {
     (TempExpr::Path(path(name)), span)
 }
 
+#[allow(dead_code)]
+#[derive(Clone)]
+pub(super) struct MacroCallInfo {
+    pub owner: usize,
+    pub span: Span,
+    pub signature: String,
+    pub parameters: Vec<(Span, String)>,
+    pub definition: (usize, Span),
+}
+#[allow(dead_code)]
 pub(super) fn expand(
     plan: &BuildPlan,
     modules: &mut HashMap<usize, TempModule>,
 ) -> Result<(), String> {
+    expand_indexed(plan, modules).map(|_| ())
+}
+pub(super) fn expand_indexed(
+    plan: &BuildPlan,
+    modules: &mut HashMap<usize, TempModule>,
+) -> Result<Vec<MacroCallInfo>, String> {
     let mut ex = Expander {
         plan,
         definitions: HashMap::new(),
@@ -39,6 +56,7 @@ pub(super) fn expand(
         visible: HashMap::new(),
         generated: vec![],
         serial: 0,
+        calls: vec![],
     };
     for target in &plan.targets {
         for (item, _) in &modules[&target.id.0] {
@@ -130,7 +148,7 @@ pub(super) fn expand(
     for (id, item) in ex.generated {
         modules.get_mut(&id).unwrap().push((item, (0..0).into()));
     }
-    Ok(())
+    Ok(ex.calls)
 }
 impl Expander<'_> {
     fn is_str_type(&self, ty: Option<&Spanned<TempType>>, owner: usize) -> bool {
@@ -320,6 +338,46 @@ impl Expander<'_> {
                     return Err("Args requires a named generic requirement".into());
                 };
                 let fixed = def.value.params.len() - 1;
+                let type_text = |ty: &Option<Spanned<TempType>>| {
+                    ty.as_ref()
+                        .map(|(_, span)| match &self.plan.targets[def.owner].input {
+                            TargetInput::Source { text, .. } => {
+                                mlc_core::ast::semantic::short_name(
+                                    text.get(span.start..span.end).unwrap_or("?"),
+                                )
+                            }
+                            _ => "?".into(),
+                        })
+                        .unwrap_or_else(|| "?".into())
+                };
+                let signature = format!(
+                    "macro func {}!({}){}",
+                    def.value.name,
+                    def.value
+                        .params
+                        .iter()
+                        .map(|p| format!("{}: {}", p.name, type_text(&p.ty)))
+                        .collect::<Vec<_>>()
+                        .join(", "),
+                    def.value
+                        .return_type
+                        .as_ref()
+                        .map(|ty| format!(" -> {}", type_text(&Some(ty.clone()))))
+                        .unwrap_or_default()
+                );
+                let parameters = args
+                    .iter()
+                    .enumerate()
+                    .map(|(i, arg)| (arg.1, def.value.params[i.min(fixed)].name.clone()))
+                    .collect();
+                self.calls.push(MacroCallInfo {
+                    owner,
+                    span,
+                    signature,
+                    parameters,
+                    definition: (def.owner, def.value.name_span),
+                });
+
                 if name == "std::fmt::println" && args.is_empty() {
                     args.push((
                         TempExpr::Literal {
