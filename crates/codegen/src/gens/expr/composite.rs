@@ -194,6 +194,34 @@ impl Expander<'_> {
             operand.signed = false;
             return operand;
         }
+        if *op == AstOp::BitPattern {
+            let original = operand.value.ty.clone();
+            let bits = match original {
+                LlvmType::Float => Some(32),
+                LlvmType::Double => Some(64),
+                LlvmType::Int(_) => None,
+                _ => fail("bit pattern requires a scalar"),
+            };
+            if let Some(bits) = bits {
+                let value = self.load(&mut operand.value);
+                let target = self.allocate();
+                let ty = LlvmType::Int(bits);
+                operand.value.code.push(Instruction::Cast {
+                    target,
+                    op: crate::gens::instruction::Cast::Bitcast,
+                    value: TypedValue {
+                        ty: original,
+                        value,
+                    },
+                    to: ty.clone(),
+                });
+                operand.value.ty = ty;
+                operand.value.reg = Some(target);
+                operand.value.in_reg = true;
+            }
+            operand.signed = false;
+            return operand;
+        }
         let rhs = self.load(&mut operand.value);
         let ty = operand.value.ty.clone();
         let float = matches!(ty, LlvmType::Float | LlvmType::Double);

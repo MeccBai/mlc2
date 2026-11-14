@@ -154,9 +154,9 @@ func unsigned(value: u64) -> String {
 func floating(value: f64) -> String {
     val representation = cast<$u64>(@value);
     val bits = $representation;
-    val negative =(bits >> cast<u64>(63)) != cast<u64>(0);
+    val negative =std::bit::shr(bits, cast<u64>(63)) != cast<u64>(0);
     val fraction = bits & cast<u64>(4503599627370495);
-    val exponent =(bits >> cast<u64>(52)) & cast<u64>(2047);
+    val exponent =std::bit::shr(bits, cast<u64>(52)) & cast<u64>(2047);
     if (exponent == cast<u64>(2047)) {
         if (fraction != cast<u64>(0)) {
             if (negative) {

@@ -49,8 +49,8 @@ impl Expression {
             return Self::Poison(span);
         }
 
-        if path.segments.len() == 1 {
-            if let Some(definition) = crate::ast::builtins::lookup(&path.segments[0]) {
+        if path.segments.len() == 1 || path.segments.starts_with(&["std".into(), "bit".into()]) {
+            if let Some(definition) = crate::ast::builtins::lookup(&path.segments.join("::")) {
                 if params.len() != definition.type_arguments {
                     config.submit_error(
                         CompileError::IllegalUse(

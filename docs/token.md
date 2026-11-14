@@ -19,8 +19,8 @@
 | `:`   | Colon       | `::`  | ColonColon | `+`    | Plus           |
 | `-`   | Minus       | `*`   | Multi      | `/`    | Div            |
 | `%`   | Mod         | `&`   | BitAnd     | `\|`   | BitOr          |
-| `^`   | BitXor      | `~`   | BitNot     | `<<`   | Shl            |
-| `>>`  | Shr         | `==`  | Equal      | `!=`   | NotEqual       |
+| `^`   | BitXor      | `~`   | BitNot     | `==`   | Equal          |
+| `!=`  | NotEqual    |       |            |        |                |
 | `>`   | RAngle      | `<`   | LAngle     | `>=`   | GreaterOrEqual |
 | `<=`  | LessOrEqual | `&&`  | LogicalAnd | `\|\|` | LogicalOr      |
 | `!`   | LogicalNot  |       |            |        |                |

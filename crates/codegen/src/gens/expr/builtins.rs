@@ -72,7 +72,14 @@ impl Expander<'_> {
         };
         let operand = self.load(&mut input.value);
         match kind {
-            Builtin::Todo => unreachable!(),
+            Builtin::Todo
+            | Builtin::Size
+            | Builtin::BitAnd
+            | Builtin::BitXor
+            | Builtin::BitOr
+            | Builtin::BitNot
+            | Builtin::BitShl
+            | Builtin::BitShr => unreachable!(),
             Builtin::ConstCStr | Builtin::StrLen => {
                 unreachable!("constant string handled before argument lowering")
             }

@@ -7,6 +7,13 @@ pub enum Builtin {
     Dealloc,
     ConstCStr,
     StrLen,
+    Size,
+    BitAnd,
+    BitXor,
+    BitOr,
+    BitNot,
+    BitShl,
+    BitShr,
 }
 
 pub struct BuiltinDefinition {
@@ -17,6 +24,48 @@ pub struct BuiltinDefinition {
 }
 
 pub const FUNCTIONS: &[BuiltinDefinition] = &[
+    BuiltinDefinition {
+        name: "std::bit::and",
+        kind: Builtin::BitAnd,
+        type_arguments: 0,
+        arguments: 2,
+    },
+    BuiltinDefinition {
+        name: "std::bit::xor",
+        kind: Builtin::BitXor,
+        type_arguments: 0,
+        arguments: 2,
+    },
+    BuiltinDefinition {
+        name: "std::bit::or",
+        kind: Builtin::BitOr,
+        type_arguments: 0,
+        arguments: 2,
+    },
+    BuiltinDefinition {
+        name: "std::bit::not",
+        kind: Builtin::BitNot,
+        type_arguments: 0,
+        arguments: 1,
+    },
+    BuiltinDefinition {
+        name: "std::bit::shl",
+        kind: Builtin::BitShl,
+        type_arguments: 0,
+        arguments: 2,
+    },
+    BuiltinDefinition {
+        name: "std::bit::shr",
+        kind: Builtin::BitShr,
+        type_arguments: 0,
+        arguments: 2,
+    },
+    BuiltinDefinition {
+        name: "size",
+        kind: Builtin::Size,
+        type_arguments: 1,
+        arguments: 0,
+    },
     BuiltinDefinition {
         name: "todo",
         kind: Builtin::Todo,
@@ -54,6 +103,21 @@ pub const FUNCTIONS: &[BuiltinDefinition] = &[
         arguments: 1,
     },
 ];
+
+impl Builtin {
+    pub fn bit_operator(self) -> Option<crate::ast::expression::operators::Operator> {
+        use crate::ast::expression::operators::Operator;
+        Some(match self {
+            Self::BitAnd => Operator::BitAnd,
+            Self::BitXor => Operator::BitXor,
+            Self::BitOr => Operator::BitOr,
+            Self::BitNot => Operator::BitNot,
+            Self::BitShl => Operator::ShiftLeft,
+            Self::BitShr => Operator::ShiftRight,
+            _ => return None,
+        })
+    }
+}
 
 /// Memory intrinsics are declarations in an imported standard-library module.
 pub fn module_builtin(module: &str, name: &str) -> Option<Builtin> {

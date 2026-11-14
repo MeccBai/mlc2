@@ -49,10 +49,6 @@ pub enum Token {
     LogicalAnd,
     #[token("||")]
     LogicalOr,
-    #[token("<<")]
-    Shl,
-    #[token(">>")]
-    Shr,
     #[token("=>")]
     FatArrow,
 
@@ -212,8 +208,6 @@ impl Token {
                 | Token::BitOr
                 | Token::BitXor
                 | Token::BitNot
-                | Token::Shl
-                | Token::Shr
                 | Token::Equal
                 | Token::NotEqual
                 | Token::RAngle

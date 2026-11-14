@@ -1,6 +1,129 @@
 use super::*;
 
 #[test]
+fn bit_builtins_fold_bits_without_numeric_conversion() {
+    use crate::ast::{expression::Expression, statement::Statement};
+    let ast = valid(
+        "func main(){const a=std::bit::and(-1,15);const b=std::bit::xor(7,3);const c=std::bit::or(4,3);const d=std::bit::not(cast<u8>(0));const e=std::bit::shl(1,3);const f=std::bit::shr(-1,1);const g=std::bit::or(cast<f32>(1.0),cast<u32>(0));const h=std::bit::and(true,false);const i=std::bit::not(true);}",
+    );
+    for (statement, expected) in main_body(&ast).iter().zip([
+        "15",
+        "4",
+        "7",
+        "255",
+        "8",
+        "2147483647",
+        "1065353216",
+        "false",
+        "false",
+    ]) {
+        let Statement::VariableDecl(variable) = statement else {
+            panic!("expected variable")
+        };
+        let Expression::ConstValueE(value, _) = &*variable.init_val else {
+            panic!("expected bit literal: {:?}", variable.init_val)
+        };
+        assert_eq!(value.value, expected);
+    }
+}
+
+#[test]
+fn bit_builtins_require_equal_width_base_operands_and_exact_arity() {
+    for source in [
+        "func main(){var n=std::bit::and(cast<u8>(1),cast<u16>(1));}",
+        "func main(){var n=std::bit::or(1.0,1);}",
+        "func main(){var n=std::bit::xor(\"a\",\"b\");}",
+        "func main(){var x=1;var n=std::bit::and(@x,@x);}",
+        "func main(){var n=std::bit::shl(1);}",
+        "func main(){var n=std::bit::not(1,2);}",
+        "func main(){var n=std::bit::and<i32>(1,2);}",
+    ] {
+        invalid_semantics(source);
+    }
+    valid(
+        "func main(){var a:i32=1;var b:u32=2;var n:u32=std::bit::or(a,b);var f:f32=cast<f32>(1.0);var bits:u32=std::bit::xor(f,b);}",
+    );
+}
+
+#[test]
+fn bit_builtins_keep_nested_generic_calls_unambiguous() {
+    valid(
+        "unit Box<T>{pub value:T;};func<T> identity(value:T)->T{return value;}func main(){var value=identity<Box<Box<i32>>>(Box<Box<i32>>{Box<i32>{1}});var n=std::bit::shl(1,2);}",
+    );
+    invalid_syntax("func main(){var n=1 << 2;}");
+    invalid_syntax("func main(){var n=4 >> 1;}");
+}
+
+#[test]
+fn size_builtin_replaces_type_queries_with_target_layout_literals() {
+    use crate::ast::{expression::Expression, statement::Statement};
+    let ast = valid(
+        "unit P{pub a:u8;pub b:i64;};func main(){const scalar=size<i32>();const array=size<[i32:3]>();const aggregate=size<P>();const pointer=size<$i8>();var runtime=size<u16>();}",
+    );
+    for (statement, expected) in
+        main_body(&ast)
+            .iter()
+            .zip([4, 12, 16, std::mem::size_of::<usize>(), 2])
+    {
+        let Statement::VariableDecl(variable) = statement else {
+            panic!("expected variable")
+        };
+        let Expression::ConstValueE(value, _) = &*variable.init_val else {
+            panic!("size must lower directly to a literal")
+        };
+        assert_eq!(value.value, expected.to_string());
+    }
+}
+
+#[test]
+fn size_builtin_supports_generic_instantiation_and_const_function_bodies() {
+    valid(
+        "const func<T> width()->u64{return size<T>();}func main(){var a=width<i32>();var b=width<$i8>();}",
+    );
+}
+
+#[test]
+fn size_builtin_uses_target_pointer_width_instead_of_host_width() {
+    use crate::ast::{expression::Expression, statement::Statement};
+    let source = "func main(){const pointer=size<$i8>();}";
+    let mut config = valid("func main(){}").config;
+    config.ptr_size = 4;
+    config.ptr_align = 4;
+    let lexed = crate::lexer::tokenize(source).unwrap();
+    let (module, errors) = crate::parser::parse(&lexed.tokens, source.len());
+    assert!(errors.is_empty());
+    let ast = AnalyzedAst::new(config, module.unwrap());
+    assert!(!ast.config.is_poisoned());
+    let Statement::VariableDecl(variable) = &main_body(&ast)[0] else {
+        panic!("expected variable")
+    };
+    let Expression::ConstValueE(value, _) = &*variable.init_val else {
+        panic!("expected size literal")
+    };
+    assert_eq!(value.value, "4");
+    assert_eq!(
+        ast.symbols
+            .types
+            .get(value.ty)
+            .unqualified()
+            .format(&ast.symbols.types),
+        "u32"
+    );
+}
+
+#[test]
+fn size_builtin_rejects_missing_types_extra_types_and_value_arguments() {
+    for source in [
+        "func main(){var n=size();}",
+        "func main(){var n=size<i32,i64>();}",
+        "func main(){var n=size<i32>(1);}",
+        "func main(){var n=size<Missing>();}",
+    ] {
+        invalid_semantics(source);
+    }
+}
+
+#[test]
 fn numeric_constants_use_destination_range_and_exact_precision() {
     for declaration in [
         "var x:u32 = 10;",

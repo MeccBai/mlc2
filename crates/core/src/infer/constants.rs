@@ -36,6 +36,109 @@ where
                 }
                 fold_composite(c, symbols).to_expression().with_span(span)
             }
+            Expression::UnaryExprE(
+                UnaryExpr::Operator {
+                    op: Operator::BitPattern,
+                    value,
+                },
+                ..,
+            ) => {
+                let value = fold_atom(*value, config, symbols);
+                if let CompAtom::ConstValueA(constant, ..) = &value {
+                    if let CompileType::Base(base) = symbols.get_type(constant.ty).unqualified() {
+                        if base.data_type() == DataType::Boolean {
+                            return Expression::ConstValueE(constant.clone(), span);
+                        }
+                        let bits = base.bits();
+                        let pattern = match base.data_type() {
+                            DataType::Integer => constant
+                                .value
+                                .parse::<i128>()
+                                .ok()
+                                .map(|n| (n as u128) & ((1u128 << bits) - 1)),
+                            DataType::Float if bits == 32 => constant
+                                .value
+                                .parse::<f32>()
+                                .ok()
+                                .map(|n| n.to_bits() as u128),
+                            DataType::Float => constant
+                                .value
+                                .parse::<f64>()
+                                .ok()
+                                .map(|n| n.to_bits() as u128),
+                            _ => None,
+                        };
+                        if let Some(pattern) = pattern {
+                            return Expression::ConstValueE(
+                                ConstValue {
+                                    ty: symbols.get_base(DataType::Integer, bits, false),
+                                    value: pattern.to_string(),
+                                },
+                                span,
+                            );
+                        }
+                    }
+                }
+                Expression::UnaryExprE(
+                    UnaryExpr::Operator {
+                        op: Operator::BitPattern,
+                        value: Box::new(value),
+                    },
+                    span,
+                )
+            }
+            Expression::UnaryExprE(
+                UnaryExpr::Operator {
+                    op: Operator::BitNot,
+                    value,
+                },
+                ..,
+            ) => {
+                let value = fold_atom(*value, config, symbols);
+                if let CompAtom::ConstValueA(constant, ..) = &value {
+                    if let CompileType::Base(base) = symbols.get_type(constant.ty).unqualified() {
+                        let result = match base.data_type() {
+                            DataType::Integer => constant
+                                .value
+                                .parse::<i128>()
+                                .ok()
+                                .map(|n| {
+                                    let mask = (1i128 << base.bits()) - 1;
+                                    let pattern = !n & mask;
+                                    if base.signed() && pattern & (1i128 << (base.bits() - 1)) != 0
+                                    {
+                                        pattern - (1i128 << base.bits())
+                                    } else {
+                                        pattern
+                                    }
+                                })
+                                .map(|n| n.to_string()),
+                            DataType::Boolean => match constant.value.as_str() {
+                                "true" => Some("false".into()),
+                                "false" => Some("true".into()),
+                                _ => None,
+                            },
+                            _ => None,
+                        };
+                        if let Some(value) = result {
+                            return Expression::ConstValueE(
+                                ConstValue {
+                                    ty: constant.ty,
+                                    value,
+                                },
+                                span,
+                            );
+                        }
+                    }
+                }
+                Expression::UnaryExprE(
+                    UnaryExpr::Operator {
+                        op: Operator::BitNot,
+                        value: Box::new(value),
+                    },
+                    span,
+                )
+            }
             Expression::FuncCallE(mut call, ..) => {
                 call.callee = call
                     .callee
@@ -80,6 +183,24 @@ where
                                             },
                                             span,
                                         );
+                                    }
+                                }
+                                if ty.data_type() == DataType::Float {
+                                    if let Ok(value) = input.value.parse::<f64>() {
+                                        let value = if ty.bits() == 32 {
+                                            (value as f32) as f64
+                                        } else {
+                                            value
+                                        };
+                                        if value.is_finite() {
+                                            return Expression::ConstValueE(
+                                                ConstValue {
+                                                    value: value.to_string(),
+                                                    ty: target,
+                                                },
+                                                span,
+                                            );
+                                        }
                                     }
                                 }
                             }
@@ -315,6 +436,13 @@ fn arithmetic(
                 Multiply => a.checked_mul(b),
                 Divide => a.checked_div(b),
                 Remainder => a.checked_rem(b),
+                BitAnd => Some(a & b),
+                BitOr => Some(a | b),
+                BitXor => Some(a ^ b),
+                ShiftLeft if b >= 0 && b < ty.bits() as i128 => {
+                    Some((a << b) & ((1i128 << ty.bits()) - 1))
+                }
+                ShiftRight if b >= 0 && b < ty.bits() as i128 => Some(a >> b),
                 _ => None,
             }?;
             let bits = ty.bits();
@@ -362,7 +490,26 @@ fn arithmetic(
                 result.to_string()
             }
         }
-        DataType::Boolean => return None,
+        DataType::Boolean => {
+            let a = match a.value.as_str() {
+                "true" => true,
+                "false" => false,
+                _ => return None,
+            };
+            let b = match b.value.as_str() {
+                "true" => true,
+                "false" => false,
+                _ => return None,
+            };
+            match op {
+                BitAnd => a & b,
+                BitOr => a | b,
+                BitXor => a ^ b,
+                ShiftLeft | ShiftRight if !b => a,
+                _ => return None,
+            }
+            .to_string()
+        }
     };
     Some(ConstValue { value, ty: a.ty })
 }

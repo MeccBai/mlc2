@@ -78,12 +78,6 @@ pub(super) fn plan(source: &str, lexed: &Lexed, module: &TempModule) -> Vec<Acti
                 {
                     1
                 }
-                Shr if stack
-                    .last()
-                    .is_some_and(|id| kind(&lexed.tokens[groups[*id].open].0) == LAngle) =>
-                {
-                    2
-                }
                 _ => 0,
             };
             for _ in 0..count {

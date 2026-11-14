@@ -33,6 +33,68 @@ impl Expression {
             );
             return Self::Poison(span);
         }
+        // Type-only intrinsic: resolve layout now and leave no callable symbol in the AST.
+        if kind == Builtin::Size {
+            if target.is_empty() || symbols.get_type(target).is_generic(symbols) {
+                return Self::invalid_builtin(config, definition.name, span);
+            }
+            let value = target.size(symbols).to_string();
+            let ty = symbols.get_base(DataType::Integer, config.ptr_size * 8, false);
+            return Self::ConstValueE(crate::ast::expression::ConstValue { ty, value }, span);
+        }
+        if let Some(op) = kind.bit_operator() {
+            use crate::ast::expression::{CompAtom, Composite, UnaryExpr};
+            let values: Vec<_> = args
+                .into_iter()
+                .map(|arg| Self::new(config, arg, symbols, context).const_fold(config, symbols))
+                .collect();
+            if config.is_poisoned() {
+                return Self::Poison(span);
+            }
+            let mut bits = None;
+            for value in &values {
+                let ty = value.type_inference(config, symbols);
+                if ty.is_empty() {
+                    return Self::invalid_builtin(config, definition.name, span);
+                }
+                let CompileType::Base(base) = symbols.get_type(ty).unqualified() else {
+                    return Self::invalid_builtin(config, definition.name, span);
+                };
+                if bits.is_some_and(|bits| bits != base.bits()) {
+                    return Self::invalid_builtin(config, definition.name, span);
+                }
+                bits = Some(base.bits());
+            }
+            let mut members: Vec<_> = values
+                .into_iter()
+                .map(|value| {
+                    CompAtom::UnaryExprA(
+                        UnaryExpr::Operator {
+                            op: crate::ast::expression::operators::Operator::BitPattern,
+                            value: Box::new(CompAtom::from_expr(value)),
+                        },
+                        span,
+                    )
+                })
+                .collect();
+            return if kind == Builtin::BitNot {
+                Self::UnaryExprE(
+                    UnaryExpr::Operator {
+                        op,
+                        value: Box::new(members.remove(0)),
+                    },
+                    span,
+                )
+            } else {
+                Self::CompositeE(
+                    Composite {
+                        members,
+                        operators: vec![op],
+                    },
+                    span,
+                )
+            };
+        }
         if kind == Builtin::Todo {
             let ty = symbols.get_base(DataType::Integer, 32, true);
             let source = std::fs::read_to_string(config.current_file()).unwrap_or_default();
@@ -91,7 +153,14 @@ impl Expression {
             return Self::invalid_builtin(config, definition.name, span);
         }
         let valid = match kind {
-            Builtin::Todo => unreachable!(),
+            Builtin::Todo
+            | Builtin::Size
+            | Builtin::BitAnd
+            | Builtin::BitXor
+            | Builtin::BitOr
+            | Builtin::BitNot
+            | Builtin::BitShl
+            | Builtin::BitShr => unreachable!(),
             Builtin::ConstCStr => {
                 matches!(symbols.get_type(source).unqualified(), CompileType::Str)
             }
@@ -132,7 +201,14 @@ impl Expression {
             }
         }
         let result = match kind {
-            Builtin::Todo => unreachable!(),
+            Builtin::Todo
+            | Builtin::Size
+            | Builtin::BitAnd
+            | Builtin::BitXor
+            | Builtin::BitOr
+            | Builtin::BitNot
+            | Builtin::BitShl
+            | Builtin::BitShr => unreachable!(),
             Builtin::StrLen => Some(symbols.get_base(DataType::Integer, 64, false)),
             Builtin::ConstCStr => Some(
                 symbols

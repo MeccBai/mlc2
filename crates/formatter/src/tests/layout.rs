@@ -30,14 +30,14 @@ fn function_parameters_and_call_arguments_expand_one_per_line() {
 
 #[test]
 fn generics_use_ast_roles_without_changing_comparisons() {
-    let source = "func<FirstLongParameter,SecondLongParameter> f(x:i32){if(x<3){x=x>>1;}} unit<FirstLongParameter,SecondLongParameter> P{a:FirstLongParameter;b:SecondLongParameter;};";
+    let source = "func<FirstLongParameter,SecondLongParameter> f(x:i32){if(x<3){x=std::bit::shr(x,1);}} unit<FirstLongParameter,SecondLongParameter> P{a:FirstLongParameter;b:SecondLongParameter;};";
     let output = stable(source);
     assert!(
         output.contains("func<\n    FirstLongParameter,\n    SecondLongParameter\n> f(x: i32) {"),
         "{output}"
     );
     assert!(output.contains("if (x < 3) {"), "{output}");
-    assert!(output.contains("x >> 1"), "{output}");
+    assert!(output.contains("std::bit::shr(x, 1)"), "{output}");
     assert!(
         output.contains("unit<\n    FirstLongParameter,\n    SecondLongParameter\n> P {"),
         "{output}"

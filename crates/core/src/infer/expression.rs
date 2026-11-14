@@ -79,6 +79,17 @@ impl TypeInfer<'_> {
             UnaryExpr::Operator { op, value } => {
                 let value_type = value.type_inference(config, symbols);
                 match op {
+                    Operator::BitPattern => {
+                        let CompileType::Base(base) = symbols.get_type(value_type).unqualified()
+                        else {
+                            unreachable!("bit pattern requires a base type")
+                        };
+                        if base.data_type() == DataType::Boolean {
+                            value_type.with_immutability(false, symbols)
+                        } else {
+                            symbols.get_base(DataType::Integer, base.bits(), false)
+                        }
+                    }
                     Operator::AddressOf => value_type.make_ref(symbols, false),
                     Operator::MutOf => value_type.make_ref(symbols, true),
                     Operator::Dereference => value_type.deref(symbols).unwrap(),

@@ -56,7 +56,7 @@ import、export、pub、global、api、in、true、false、if、else、while、f
 continue、match、return、null、anonymous；`_` 是 match 默认分支标记。
 null 已有词法与临时节点，但尚无完整的公共空指针初始化约定，不应视为通用可用的指针值。
 
-嵌套泛型闭合时注意连续 `>>` 会被识别为右移，必要时写作 `> >`；
+嵌套泛型允许连续 `>>`、`>>>` 闭合，`<<`、`>>` 不再是移位运算符；
 泛型类型紧接 `=>` 时写 `Type<T> =>`，避免 `>=` 合并。
 
 ## 3. 类型
@@ -153,7 +153,6 @@ cast<T>(value) 表示主动转换，不按目标数值范围拒绝输入；它�
 | 前缀            | -expr、!expr、~expr、@expr、@mut expr、$expr              |
 | 乘除余          | *、/、%                                                   |
 | 加减            | +、-                                                      |
-| 移位            | <<、>>                                                    |
 | 大小比较        | <、<=、>、>=                                              |
 | 相等比较        | ==、!=                                                    |
 | 按位与          | &                                                         |
@@ -175,12 +174,20 @@ func main() -> i32 {
     var arithmetic = a + b * 2;
     var grouped = (a + b) * 2;
     var remainder = arithmetic % 4;
-    var bits = ((a << 1) | b) ^ 1;
+    var bits = std::bit::xor(std::bit::or(std::bit::shl(a, 1), b), 1);
     var condition = a > b && b != 0;
     if (condition) { return grouped + remainder; }
-    return bits;
+    return cast<i32>(bits);
 }
 ```
+
+### 按位内建函数
+
+`std::bit::and(a,b)`、`xor(a,b)`、`or(a,b)`、`shl(a,b)`、`shr(a,b)` 接收两个参数；
+`std::bit::not(a)` 接收一个参数。所有参数必须为 BaseType，二元操作的位宽必须一致，
+不会为整数字面量自动调整位宽。整数、bool 和浮点数均可使用；浮点数按原始二进制位解释，
+不进行数值转换。结果是同位宽的无符号整数右值，bool 结果仍为 bool，不转换回浮点类型。
+右移补零。常量参数可直接折叠，运行时参数直接生成对应位运算，不产生函数调用。
 
 ## 6. 数组与字符串
 

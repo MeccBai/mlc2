@@ -3,7 +3,7 @@
 pub const EXECUTABLE_NAME: &str = "mlc";
 /// Artifact/cache compatibility identity. Increment when compiler semantics or
 /// serialized layouts change; the display/package version is not a cache key.
-pub const BUILD_NUMBER: u32 = 3;
+pub const BUILD_NUMBER: u32 = 4;
 /// Host executable suffix; independent of the compilation target.
 pub const EXE_SUFFIX: &str = std::env::consts::EXE_SUFFIX;
 pub const LIB_DIR: &str = "lib";
@@ -14,9 +14,6 @@ pub const UNIVERSAL_LIB_DIR: &str = "universal";
 pub const TOOLS_DIR: &str = "tools";
 
 pub const IR_BUFFER_NAME: &std::ffi::CStr = c"mlc";
-
-pub const X86_64_PC_WINDOWS_MSVC: &str = "x86_64-pc-windows-msvc";
-pub const X86_64_PC_WINDOWS_GNU: &str = "x86_64-pc-windows-gnu";
 
 mod abi;
 mod arch;
@@ -54,22 +51,6 @@ impl Target {
 
     pub fn with_abi(self, abi: Abi) -> Self {
         Self::new(self.arch, self.system, Some(abi)).expect("unsupported target ABI")
-    }
-
-    pub const fn ptr_size(&self) -> usize {
-        match self.arch {
-            Arch::X86_64 | Arch::Aarch64 => 8,
-            Arch::Arm
-            | Arch::Armv7
-            | Arch::Armv7R
-            | Arch::Armv8
-            | Arch::Thumbv6m
-            | Arch::Thumbv7a
-            | Arch::Thumbv7em
-            | Arch::Thumbv7m
-            | Arch::Thumbv8m
-            | Arch::X86 => 4,
-        }
     }
 
     pub const fn arch(self) -> Arch {

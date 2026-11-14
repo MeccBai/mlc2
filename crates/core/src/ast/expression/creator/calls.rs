@@ -143,7 +143,10 @@ impl Expression {
             return Self::new_indirect_call(config, callee, args, span, symbols, context);
         }
         if let TempExpr::Path(path) = &callee.0 {
-            if path.segments.len() == 1 || path.segments.join("::") == "str::len" {
+            if path.segments.len() == 1
+                || path.segments.join("::") == "str::len"
+                || path.segments.starts_with(&["std".into(), "bit".into()])
+            {
                 if let Some(definition) = crate::ast::builtins::lookup(&path.segments.join("::")) {
                     if definition.type_arguments != 0 {
                         config.submit_error(

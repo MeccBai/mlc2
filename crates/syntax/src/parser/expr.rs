@@ -276,12 +276,6 @@ where
         ));
         let sum = fold_binary(product, sum_op);
 
-        let shift_op = choice((
-            binary(Token::Shl, Operator::ShiftLeft),
-            binary(Token::Shr, Operator::ShiftRight),
-        ));
-        let shift = fold_binary(sum, shift_op);
-
         let compare_op = choice((
             binary(Token::Equal, Operator::Equal),
             binary(Token::NotEqual, Operator::NotEqual),
@@ -290,7 +284,7 @@ where
             binary(Token::RAngle, Operator::Greater),
             binary(Token::GreaterOrEqual, Operator::GreaterOrEqual),
         ));
-        let compare = fold_binary(shift, compare_op);
+        let compare = fold_binary(sum, compare_op);
         let bit_and = fold_binary(compare, binary(Token::BitAnd, Operator::BitAnd));
         let bit_xor = fold_binary(bit_and, binary(Token::BitXor, Operator::BitXor));
         let bit_or = fold_binary(bit_xor, binary(Token::BitOr, Operator::BitOr));
