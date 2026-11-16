@@ -37,7 +37,7 @@ impl Project {
             optimize: false,
             module_options: Default::default(),
             output: self.root.path().join("out"),
-            target: "x86_64-pc-windows-msvc".into(),
+            target: mlc_manifest::Target::default().triplet().into(),
             compiler_id: "test-compiler-1".into(),
             compiler_options: vec![],
             module_fingerprints: Default::default(),

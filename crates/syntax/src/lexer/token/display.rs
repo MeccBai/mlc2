@@ -18,8 +18,6 @@ impl std::fmt::Display for Token {
             Self::LessOrEqual => "<=",
             Self::LogicalAnd => "&&",
             Self::LogicalOr => "||",
-            Self::Shl => "<<",
-            Self::Shr => ">>",
             Self::FatArrow => "=>",
             Self::LParen => "(",
             Self::RParen => ")",

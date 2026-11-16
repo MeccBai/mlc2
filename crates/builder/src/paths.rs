@@ -5,7 +5,7 @@ use std::path::{Component, Path, PathBuf};
 mod tests;
 
 /// Default target follows the platform this compiler executable was built for.
-pub const HOST_TRIPLET: &str = env!("MLC_HOST_TRIPLET");
+pub const HOST_TRIPLET: &str = mlc_manifest::Target::host().triplet();
 
 #[derive(Debug, Clone)]
 pub struct PathResolver {

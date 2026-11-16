@@ -1,7 +1,6 @@
 #![allow(unused)]
 //! AST-to-IR generation, independent of the LLVM runtime.
 pub mod gens;
-pub mod manifest;
 pub use gens::IrGenerator;
 pub use gens::func::SymbolIr;
 

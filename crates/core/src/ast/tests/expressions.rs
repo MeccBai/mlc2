@@ -32,7 +32,7 @@ valid_case!(
 );
 valid_case!(
     bitwise_and_shift_operators,
-    "func main() { var a = (1 << 2) | (4 & 3) ^ 5; var b = ~a; var c = b >> 1; }"
+    "func main() { var a = std::bit::or(std::bit::shl(1, 2), std::bit::xor(std::bit::and(4, 3), 5)); var b = std::bit::not(a); var c = std::bit::shr(b, cast<u32>(1)); }"
 );
 valid_case!(
     comparison_and_logical_operators,

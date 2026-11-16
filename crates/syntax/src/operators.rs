@@ -27,6 +27,8 @@ pub enum Operator {
     BitOr,
     BitXor,
     BitNot,
+    /// Compiler-only reinterpretation of a scalar as its unsigned bit pattern.
+    BitPattern,
 
     LogicalAnd,
     LogicalOr,

@@ -29,7 +29,7 @@ fn header_generates_targeted_symbols_and_imports_raw_c_names() {
     assert_eq!(artifact.manifest.config.module_name, "native");
     assert_eq!(
         artifact.manifest.config.target,
-        mlc_builder::paths::HOST_TRIPLET
+        mlc_manifest::Target::default().triplet()
     );
     assert_eq!(artifact.manifest.config.object, artifacts::ObjectMode::None);
     assert_eq!(artifact.manifest.symbols.units[0].members.len(), 2);
@@ -42,7 +42,7 @@ fn header_generates_targeted_symbols_and_imports_raw_c_names() {
     let ir = fs::read_to_string(
         root.path()
             .join("ir/ll/default")
-            .join(mlc_builder::paths::HOST_TRIPLET)
+            .join(mlc_manifest::Target::default().triplet())
             .join("app.ll"),
     )
     .unwrap();
@@ -97,13 +97,21 @@ fn declarations_cannot_be_used_for_another_target() {
             "symbols",
             "native.h",
             "--triplet",
-            "aarch64-unknown-linux-gnu",
+            mlc_manifest::Target::default()
+                .with_system(mlc_manifest::System::Linux)
+                .with_arch(mlc_manifest::Arch::Aarch64)
+                .triplet(),
         ],
     ));
     fs::write(root.path().join("app.m2"), "import native;func main(){}").unwrap();
     let output = invoke(
         root.path(),
-        &["ll", "app.m2", "--triplet", "x86_64-pc-windows-msvc"],
+        &[
+            "ll",
+            "app.m2",
+            "--triplet",
+            mlc_manifest::Target::default().triplet(),
+        ],
     );
     assert!(!output.status.success());
     assert!(String::from_utf8_lossy(&output.stderr).contains("declaration target"));
@@ -129,10 +137,20 @@ fn universal_fixed_width_headers_import_across_supported_targets() {
     )
     .unwrap();
     for target in [
-        "x86_64-pc-windows-msvc",
-        "x86_64-pc-windows-gnu",
-        "x86_64-unknown-linux-gnu",
-        "aarch64-apple-darwin",
+        mlc_manifest::Target::default().triplet(),
+        mlc_manifest::Target::default()
+            .with_system(mlc_manifest::System::Windows)
+            .with_arch(mlc_manifest::Arch::X86_64)
+            .with_abi(mlc_manifest::Abi::Gnu)
+            .triplet(),
+        mlc_manifest::Target::default()
+            .with_system(mlc_manifest::System::Linux)
+            .with_arch(mlc_manifest::Arch::X86_64)
+            .triplet(),
+        mlc_manifest::Target::default()
+            .with_arch(mlc_manifest::Arch::Aarch64)
+            .with_system(mlc_manifest::System::Macos)
+            .triplet(),
     ] {
         success(&invoke(
             root.path(),

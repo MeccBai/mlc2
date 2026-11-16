@@ -3,14 +3,19 @@ use super::*;
 
 #[test]
 fn all_bundled_examples_build_and_run() {
-    let compiler = mlc_builder::llvm::IrCompiler::init("x86_64-pc-windows-msvc").unwrap();
+    let compiler =
+        mlc_builder::llvm::IrCompiler::init(mlc_manifest::Target::default().triplet()).unwrap();
     for example in mlc_examples::EXAMPLES {
         let root = tempfile::tempdir().unwrap();
         let entry = root.path().join("main.m2");
         std::fs::write(&entry, example.source).unwrap();
         let plan = super::test_support::plan(&entry);
-        let generated = generate(&plan, "x86_64-pc-windows-msvc", TargetKind::Bin)
-            .unwrap_or_else(|error| panic!("{}: {error}", example.name));
+        let generated = generate(
+            &plan,
+            mlc_manifest::Target::default().triplet(),
+            TargetKind::Bin,
+        )
+        .unwrap_or_else(|error| panic!("{}: {error}", example.name));
         let mut objects = Vec::new();
         for (id, ir) in generated.modules {
             let object = root.path().join(format!("module{id}.obj"));

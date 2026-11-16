@@ -49,7 +49,7 @@ fn cli_implementation_change_rebuilds_only_its_object_and_relinks() {
     let objects = root
         .path()
         .join("out/objects/default")
-        .join(mlc_builder::paths::HOST_TRIPLET);
+        .join(mlc_manifest::Target::default().triplet());
     let main = objects.join("main.obj");
     let leaf = objects.join("leaf.obj");
     let library = root.path().join("out/default/main.lib");
@@ -99,7 +99,7 @@ fn generic_instance_object_is_reused_until_its_ir_changes() {
     let object = root
         .path()
         .join("out/objects/default")
-        .join(mlc_builder::paths::HOST_TRIPLET)
+        .join(mlc_manifest::Target::default().triplet())
         .join("__mlc_instances.obj");
     let original = fs::metadata(&object).unwrap().modified().unwrap();
     run(root.path());

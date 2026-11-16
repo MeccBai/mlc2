@@ -134,7 +134,7 @@ fn discover(root: &Path, excluded: &[PathBuf], files: &mut Vec<PathBuf>) -> Resu
             discover(&path, excluded, files)?;
         } else if kind.is_file()
             && path.extension().is_some_and(|extension| {
-                extension == mlc_syntax::manifest::SOURCE_SUFFIX.trim_start_matches('.')
+                extension == mlc_manifest::SOURCE_SUFFIX.trim_start_matches('.')
             })
         {
             files.push(path);

@@ -1,7 +1,6 @@
 //! Compiler worker: this executable owns the LLVM-C runtime dependency.
 mod cli;
 mod driver;
-pub mod manifest;
 mod output;
 
 fn main() {

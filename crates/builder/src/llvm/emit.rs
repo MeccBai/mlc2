@@ -56,7 +56,7 @@ pub(super) fn object(
         let buffer = LLVMCreateMemoryBufferWithMemoryRangeCopy(
             ir.as_ptr().cast(),
             ir.len(),
-            crate::manifest::IR_BUFFER_NAME.as_ptr(),
+            mlc_manifest::IR_BUFFER_NAME.as_ptr(),
         );
         let mut error = ptr::null_mut();
         let failed = LLVMParseIRInContext2(module.context, buffer, &mut module.module, &mut error);

@@ -40,7 +40,8 @@ fn batch_render_appends_to_existing_buffer() {
     buffer.write_to(&mut text).unwrap();
     text.push_str("}\n");
     assert!(text.contains("%r0 = alloca i32, align 4"));
-    let compiler = crate::llvm::IrCompiler::init(crate::manifest::X86_64_PC_WINDOWS_MSVC).unwrap();
+    let compiler =
+        crate::llvm::IrCompiler::init(mlc_manifest::Target::default().triplet()).unwrap();
     let output = std::env::temp_dir().join(format!("mlc2-instruction-{}.obj", std::process::id()));
     compiler.emit(text, &output).unwrap();
     assert!(std::fs::metadata(&output).unwrap().len() > 0);

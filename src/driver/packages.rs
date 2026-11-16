@@ -116,7 +116,7 @@ pub(super) fn prepare(
             package.profile.directory(),
             source_hash(&package.root)?,
             dependencies,
-            mlc_builder::manifest::BUILD_NUMBER,
+            mlc_manifest::BUILD_NUMBER,
         ))?;
         let output = paths.package_root.join("cache/artifacts").join(key);
         let child = library_cli(

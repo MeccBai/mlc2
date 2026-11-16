@@ -11,9 +11,13 @@ fn type_name_calls_are_not_builtin_conversions() {
         )
         .unwrap();
         let plan = super::test_support::plan(&entry);
-        let error = generate(&plan, "x86_64-pc-windows-msvc", TargetKind::Bin)
-            .err()
-            .expect("legacy conversion must fail before linking");
+        let error = generate(
+            &plan,
+            mlc_manifest::Target::default().triplet(),
+            TargetKind::Bin,
+        )
+        .err()
+        .expect("legacy conversion must fail before linking");
         assert!(error.contains("Unknown function"), "{error}");
     }
 }
@@ -30,14 +34,19 @@ fn builtins_lower_without_external_language_symbols() {
     )
     .unwrap();
     let plan = super::test_support::plan(&entry);
-    let generated = generate(&plan, "x86_64-pc-windows-msvc", TargetKind::Bin).unwrap();
+    let generated = generate(
+        &plan,
+        mlc_manifest::Target::default().triplet(),
+        TargetKind::Bin,
+    )
+    .unwrap();
     let ir = &generated.modules[0].1;
     assert!(ir.contains("declare ptr @malloc(i64)"), "{ir}");
     assert!(ir.contains("declare void @free(ptr)"), "{ir}");
     assert!(ir.contains("44"), "{ir}");
     assert!(!ir.contains("declare i8 @\"main::"), "{ir}");
     let object = root.path().join("main.obj");
-    mlc_builder::llvm::IrCompiler::init("x86_64-pc-windows-msvc")
+    mlc_builder::llvm::IrCompiler::init(mlc_manifest::Target::default().triplet())
         .unwrap()
         .emit(ir.clone(), &object)
         .unwrap();
@@ -80,7 +89,12 @@ fn builtin_arguments_are_validated_before_generation() {
         .unwrap();
         let plan = super::test_support::plan(&entry);
         assert!(
-            generate(&plan, "x86_64-pc-windows-msvc", TargetKind::Bin).is_err(),
+            generate(
+                &plan,
+                mlc_manifest::Target::default().triplet(),
+                TargetKind::Bin
+            )
+            .is_err(),
             "{statement}"
         );
     }
@@ -101,8 +115,14 @@ fn builtin_casts_and_generic_allocations_pass_llvm_verification() {
     )
     .unwrap();
     let plan = super::test_support::plan(&entry);
-    let generated = generate(&plan, "x86_64-pc-windows-msvc", TargetKind::Bin).unwrap();
-    let compiler = mlc_builder::llvm::IrCompiler::init("x86_64-pc-windows-msvc").unwrap();
+    let generated = generate(
+        &plan,
+        mlc_manifest::Target::default().triplet(),
+        TargetKind::Bin,
+    )
+    .unwrap();
+    let compiler =
+        mlc_builder::llvm::IrCompiler::init(mlc_manifest::Target::default().triplet()).unwrap();
     for (id, ir) in generated.modules {
         assert!(ir.contains("trunc i32"), "{ir}");
         compiler
@@ -131,12 +151,17 @@ fn multilevel_reference_reads_and_writes_generate_valid_ir() {
     )
     .unwrap();
     let plan = super::test_support::plan(&entry);
-    let generated = generate(&plan, "x86_64-pc-windows-msvc", TargetKind::Bin).unwrap();
+    let generated = generate(
+        &plan,
+        mlc_manifest::Target::default().triplet(),
+        TargetKind::Bin,
+    )
+    .unwrap();
     let ir = &generated.modules[0].1;
     assert!(ir.matches("load ptr").count() >= 5, "{ir}");
     assert!(ir.contains("load i32"), "{ir}");
     assert!(ir.contains("store i32"), "{ir}");
-    mlc_builder::llvm::IrCompiler::init("x86_64-pc-windows-msvc")
+    mlc_builder::llvm::IrCompiler::init(mlc_manifest::Target::default().triplet())
         .unwrap()
         .emit(ir.clone(), &root.path().join("main.obj"))
         .unwrap();
@@ -164,7 +189,11 @@ fn constant_integer_narrowing_reports_out_of_range() {
         )
         .unwrap();
         let plan = super::test_support::plan(&entry);
-        let result = generate(&plan, "x86_64-pc-windows-msvc", TargetKind::Bin);
+        let result = generate(
+            &plan,
+            mlc_manifest::Target::default().triplet(),
+            TargetKind::Bin,
+        );
         if valid {
             assert!(result.is_ok(), "{statement}: {:?}", result.err());
         } else {
@@ -191,7 +220,11 @@ fn array_initializers_allow_missing_elements_and_reject_braces_and_excess() {
         )
         .unwrap();
         let plan = super::test_support::plan(&entry);
-        let result = generate(&plan, "x86_64-pc-windows-msvc", TargetKind::Bin);
+        let result = generate(
+            &plan,
+            mlc_manifest::Target::default().triplet(),
+            TargetKind::Bin,
+        );
         if valid {
             let generated = result.unwrap();
             assert!(generated.modules[0].1.contains("llvm.memset.p0.i64"));
@@ -217,7 +250,12 @@ fn local_generic_instance_is_defined_only_in_supplement() {
     )
     .unwrap();
     let plan = super::test_support::plan(&entry);
-    let generated = generate(&plan, "x86_64-pc-windows-msvc", TargetKind::Bin).unwrap();
+    let generated = generate(
+        &plan,
+        mlc_manifest::Target::default().triplet(),
+        TargetKind::Bin,
+    )
+    .unwrap();
     let symbol = "@\"main::swap<i32>\"";
     let definitions = |ir: &str| {
         ir.lines()

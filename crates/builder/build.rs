@@ -1,6 +1,4 @@
-#[allow(dead_code)]
-#[path = "src/manifest.rs"]
-mod manifest;
+use mlc_manifest as manifest;
 use std::{path::PathBuf, process::Command};
 
 fn output(program: &std::path::Path, args: &[&str]) -> Result<String, String> {
@@ -19,15 +17,14 @@ fn output(program: &std::path::Path, args: &[&str]) -> Result<String, String> {
         .map(|s| s.trim().to_string())
         .map_err(|e| e.to_string())
 }
+
 fn main() {
     for variable in ["SCOOP", "LLVM_CONFIG", "LLVM_SYS_231_PREFIX"] {
         println!("cargo:rerun-if-env-changed={variable}");
     }
+
     let target = std::env::var("TARGET").expect("Cargo provides TARGET");
-    println!(
-        "cargo:rustc-env=MLC_HOST_TRIPLET={}",
-        manifest::system_triplet(&target)
-    );
+
     if target.contains("windows") {
         let prefix = std::env::var_os("LLVM_SYS_231_PREFIX")
             .map(PathBuf::from)
@@ -44,6 +41,7 @@ fn main() {
         println!("cargo:rustc-link-lib=dylib={}", manifest::LLVM_C_LIBRARY);
         return;
     }
+
     let candidates = if let Some(config) = std::env::var_os("LLVM_CONFIG") {
         vec![PathBuf::from(config)]
     } else if let Some(prefix) = std::env::var_os("LLVM_SYS_231_PREFIX") {
@@ -55,6 +53,7 @@ fn main() {
         ]
     };
     let mut failures = Vec::new();
+
     let config = candidates
         .into_iter()
         .find(|candidate| match output(candidate, &["--version"]) {
@@ -77,11 +76,15 @@ fn main() {
                 failures.join("\n")
             )
         });
+
     let directory = output(&config, &["--libdir"]).unwrap_or_else(|error| panic!("{error}"));
+
     let libraries = output(&config, &["--libs", "--link-shared"])
         .unwrap_or_else(|error| panic!("A shared LLVM 23 library is required: {error}"));
     println!("cargo:rustc-link-search=native={directory}");
+
     let mut linked = false;
+
     for name in libraries
         .split_whitespace()
         .filter_map(|arg| arg.strip_prefix("-l"))

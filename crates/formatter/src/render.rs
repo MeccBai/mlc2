@@ -160,10 +160,6 @@ pub(super) fn render(
             writer.newline();
         }
         let tight_after_previous = index > 0 && actions[index - 1].tight_after;
-        // Separate original '>' tokens: merging them would produce a shift token.
-        if matches!(previous, Some(RAngle | Shr)) && matches!(current, RAngle | Shr) {
-            writer.space();
-        }
         if !action.tight_before
             && !tight_after_previous
             && space_before(previous.as_ref(), &current)

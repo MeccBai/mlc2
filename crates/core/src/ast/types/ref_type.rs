@@ -2,6 +2,7 @@ use crate::ast::arena::{GenericIndex, Ident, TypeArena, TypeIndex, get_ident};
 use crate::ast::config::Config;
 use crate::ast::symbol_name::SymbolName;
 use crate::ast::symbols::Resolution;
+use crate::ast::{function, types};
 use crate::ast::{
     symbols::{EnumBool, SymbolTable},
     types::CompileType::{self, Ref},
@@ -42,7 +43,7 @@ impl RefType {
         self
     }
 
-    pub fn format(&self, arena: &(impl crate::ast::types::TypeLookup + ?Sized)) -> String {
+    pub fn format(&self, arena: &(impl types::TypeLookup + ?Sized)) -> String {
         self.decorate(SymbolName::reference(
             &self.base.format(arena),
             self.level,
@@ -58,10 +59,7 @@ impl RefType {
         }
     }
 
-    pub fn deref(
-        mut self,
-        arena: &mut (impl crate::ast::types::TypeStorage + ?Sized),
-    ) -> Option<TypeIndex> {
+    pub fn deref(mut self, arena: &mut (impl types::TypeStorage + ?Sized)) -> Option<TypeIndex> {
         if self.level > 1 {
             self = self.deref_reference()?;
             let type_str = self.format(arena);
@@ -79,20 +77,20 @@ impl RefType {
         (self.level > 1).then(|| Self::new(self.base, self.level - 1, self.mut_base))
     }
 
-    pub fn size(&self, arena: &(impl crate::ast::types::TypeLookup + ?Sized)) -> usize {
+    pub fn size(&self, arena: &(impl types::TypeLookup + ?Sized)) -> usize {
         arena.target_layout().ptr_size
     }
-    pub fn align(&self, arena: &(impl crate::ast::types::TypeLookup + ?Sized)) -> usize {
+    pub fn align(&self, arena: &(impl types::TypeLookup + ?Sized)) -> usize {
         arena.target_layout().ptr_align
     }
 
-    pub fn dump(&self, arena: &(impl crate::ast::types::TypeLookup + ?Sized)) -> String {
+    pub fn dump(&self, arena: &(impl types::TypeLookup + ?Sized)) -> String {
         self.format(arena)
     }
 
     pub fn generic_instance_name(
         &self,
-        arena: &(impl crate::ast::types::TypeLookup + ?Sized),
+        arena: &(impl types::TypeLookup + ?Sized),
         params: &HashMap<GenericIndex, TypeIndex>,
     ) -> String {
         self.decorate(SymbolName::reference(
@@ -107,7 +105,7 @@ impl RefType {
         config: &mut Config,
         params: &HashMap<GenericIndex, TypeIndex>,
         symbols: &mut dyn Resolution,
-        actives: Option<&crate::ast::function::InstantiationActives>,
+        actives: Option<&function::InstantiationActives>,
         span: Span,
     ) -> Option<TypeIndex> {
         let child = self

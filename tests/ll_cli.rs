@@ -39,7 +39,7 @@ fn ll_exports_source_modules_and_generic_instances_without_linking() {
         fs::read_to_string(
             root.path()
                 .join("ir/ll/default")
-                .join(mlc_builder::paths::HOST_TRIPLET)
+                .join(mlc_manifest::Target::default().triplet())
                 .join("main.ll")
         )
         .unwrap()
@@ -48,7 +48,7 @@ fn ll_exports_source_modules_and_generic_instances_without_linking() {
     assert!(
         root.path()
             .join("ir/ll/default")
-            .join(mlc_builder::paths::HOST_TRIPLET)
+            .join(mlc_manifest::Target::default().triplet())
             .join("leaf.ll")
             .is_file()
     );
@@ -56,7 +56,7 @@ fn ll_exports_source_modules_and_generic_instances_without_linking() {
         fs::read_to_string(
             root.path()
                 .join("ir/ll/default")
-                .join(mlc_builder::paths::HOST_TRIPLET)
+                .join(mlc_manifest::Target::default().triplet())
                 .join("__mlc_instances.ll")
         )
         .unwrap()
@@ -92,7 +92,7 @@ fn ll_defaults_to_build_ll_and_emits_nothing_on_frontend_failure() {
     assert!(
         root.path()
             .join("build/ll/default")
-            .join(mlc_builder::paths::HOST_TRIPLET)
+            .join(mlc_manifest::Target::default().triplet())
             .join("main.ll")
             .is_file()
     );

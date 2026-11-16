@@ -173,11 +173,23 @@ mod tests {
     #[test]
     fn bundled_msvc_table_selects_coff_linker_and_avoids_sdk_discovery() {
         let runtime = tempfile::tempdir().unwrap();
-        let profile = profile("x86_64-pc-windows-msvc").unwrap();
+        let profile = profile(
+            mlc_manifest::Target::default()
+                .with_system(mlc_manifest::System::Windows)
+                .with_arch(mlc_manifest::Arch::X86_64)
+                .triplet(),
+        )
+        .unwrap();
         for name in profile.libraries {
             std::fs::write(runtime.path().join(name), "").unwrap();
         }
-        assert_eq!(profile.linker, "lld-link");
+        assert_eq!(
+            profile.linker,
+            mlc_manifest::Target::default()
+                .with_system(mlc_manifest::System::Windows)
+                .with_arch(mlc_manifest::Arch::X86_64)
+                .linker()
+        );
         assert_eq!(
             profile.library_roots(runtime.path()).unwrap(),
             vec![runtime.path()]
@@ -211,7 +223,24 @@ mod tests {
     }
     #[test]
     fn gnu_profile_is_explicit_and_unknown_targets_fail() {
-        assert_eq!(profile("x86_64-pc-windows-gnu").unwrap().linker, "ld.lld");
+        assert_eq!(
+            profile(
+                mlc_manifest::Target::default()
+                    .with_system(mlc_manifest::System::Windows)
+                    .with_arch(mlc_manifest::Arch::X86_64)
+                    .with_system(mlc_manifest::System::Windows)
+                    .with_arch(mlc_manifest::Arch::X86_64)
+                    .with_abi(mlc_manifest::Abi::Gnu)
+                    .triplet()
+            )
+            .unwrap()
+            .linker,
+            mlc_manifest::Target::default()
+                .with_system(mlc_manifest::System::Windows)
+                .with_arch(mlc_manifest::Arch::X86_64)
+                .with_abi(mlc_manifest::Abi::Gnu)
+                .linker()
+        );
         assert!(profile("unconfigured-target").is_err());
     }
 }

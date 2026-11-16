@@ -1,4 +1,5 @@
-use mlc_syntax::{ImportModule, manifest::SOURCE_SUFFIX};
+use mlc_manifest::SOURCE_SUFFIX;
+use mlc_syntax::ImportModule;
 use std::path::{Component, Path, PathBuf};
 #[derive(Debug, Clone)]
 pub struct ImportResolver {

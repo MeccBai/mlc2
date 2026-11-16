@@ -2,16 +2,15 @@
 #[allow(dead_code)]
 #[path = "../../src/driver/link/targets.rs"]
 mod targets;
-use mlc_builder::{
-    manifest::{DEFAULT_WINDOWS_LINKER, X86_64_PC_WINDOWS_MSVC},
-    project::TargetKind,
-};
+use mlc_builder::project::TargetKind;
+use mlc_manifest::Target;
 use std::{
     path::{Path, PathBuf},
     process::{Command, Output},
 };
 
 pub fn link(objects: &[PathBuf], executable: &Path) -> Output {
+    let linker_name = Target::default().linker();
     let compiler = std::env::current_exe().unwrap();
     let directory = compiler.parent().unwrap();
     let installation = if directory.file_name().is_some_and(|name| name == "deps") {
@@ -21,21 +20,21 @@ pub fn link(objects: &[PathBuf], executable: &Path) -> Output {
     };
     let bundled = installation
         .join("tools")
-        .join(format!("{DEFAULT_WINDOWS_LINKER}.exe"));
+        .join(format!("{linker_name}.exe"));
     let linker = std::env::var_os("MLC_TEST_LLD_LINK").unwrap_or_else(|| {
         let repository = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("tools")
-            .join(format!("{DEFAULT_WINDOWS_LINKER}.exe"));
+            .join(format!("{linker_name}.exe"));
         if repository.is_file() {
             repository.into_os_string()
         } else if bundled.is_file() {
             bundled.into_os_string()
         } else {
-            DEFAULT_WINDOWS_LINKER.into()
+            linker_name.into()
         }
     });
     let runtime = runtime(installation);
-    let args = targets::profile(X86_64_PC_WINDOWS_MSVC)
+    let args = targets::profile(Target::default().triplet())
         .unwrap()
         .arguments(&runtime, objects, executable, TargetKind::Bin)
         .unwrap();
@@ -51,11 +50,13 @@ fn runtime(installation: &Path) -> PathBuf {
     }
     let repository = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("runtimes")
-        .join(X86_64_PC_WINDOWS_MSVC);
+        .join(Target::default().triplet());
     if repository.join("ucrt.lib").is_file() {
         return repository;
     }
-    let bundled = installation.join("runtimes").join(X86_64_PC_WINDOWS_MSVC);
+    let bundled = installation
+        .join("runtimes")
+        .join(Target::default().triplet());
     if bundled.is_dir() {
         return bundled;
     }
@@ -63,7 +64,7 @@ fn runtime(installation: &Path) -> PathBuf {
     // Reuse that installation's CRT if mlc.exe is already available on PATH.
     if let Some(path) = std::env::var_os("PATH") {
         for root in std::env::split_paths(&path) {
-            let runtime = root.join("runtimes").join(X86_64_PC_WINDOWS_MSVC);
+            let runtime = root.join("runtimes").join(Target::default().triplet());
             if root.join("mlc.exe").is_file() && runtime.join("ucrt.lib").is_file() {
                 return runtime;
             }
@@ -80,13 +81,8 @@ pub fn compile_c(source: &Path, directory: &Path) -> PathBuf {
         .with_extension("obj");
     let compiler = std::env::var_os("MLC_TEST_CLANG_CL").unwrap_or_else(|| "clang-cl".into());
     let output = Command::new(compiler)
-        .args([
-            "--target=x86_64-pc-windows-msvc",
-            "/nologo",
-            "/c",
-            "/MD",
-            "/clang:-std=c11",
-        ])
+        .arg(format!("--target={}", Target::default().triplet()))
+        .args(["/nologo", "/c", "/MD", "/clang:-std=c11"])
         .arg(source)
         .arg(format!("/Fo{}", object.display()))
         .output()

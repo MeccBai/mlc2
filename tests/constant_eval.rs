@@ -14,7 +14,7 @@ fn compile(source: &str, triplet: &str) -> (tempfile::TempDir, Output) {
         .unwrap();
     (root, output)
 }
-const HOST: &str = "x86_64-pc-windows-msvc";
+const HOST: &str = mlc_manifest::Target::host().triplet();
 fn ir(root: &tempfile::TempDir, target: &str) -> String {
     fs::read_to_string(
         root.path()

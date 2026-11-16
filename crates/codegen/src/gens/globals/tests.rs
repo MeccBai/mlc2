@@ -1,4 +1,4 @@
-use mlc_syntax::manifest::SOURCE_SUFFIX;
+use mlc_manifest::SOURCE_SUFFIX;
 
 use super::*;
 use crate::ast::{AbstractSyntaxTree, config::Config};
@@ -25,7 +25,7 @@ fn parse(source: &str) -> (AbstractSyntaxTree, PackageSymbolTable) {
 fn generate(source: &str) -> (String, Vec<String>) {
     let (ast, package) = parse(source);
     assert!(!ast.config.is_poisoned(), "{:?}", ast.config.error_handle());
-    let mut generator = IrGenerator::new(crate::manifest::X86_64_PC_WINDOWS_MSVC.into());
+    let mut generator = IrGenerator::new(mlc_manifest::Target::default().triplet().into());
     generator.generate_globals(ast.config.file_id(), &package);
     generator.generate_globals(ast.config.file_id(), &package);
     for function in ast.body {
@@ -36,7 +36,8 @@ fn generate(source: &str) -> (String, Vec<String>) {
 }
 
 fn verify(ir: String, suffix: &str) {
-    let compiler = crate::llvm::IrCompiler::init(crate::manifest::X86_64_PC_WINDOWS_MSVC).unwrap();
+    let compiler =
+        crate::llvm::IrCompiler::init(mlc_manifest::Target::default().triplet()).unwrap();
     let path =
         std::env::temp_dir().join(format!("mlc2-globals-{suffix}-{}.obj", std::process::id()));
     compiler.emit(ir, &path).unwrap();

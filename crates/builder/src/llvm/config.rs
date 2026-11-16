@@ -25,8 +25,8 @@ impl BackendConfig {
                 BackendError::Config("executable must have a parent directory".into())
             })?;
         Ok(Self {
-            runtimes: root.join(crate::manifest::RUNTIMES_DIR),
-            tools: root.join(crate::manifest::TOOLS_DIR),
+            runtimes: root.join(mlc_manifest::RUNTIMES_DIR),
+            tools: root.join(mlc_manifest::TOOLS_DIR),
             executable,
         })
     }

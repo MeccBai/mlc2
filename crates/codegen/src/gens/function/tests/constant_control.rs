@@ -87,11 +87,11 @@ fn constant_match_selects_enum_and_default_without_runtime_comparisons() {
 }
 
 #[test]
-fn constants_the_evaluator_cannot_expand_keep_runtime_control_flow() {
+fn floating_constant_casts_eliminate_runtime_control_flow() {
     let ir = emit(
         "func main() { const number = cast<f32>(1.0); if (number == number) {} match (number) { cast<f32>(1.0) => {}, _ => {} } }",
-        "unexpanded-constants",
+        "floating-constant-control",
     );
-    assert!(ir.contains("if.then"), "{ir}");
-    assert!(ir.contains("match.arm"), "{ir}");
+    assert!(!ir.contains("if.then"), "{ir}");
+    assert!(!ir.contains("match.arm"), "{ir}");
 }
