@@ -26,6 +26,14 @@ pub fn version() -> &'static str {
     about = "MLC compiler and project builder"
 )]
 pub struct Cli {
+    #[arg(skip)]
+    pub package_requires: Option<Vec<mlc_builder::packages::Requirement>>,
+    #[arg(skip)]
+    pub package_identity: Option<(PathBuf, String)>,
+    #[arg(skip)]
+    pub package_ctfe_max_time: Option<std::time::Duration>,
+    #[arg(skip)]
+    pub package_std_type: Option<mlc_builder::project::StdType>,
     /// Emit one JSON result instead of human-readable output.
     #[arg(long, global = true)]
     pub json: bool,
@@ -79,9 +87,15 @@ pub struct Cli {
 
 #[derive(Debug, Clone, Subcommand)]
 pub enum Commands {
+    /// Compile and install a library target into the MLC package catalogue.
+    Install {
+        target: String,
+        #[arg(long, value_enum, default_value = "source")]
+        package_type: InstallType,
+    },
     /// Remove the project build output directory (default: build).
     Clean,
-    /// Compile installed library declarations and sources into objects (debug and release).
+    /// Prepare registered Source packages in their own cache directories.
     Setup,
     /// Create a new project directory with Project.toml and src/main.m2.
     Init { project: PathBuf },
@@ -183,4 +197,11 @@ mod tests {
             }
         }
     }
+}
+
+#[derive(Debug, Clone, Copy, ValueEnum)]
+pub enum InstallType {
+    Source,
+    Static,
+    Shared,
 }

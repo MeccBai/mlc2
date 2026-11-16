@@ -21,10 +21,7 @@ fn standalone_ignores_even_malformed_project_configuration() {
         paths.output,
         root.path().join("build/objects/default").join(HOST_TRIPLET)
     );
-    assert_eq!(
-        paths.imports.lib_dirs,
-        vec![root.path().join("install/lib").join(HOST_TRIPLET)]
-    );
+    assert_eq!(paths.imports.lib_dirs, Vec::<PathBuf>::new());
 }
 
 #[test]
@@ -91,10 +88,7 @@ fn default_layout_and_triplet_validation() {
         &GlobalConfig::default(),
     )
     .unwrap();
-    assert_eq!(
-        paths.imports.lib_dirs,
-        vec![root.path().join("lib").join(HOST_TRIPLET)]
-    );
+    assert_eq!(paths.imports.lib_dirs, Vec::<PathBuf>::new());
     assert_eq!(
         paths.lib_fallback,
         root.path()

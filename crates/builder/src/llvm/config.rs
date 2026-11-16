@@ -1,11 +1,11 @@
 use super::BackendError;
-use crate::manifest::LIB_DIR;
+
 use std::path::PathBuf;
 
 #[derive(Debug, Clone)]
 pub struct BackendConfig {
     pub executable: PathBuf,
-    pub lib: PathBuf,
+    pub runtimes: PathBuf,
     pub tools: PathBuf,
 }
 
@@ -16,7 +16,7 @@ impl BackendConfig {
         Self::from_executable(executable)
     }
 
-    /// Distribution layout: sources in lib/, executable tools in tools/.
+    /// Distribution layout: packages in packages/, native runtimes in runtimes/, tools in tools/.
     pub fn from_executable(executable: PathBuf) -> Result<Self, BackendError> {
         let root = executable
             .parent()
@@ -25,7 +25,7 @@ impl BackendConfig {
                 BackendError::Config("executable must have a parent directory".into())
             })?;
         Ok(Self {
-            lib: root.join(LIB_DIR),
+            runtimes: root.join(crate::manifest::RUNTIMES_DIR),
             tools: root.join(crate::manifest::TOOLS_DIR),
             executable,
         })

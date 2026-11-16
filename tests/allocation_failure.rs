@@ -16,8 +16,8 @@ fn allocation_failure_aborts_without_resource_cleanup() {
     .unwrap();
     let compile = Command::new(env!("CARGO_BIN_EXE_mlc"))
         .current_dir(root.path())
-        .args(["ll", "main.m2", "--lib-dir"])
-        .arg(support::library())
+        .args(["ll", "main.m2"])
+        .env("MLC", support::library())
         .output()
         .unwrap();
     assert!(

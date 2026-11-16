@@ -122,27 +122,13 @@ cargo test -p mlc_syntax -p mlc_core -p ffi_parser -p mlc_formatter
 cargo test --workspace
 ```
 
-从 Cargo 输出目录运行时，库路径不会自动指向仓库的 `lib`。在仓库根目录准备声明符号表后，可以通过 `--lib-dir lib` 使用标准库：
+开发时将 MLC 指向仓库根目录，使用包注册表准备标准库：
 
 ```powershell
-$mlc = (Resolve-Path ./target/release/mlc.exe).Path
-$library = (Resolve-Path ./lib).Path
-Get-ChildItem $library -Recurse -Filter *.h | ForEach-Object {
-    $relative = [IO.Path]::GetRelativePath($library, $_.FullName)
-    $parts = $relative -split '[/\\]'
-    $module = ($parts[1..($parts.Length - 1)] -join '::') -replace '\.h$', ''
-    $output = Join-Path objects ([IO.Path]::ChangeExtension($relative, '.sym'))
-    & $mlc symbols $_.FullName --module $module --triplet $parts[0] -o $output
-    if ($LASTEXITCODE -ne 0) { throw "Header conversion failed: $relative" }
-}
-& $mlc symbols lib/universal/std/mem.toml -o objects/universal/std/mem.sym
-if ($LASTEXITCODE -ne 0) { throw 'std::mem conversion failed' }
-& $mlc ll main.m2 --lib-dir lib
+$env:MLC = (Get-Location).Path
+./target/release/mlc.exe setup
+./target/release/mlc.exe run crates/examples/sources/hello_world.m2
 ```
-
-仅执行 `cargo build` 不会生成完整安装包，也不会下载 CRT 或链接工具。运行 / 链接程序还需配置 `tools` 与 `runtimes`；开发环境也可用 `--linker lld-link` 显式选择 PATH 中的链接器。工具放置、库路径和打包见 [分发说明](docs/distribution.md)。
-
-Windows 默认目标为 `x86_64-pc-windows-msvc`，GNU 目标可显式选择。其他目标的 LLVM 对象生成能力不等于已经具备完整的标准库、链接参数和运行环境；嵌入式工具链仍是后续工作。
 
 ## 编译流程与 workspace
 

@@ -46,7 +46,7 @@ Function-pointer APIs (qsort/bsearch/atexit/signal), va_list APIs, long double, 
 ## Validation and installation
 
 ```powershell
-mlc symbols lib/universal/c_std/string.h --module c_std::string --triplet universal -o objects/universal/c_std/string.sym
+mlc setup --triplet x86_64-pc-windows-msvc
 mlc symbols lib/x86_64-pc-windows-msvc/c_std/time.h --module c_std::time --triplet x86_64-pc-windows-msvc -o objects/x86_64-pc-windows-msvc/c_std/time.sym
 cargo test --test c_std --test ffi_symbols_cli
 ```

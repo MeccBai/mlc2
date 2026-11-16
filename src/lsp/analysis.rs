@@ -78,7 +78,20 @@ pub fn analyze(entry: &Path) -> Result<Snapshot, Report> {
         .find(|p| p.join("Project.toml").is_file() || p.join("project.toml").is_file())
         .unwrap_or(entry.parent().unwrap());
     let exe = std::env::current_exe().map_err(|e| e.to_string())?;
-    let paths = PathResolver::new(&exe, root, None, &GlobalConfig::load_default()?)?;
+    let project = mlc_builder::project::ProjectFile::load(root)?;
+    let target = project.as_ref().and_then(|p| {
+        p.project
+            .targets
+            .iter()
+            .find(|t| root.join(&t.entry).canonicalize().ok().as_ref() == Some(&entry))
+    });
+    let mut paths = PathResolver::new(
+        &exe,
+        root,
+        target.map(|t| t.name.as_str()),
+        &GlobalConfig::load_default()?,
+    )?;
+    paths.resolve_packages()?;
     let plan = BuildPlan::discover_with_paths(&entry, &paths)?;
     let layout = mlc_builder::llvm::IrCompiler::init(&paths.triplet)
         .map_err(|e| e.to_string())?

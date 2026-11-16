@@ -3,19 +3,20 @@ use mlc_builder::artifacts;
 use std::{collections::BTreeSet, fs};
 
 fn declarations(target: &str) -> Vec<artifacts::Manifest> {
-    let installation = support::library().parent().unwrap().to_owned();
+    let directory = support::library()
+        .join("packages/c_std/0.2.0/source/.compiled/declarations")
+        .join(target)
+        .join("c_std");
     let mut result = Vec::new();
-    for variant in ["universal", target] {
-        for entry in fs::read_dir(installation.join("objects").join(variant).join("c_std")).unwrap()
-        {
-            let path = entry.unwrap().path();
-            if path.extension().is_some_and(|ext| ext == "sym") {
-                result.push(artifacts::load(&path).unwrap().manifest);
-            }
+    for entry in fs::read_dir(directory).unwrap() {
+        let path = entry.unwrap().path();
+        if path.extension().is_some_and(|e| e == "sym") {
+            result.push(artifacts::load(&path).unwrap().manifest);
         }
     }
     result
 }
+
 #[test]
 fn common_c_declarations_are_universal_and_windows_layouts_are_targeted() {
     let manifests = declarations("x86_64-pc-windows-msvc");
@@ -170,8 +171,8 @@ func main()->i32 {
     .unwrap();
     let result = std::process::Command::new(env!("CARGO_BIN_EXE_mlc"))
         .current_dir(root.path())
-        .args(["run", "main.m2", "--triplet", target, "--lib-dir"])
-        .arg(support::library())
+        .args(["run", "main.m2", "--triplet", target])
+        .env("MLC", support::library())
         .arg("--linker")
         .arg(
             std::path::Path::new(env!("CARGO_MANIFEST_DIR"))

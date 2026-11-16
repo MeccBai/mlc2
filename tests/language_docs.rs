@@ -27,8 +27,8 @@ fn standalone_language_documentation_examples_compile() {
         fs::write(root.path().join("main.m2"), source).unwrap();
         let result = Command::new(env!("CARGO_BIN_EXE_mlc"))
             .current_dir(root.path())
-            .args(["ll", "main.m2", "--lib-dir"])
-            .arg(&lib)
+            .args(["ll", "main.m2"])
+            .env("MLC", &lib)
             .output()
             .unwrap();
         assert!(

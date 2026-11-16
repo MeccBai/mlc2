@@ -10,8 +10,7 @@ fn invoke(root: &Path, args: &[&str]) -> Output {
     let output = Command::new(env!("CARGO_BIN_EXE_mlc"))
         .current_dir(root)
         .args(args)
-        .arg("--lib-dir")
-        .arg(support::library())
+        .env("MLC", support::library())
         .output()
         .unwrap();
     assert!(

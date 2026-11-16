@@ -9,6 +9,7 @@ use std::{
 fn mlc(root: &Path, args: &[&str]) -> Output {
     Command::new(env!("CARGO_BIN_EXE_mlc"))
         .current_dir(root)
+        .env("MLC", support::library())
         .args(args)
         .output()
         .unwrap()
@@ -29,15 +30,7 @@ fn cli_hello_world_builds_runs_and_reuses_objects() {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let output = tempfile::tempdir().unwrap();
     let destination = output.path().to_str().unwrap();
-    let library = support::library();
-    let args = [
-        "build",
-        "tests/fixtures/hello_world.m2",
-        "--lib-dir",
-        library.to_str().unwrap(),
-        "-o",
-        destination,
-    ];
+    let args = ["build", "tests/fixtures/hello_world.m2", "-o", destination];
     success(&mlc(&root, &args));
     let executable = output.path().join("default/hello_world.exe");
     let run = Command::new(&executable).output().unwrap();

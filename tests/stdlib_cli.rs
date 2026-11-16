@@ -20,9 +20,8 @@ fn compile(source: &str, run: bool) -> (tempfile::TempDir, Output) {
             "main.m2",
             "--config",
             "config.toml",
-            "--lib-dir",
         ])
-        .arg(support::library())
+        .env("MLC", support::library())
         .output()
         .unwrap();
     (root, result)

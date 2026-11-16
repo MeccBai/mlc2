@@ -15,54 +15,71 @@ pub fn library() -> PathBuf {
     static INSTALLATION: OnceLock<tempfile::TempDir> = OnceLock::new();
     INSTALLATION
         .get_or_init(|| {
-            let root = tempfile::tempdir().unwrap();
-            let source = Path::new(env!("CARGO_MANIFEST_DIR")).join("lib");
-            copy_inputs(&source, &source, root.path());
-            root
+            let installation = tempfile::tempdir().unwrap();
+            let repository = Path::new(env!("CARGO_MANIFEST_DIR"));
+            fn copy(source: &Path, destination: &Path) {
+                fs::create_dir_all(destination).unwrap();
+                for entry in fs::read_dir(source).unwrap() {
+                    let entry = entry.unwrap();
+                    if entry.file_name().to_string_lossy().starts_with('.') {
+                        continue;
+                    }
+                    if entry.file_type().unwrap().is_dir() {
+                        copy(&entry.path(), &destination.join(entry.file_name()));
+                    } else {
+                        fs::copy(entry.path(), destination.join(entry.file_name())).unwrap();
+                    }
+                }
+            }
+            copy(
+                &repository.join("packages"),
+                &installation.path().join("packages"),
+            );
+            let registry = mlc_builder::packages::Registry::load(installation.path()).unwrap();
+            for triplet in [
+                "i686-pc-windows-msvc",
+                "x86_64-pc-windows-msvc",
+                "x86_64-pc-windows-gnu",
+                "x86_64-unknown-linux-gnu",
+                "aarch64-unknown-linux-gnu",
+                "x86_64-apple-darwin",
+                "aarch64-apple-darwin",
+            ] {
+                for mode in [
+                    mlc_builder::project::BuildMode::Debug,
+                    mlc_builder::project::BuildMode::Release,
+                ] {
+                    for name in ["c_std", "std"] {
+                        let requirement = mlc_builder::packages::Requirement {
+                            name: name.into(),
+                            version: env!("CARGO_PKG_VERSION").into(),
+                            kind: mlc_builder::packages::PackageType::Source,
+                            link_type: None,
+                        };
+                        for package in registry
+                            .resolve(installation.path(), &[requirement], mode, triplet)
+                            .unwrap()
+                        {
+                            mlc_builder::packages::prepare_declarations(&package, triplet).unwrap();
+                        }
+                    }
+                }
+            }
+            installation
         })
         .path()
-        .join("lib")
+        .to_owned()
 }
 
-fn copy_inputs(source: &Path, directory: &Path, installation: &Path) {
-    for entry in fs::read_dir(directory).unwrap() {
-        let path = entry.unwrap().path();
-        if path.is_dir() {
-            copy_inputs(source, &path, installation);
-            continue;
-        }
-        let relative = path.strip_prefix(source).unwrap();
-        match path.extension().and_then(|value| value.to_str()) {
-            Some("m2") => {
-                let destination = installation.join("lib").join(relative);
-                fs::create_dir_all(destination.parent().unwrap()).unwrap();
-                fs::copy(&path, destination).unwrap();
-            }
-            Some("toml") => {
-                let destination = installation
-                    .join("objects")
-                    .join(relative)
-                    .with_extension("sym");
-                mlc_builder::artifacts::convert_toml(&path, &destination).unwrap();
-            }
-            Some("h") => {
-                let mut parts = relative.components();
-                let target = parts.next().unwrap().as_os_str().to_str().unwrap();
-                let module = parts
-                    .as_path()
-                    .with_extension("")
-                    .iter()
-                    .map(|part| part.to_str().unwrap().to_owned())
-                    .collect::<Vec<_>>()
-                    .join("::");
-                let destination = installation
-                    .join("objects")
-                    .join(relative)
-                    .with_extension("sym");
-                mlc_builder::artifacts::convert_c_header(&path, &destination, &module, target)
-                    .unwrap();
-            }
-            _ => {}
-        }
-    }
+pub fn plan(entry: &Path) -> mlc_builder::plan::BuildPlan {
+    let mut paths = mlc_builder::paths::PathResolver::standalone(
+        &library().join("mlc.exe"),
+        entry.parent().unwrap(),
+        &mlc_builder::config::GlobalConfig::default(),
+    )
+    .unwrap();
+    paths.package_root = library();
+    paths.triplet = "x86_64-pc-windows-msvc".into();
+    paths.resolve_packages().unwrap();
+    mlc_builder::plan::BuildPlan::discover_with_paths(entry, &paths).unwrap()
 }

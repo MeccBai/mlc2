@@ -94,7 +94,7 @@ fn repository_sources_are_idempotent() {
         }
     }
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-    visit(&root.join("lib"));
+    visit(&root.join("packages"));
     visit(&root.join("crates/examples/sources"));
 }
 

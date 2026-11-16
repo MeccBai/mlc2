@@ -6,6 +6,7 @@ use std::path::PathBuf;
 #[serde(rename_all = "lowercase")]
 pub enum TargetKind {
     Bin,
+    #[serde(alias = "lib")]
     Static,
     Shared,
 }
@@ -91,6 +92,8 @@ pub struct Project {
 #[serde(rename_all = "PascalCase", deny_unknown_fields)]
 pub struct Target {
     #[serde(default)]
+    pub requires: Vec<crate::packages::Requirement>,
+    #[serde(default)]
     pub mode: Option<BuildMode>,
     #[serde(default, rename = "std_type")]
     pub std_type: Option<StdType>,
@@ -139,10 +142,11 @@ mod tests {
     use super::*;
 
     #[test]
-    fn project_accepts_exactly_three_target_kinds() {
+    fn project_accepts_target_kinds_and_lib_alias() {
         for (kind, expected) in [
             ("bin", TargetKind::Bin),
             ("static", TargetKind::Static),
+            ("lib", TargetKind::Static),
             ("shared", TargetKind::Shared),
         ] {
             let text = format!(
@@ -151,7 +155,7 @@ mod tests {
             );
             let project: ProjectFile = toml::from_str(&text).unwrap();
             assert_eq!(project.project.targets[0].kind, expected);
-            assert!(toml::from_str::<ProjectFile>(&text.replace(kind, "lib")).is_err());
+            assert!(toml::from_str::<ProjectFile>(&text.replace(kind, "unknown")).is_err());
         }
     }
 }

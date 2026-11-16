@@ -1,5 +1,4 @@
 use super::*;
-use mlc_builder::plan::ImportResolver;
 
 #[test]
 fn type_name_calls_are_not_builtin_conversions() {
@@ -11,13 +10,7 @@ fn type_name_calls_are_not_builtin_conversions() {
             format!("func main() -> i32 {{ var value = {name}(1); return 0; }}"),
         )
         .unwrap();
-        let plan = BuildPlan::discover(
-            &entry,
-            &ImportResolver {
-                lib_dirs: vec![super::test_support::library().join("universal")],
-            },
-        )
-        .unwrap();
+        let plan = super::test_support::plan(&entry);
         let error = generate(&plan, "x86_64-pc-windows-msvc", TargetKind::Bin)
             .err()
             .expect("legacy conversion must fail before linking");
@@ -36,13 +29,7 @@ fn builtins_lower_without_external_language_symbols() {
          var wide = cast<i32>(narrow); std::mem::dealloc<i32>(p); return value + wide; }",
     )
     .unwrap();
-    let plan = BuildPlan::discover(
-        &entry,
-        &ImportResolver {
-            lib_dirs: vec![super::test_support::library().join("universal")],
-        },
-    )
-    .unwrap();
+    let plan = super::test_support::plan(&entry);
     let generated = generate(&plan, "x86_64-pc-windows-msvc", TargetKind::Bin).unwrap();
     let ir = &generated.modules[0].1;
     assert!(ir.contains("declare ptr @malloc(i64)"), "{ir}");
@@ -91,13 +78,7 @@ fn builtin_arguments_are_validated_before_generation() {
             format!("import std::mem; func main() -> i32 {{ {statement} return 0; }}"),
         )
         .unwrap();
-        let plan = BuildPlan::discover(
-            &entry,
-            &ImportResolver {
-                lib_dirs: vec![super::test_support::library().join("universal")],
-            },
-        )
-        .unwrap();
+        let plan = super::test_support::plan(&entry);
         assert!(
             generate(&plan, "x86_64-pc-windows-msvc", TargetKind::Bin).is_err(),
             "{statement}"
@@ -119,13 +100,7 @@ fn builtin_casts_and_generic_allocations_pass_llvm_verification() {
          return integer; }",
     )
     .unwrap();
-    let plan = BuildPlan::discover(
-        &entry,
-        &ImportResolver {
-            lib_dirs: vec![super::test_support::library().join("universal")],
-        },
-    )
-    .unwrap();
+    let plan = super::test_support::plan(&entry);
     let generated = generate(&plan, "x86_64-pc-windows-msvc", TargetKind::Bin).unwrap();
     let compiler = mlc_builder::llvm::IrCompiler::init("x86_64-pc-windows-msvc").unwrap();
     for (id, ir) in generated.modules {
@@ -155,13 +130,7 @@ fn multilevel_reference_reads_and_writes_generate_valid_ir() {
          var r = @mut q; $$q = 20; $$$r = 30; var copy = $$q; return $$$r; }",
     )
     .unwrap();
-    let plan = BuildPlan::discover(
-        &entry,
-        &ImportResolver {
-            lib_dirs: vec![super::test_support::library().join("universal")],
-        },
-    )
-    .unwrap();
+    let plan = super::test_support::plan(&entry);
     let generated = generate(&plan, "x86_64-pc-windows-msvc", TargetKind::Bin).unwrap();
     let ir = &generated.modules[0].1;
     assert!(ir.matches("load ptr").count() >= 5, "{ir}");
@@ -194,13 +163,7 @@ fn constant_integer_narrowing_reports_out_of_range() {
             format!("func main() -> i32 {{ {statement} return 0; }}"),
         )
         .unwrap();
-        let plan = BuildPlan::discover(
-            &entry,
-            &ImportResolver {
-                lib_dirs: vec![super::test_support::library().join("universal")],
-            },
-        )
-        .unwrap();
+        let plan = super::test_support::plan(&entry);
         let result = generate(&plan, "x86_64-pc-windows-msvc", TargetKind::Bin);
         if valid {
             assert!(result.is_ok(), "{statement}: {:?}", result.err());
@@ -227,13 +190,7 @@ fn array_initializers_allow_missing_elements_and_reject_braces_and_excess() {
             format!("func main() -> i32 {{ var t:[i32:3] = {initializer}; return 0; }}"),
         )
         .unwrap();
-        let plan = BuildPlan::discover(
-            &entry,
-            &ImportResolver {
-                lib_dirs: vec![super::test_support::library().join("universal")],
-            },
-        )
-        .unwrap();
+        let plan = super::test_support::plan(&entry);
         let result = generate(&plan, "x86_64-pc-windows-msvc", TargetKind::Bin);
         if valid {
             let generated = result.unwrap();
@@ -259,13 +216,7 @@ fn local_generic_instance_is_defined_only_in_supplement() {
          swap<i32>(@mut a,@mut b); swap<i32>(@mut a,@mut b); return 0; }",
     )
     .unwrap();
-    let plan = BuildPlan::discover(
-        &entry,
-        &ImportResolver {
-            lib_dirs: vec![super::test_support::library().join("universal")],
-        },
-    )
-    .unwrap();
+    let plan = super::test_support::plan(&entry);
     let generated = generate(&plan, "x86_64-pc-windows-msvc", TargetKind::Bin).unwrap();
     let symbol = "@\"main::swap<i32>\"";
     let definitions = |ir: &str| {

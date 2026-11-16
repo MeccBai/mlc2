@@ -20,9 +20,8 @@ fn all_examples_link_and_run_with_msvc_ucrt() {
                 "x86_64-pc-windows-msvc",
                 "--config",
                 "config.toml",
-                "--lib-dir",
             ])
-            .arg(support::library())
+            .env("MLC", support::library())
             .output()
             .unwrap();
         assert!(

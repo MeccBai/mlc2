@@ -299,6 +299,24 @@ pub fn generate_with_module_configs(
             &file_initializers,
             kind == TargetKind::Shared && id == plan.entry,
         );
+        if kind == TargetKind::Shared && triplet.contains("windows") {
+            ir = ir
+                .lines()
+                .map(|line| {
+                    if line.starts_with("define ")
+                        && !line.starts_with("define internal ")
+                        && !line.starts_with("define private ")
+                        && !line.starts_with("define dllexport ")
+                    {
+                        line.replacen("define ", "define dllexport ", 1)
+                    } else {
+                        line.to_owned()
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join("\n")
+                + "\n";
+        }
         global_inits.push((id.0, init_name.clone()));
         if id == plan.entry {
             initializers.push(init_name.clone());
@@ -331,6 +349,24 @@ pub fn generate_with_module_configs(
         supplement.generate(&package, function);
     }
     let mut ir = supplement.finish().map_err(|e| format!("{e:?}"))?;
+    if kind == TargetKind::Shared && triplet.contains("windows") {
+        ir = ir
+            .lines()
+            .map(|line| {
+                if line.starts_with("define ")
+                    && !line.starts_with("define internal ")
+                    && !line.starts_with("define private ")
+                    && !line.starts_with("define dllexport ")
+                {
+                    line.replacen("define ", "define dllexport ", 1)
+                } else {
+                    line.to_owned()
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+            + "\n";
+    }
     let mut extra = has_instances;
     if kind == TargetKind::Bin {
         let (name, result) = entry.ok_or("Executable entry file must define main")?;

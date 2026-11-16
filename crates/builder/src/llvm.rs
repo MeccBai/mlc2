@@ -139,13 +139,18 @@ impl IrCompiler {
             .any(|s| s == b"windows-msvc");
         let program = manifest::lld_path(&self.config.executable, windows)
             .ok_or_else(|| BackendError::Config("executable has no parent directory".into()))?;
+        let runtime = self.config.runtimes.join(
+            self.triplet
+                .to_str()
+                .map_err(|e| BackendError::Config(e.to_string()))?,
+        );
         let mut args = vec![if windows {
-            OsString::from(format!("/libpath:{}", self.config.lib.display()))
+            OsString::from(format!("/libpath:{}", runtime.display()))
         } else {
             OsString::from("-L")
         }];
         if !windows {
-            args.push(self.config.lib.as_os_str().to_owned());
+            args.push(runtime.as_os_str().to_owned());
         }
         args.extend_from_slice(arguments);
         link::link(&program, &args)

@@ -138,45 +138,33 @@ fn imported_constant_functions_have_native_bodies_available() {
 #[test]
 fn cached_nongeneric_constant_functions_keep_their_native_source_bodies() {
     let root = tempfile::tempdir().unwrap();
-    let library = root.path().join("lib").join(HOST);
-    fs::create_dir_all(&library).unwrap();
-    let source = library.join("math.m2");
+    let source = root.path().join("math.m2");
     fs::write(&source, "export const func twice(x:i32)->i32{return x*2;}").unwrap();
+    fs::write(root.path().join("config.toml"), "").unwrap();
+    fs::write(root.path().join("Project.toml"),"[Project]\nName='math'\nVersion='1.0.0'\nOutputDir='build'\n[[Project.Targets]]\nName='math'\nEntry='math.m2'\nType='lib'\n").unwrap();
     let output = Command::new(env!("CARGO_BIN_EXE_mlc"))
         .current_dir(root.path())
+        .env("MLC", root.path())
         .args([
-            "setup",
-            "--lib-dir",
-            "lib",
-            "--triplet",
-            HOST,
-            "--debug",
-            "-o",
             "install",
+            "math",
+            "--package-type",
+            "static",
+            "--archiver",
+            "llvm-ar",
+            "--config",
+            "config.toml",
         ])
         .output()
         .unwrap();
     success(&output);
-    let stem = root
-        .path()
-        .join("install/objects/debug")
-        .join(HOST)
-        .join("math");
-    assert!(stem.with_extension("mg").is_file());
-    let manifest_path = stem.with_extension("sym");
-    let mut artifact = mlc_builder::artifacts::load(&manifest_path).unwrap();
-    artifact.manifest.config.object = mlc_builder::artifacts::ObjectMode::Only;
-    fs::write(
-        &manifest_path,
-        mlc_builder::artifacts::to_binary(&artifact.manifest).unwrap(),
-    )
-    .unwrap();
+    assert!(
+        root.path()
+            .join("packages/math/1.0.0/debug/static/modules/math.mg")
+            .is_file()
+    );
     fs::remove_file(source).unwrap();
-    fs::write(
-        root.path().join("config.toml"),
-        "LibDirs=['lib']\nLibCacheDir='install/objects'\n",
-    )
-    .unwrap();
+    fs::write(root.path().join("Project.toml"),"[Project]\nName='consumer'\nVersion='1.0.0'\nOutputDir='build'\n[[Project.Targets]]\nName='app'\nEntry='main.m2'\nType='bin'\n[[Project.Targets.Requires]]\nName='math'\nVersion='1.0.0'\nType='Static'\n").unwrap();
     fs::write(
         root.path().join("main.m2"),
         "import math;func main()->i32{const x=math::twice(21);return x;}",
@@ -184,18 +172,11 @@ fn cached_nongeneric_constant_functions_keep_their_native_source_bodies() {
     .unwrap();
     let output = Command::new(env!("CARGO_BIN_EXE_mlc"))
         .current_dir(root.path())
-        .args(["ll", "main.m2", "--debug", "--config", "config.toml"])
+        .env("MLC", root.path())
+        .args(["run", "app", "--config", "config.toml"])
         .output()
         .unwrap();
-    success(&output);
-    let ir = fs::read_to_string(
-        root.path()
-            .join("build/ll/debug")
-            .join(HOST)
-            .join("main.ll"),
-    )
-    .unwrap();
-    assert!(ir.contains("store i32 42"));
+    assert_eq!(output.status.code(), Some(42), "{output:?}");
 }
 
 #[test]
@@ -251,8 +232,8 @@ fn target_pointer_config_controls_malloc_size_t_width() {
     fs::write(root.path().join("main.m2"),"import std::mem;func main()->i32{var p:res=std::mem::alloc<i32>(1);std::mem::dealloc<i32>(p);return 0;}").unwrap();
     let output = Command::new(env!("CARGO_BIN_EXE_mlc"))
         .current_dir(root.path())
-        .args(["ll", "main.m2", "--triplet", target, "--lib-dir"])
-        .arg(support::library())
+        .args(["ll", "main.m2", "--triplet", target])
+        .env("MLC", support::library())
         .output()
         .unwrap();
     success(&output);

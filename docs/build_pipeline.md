@@ -5,36 +5,11 @@
 
 ## 安装布局与查找顺序
 
-```text
-installation/
-  mlc.exe
-  LLVM-C.dll                # 编译器启动依赖
-  tools/                    # lld-link.exe / ld.lld.exe / llvm-ar.exe
-  runtimes/
-    <triplet>/              # MSVC .lib 或 GNU CRT .o / .a
-  lib/
-    <triplet>/
-      std/
-        io.m2
-  objects/
-    universal/              # Object=None 的声明
-    debug/<triplet>/        # debug 标准库 .sym、.obj/.o、.mg
-    release/<triplet>/      # release 标准库 .sym、.obj/.o、.mg
-```
-
-`BackendConfig.tools` 指向安装根目录下的 `tools/` 子目录。
-`ImportResolver::from_executable()` 默认使用安装根目录的 `lib/<host-triplet>/`；
-调用方可以通过 `lib_dirs` 增加有序库路径。
-
-`import std::io;` 查找顺序为：
-
-1. 当前导入文件所在目录的 `std/io.m2`。
-2. 各目标专用库目录的 `std/io.m2`，然后对应 universal 源码。
-3. 无源码时，查本地 `std/io.sym`，然后 objects/<mode>/<triplet>、兼容的 objects/<triplet> 和 objects/universal。
-
-源码优先于任何位置的 `.sym`。完整布局和打包方法见 [安装分发](distribution.md)。
-所有存在的文件路径规范化后去重；重复 import 只产生一条依赖边。
-递归扫描会在启动线程池前发现并返回依赖环。
+标准包从 MLC 指定的 packages/packages.toml 解析，源码在 packages/<name>/<version>/source/。
+std/c_std 默认可导入，子模块相对于各包入口目录定位。平台声明位于 source/targets/<triplet>/。
+旧安装目录 lib/、objects/ 不参与标准库查找。具体目录和 setup 行为见 [安装分发](distribution.md)。
+普通库依赖通过 Project.Targets.Requires 指定；解析检查版本、profile、表示方式、triplet、依赖环与冲突。
+递归扫描在启动线程池前返回导入环；重复 import 只保留一条依赖边。
 
 ## 三层接口
 
@@ -61,11 +36,9 @@ taskflowrs 的任务没有业务返回值，因此这里使用每节点一个
 
 ## 产物与缓存
 
-通过 `PathResolver` 构建时，项目模块 `std::io` 位于
-`build/objects/<mode>/<triplet>/std/io.*`；库默认在安装目录 `objects/<mode>/<triplet>/std/io.*` 缓存。
-显式库缓存目录或原目录写入失败时，回退到
-`build/objects/<mode>/<triplet>/lib/std/io.*`，并收集警告。
-低层 `BuildPlan::discover()` 仍保留调用方直接指定输出目录的接口。
+项目对象位于 build/objects/<profile>/<triplet>/；标准包缓存位于自身 source/.compiled/objects/<profile>/<triplet>/，
+头文件和 TOML 声明转换到 source/.compiled/declarations/<triplet>/。写入失败时可以使用项目内缓存，
+不会搜索旧安装对象目录。普通 Source 包的独立原生库缓存位于 MLC/cache/artifacts/。
 
 - `.sym`：MessagePack 二进制，保存版本、模块名、源文件路径、目标、构建键、依赖指纹和声明。
 - `.obj` / `.o`：LLVM 输出，根据 target 选择后缀。
@@ -129,16 +102,13 @@ object 和模板先写入，manifest 最后原子替换。不再被引用的旧�
 配置的库根目录和缓存根目录均自动追加 `<triplet>`。
 同一级 `LibDirs` 数组按顺序查找，显式配置替换下一级目录列表。
 当前导入文件所在目录仍优先于所有库目录。
-源码库也搜索 `lib/universal`。全部源码位置均未找到后才搜索 objects 目录，
-其中 `objects/universal/<module>.sym` 仅接受 `Object = "None"`。
-仓库通过 `lib/universal/c_std/io.h` 生成 `objects/universal/c_std/io.sym` 中的 C ABI 声明，
-通过 `import c_std::io;` 使用；实际实现和链接库由目标 C 运行时提供。
+标准库通过注册表定位，各包内的 C 声明由 setup 预处理；实际实现和链接库由目标 C 运行时提供。
 项目配置的相对路径基于项目根目录，全局配置的相对路径基于配置文件目录。
 
 全局配置示例：
 
 ```toml
-LibDirs = ["D:/mlc/lib", "D:/extra/lib"]
+LibDirs = ["D:/extra/sources"]
 LibCacheDir = "D:/mlc/cache"
 ```
 
@@ -198,14 +168,14 @@ Git 保存标准库的 `.m2`、声明 `.toml` 和受限 `.h` 输入；`.sym`、`
 测试 helper 会自动生成隔离声明。手动运行示例前，可使用打包脚本建立完整安装：
 
 ```powershell
-cargo build --bin mlc
-pwsh -NoProfile -File scripts/copy_to.ps1 -Profile debug -Destination D:\mlc
+cargo build --bins
+$env:MLC = (Get-Location).Path
+./target/debug/mlc.exe setup
 ```
 
-脚本转换各目标和 universal 下的所有声明输入，而非仅生成 io.sym；标准库也会引用
-lib、runtime 等模块。工具及运行库配置见 [安装分发](distribution.md)。
+setup 转换注册包中的所有声明输入，并预编译所有源码模块。工具及运行库配置见 [安装分发](distribution.md)。
 标准库 `.m2` 的对象文件与模板缓存由正常构建按需生成。
 
 标准库只提供 debug/release 两档，Project.toml 的 `[Project]` 或 target 可设置 `std_type = "debug"` / `"release"`；target 优先。省略时 default/debug 使用 debug，release/rel-with-info 使用 release。该设置没有 CLI 选项，单文件入口继续忽略 Project.toml。
 
-`mlc setup` prepares every installed library input before application builds, including unreferenced modules. It runs declaration conversion first, then invokes the normal analysis/codegen/cache scheduler in object-only mode. This uses the same library cache keys as consumer builds and retains library helpers independently of the current entry. Configured library cache roots are also searched for generated declarations, including when setup redirects output with `-o`.
+`mlc setup` prepares registered Source packages, converts their declaration inputs, and writes artifacts inside each package.

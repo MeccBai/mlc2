@@ -1,0 +1,11 @@
+[[Packages]]
+Name = "std"
+Version = "0.2.0"
+[Packages.Source]
+Entry = "std.m2"
+
+[[Packages]]
+Name = "c_std"
+Version = "0.2.0"
+[Packages.Source]
+DeclarationOnly = true

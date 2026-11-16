@@ -1,6 +1,5 @@
 //! Keep bundled examples valid through semantics and LLVM object generation.
 use super::*;
-use mlc_builder::plan::ImportResolver;
 
 #[test]
 fn all_bundled_examples_build_and_run() {
@@ -9,13 +8,7 @@ fn all_bundled_examples_build_and_run() {
         let root = tempfile::tempdir().unwrap();
         let entry = root.path().join("main.m2");
         std::fs::write(&entry, example.source).unwrap();
-        let resolver = ImportResolver {
-            lib_dirs: vec![
-                super::test_support::library().join("x86_64-pc-windows-msvc"),
-                super::test_support::library().join("universal"),
-            ],
-        };
-        let plan = BuildPlan::discover(&entry, &resolver).unwrap();
+        let plan = super::test_support::plan(&entry);
         let generated = generate(&plan, "x86_64-pc-windows-msvc", TargetKind::Bin)
             .unwrap_or_else(|error| panic!("{}: {error}", example.name));
         let mut objects = Vec::new();

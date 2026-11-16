@@ -141,6 +141,7 @@ pub fn finish(command: &str, result: Result<i32, Report>) -> i32 {
 pub fn command(cli: &crate::cli::Cli) -> &'static str {
     use crate::cli::Commands::*;
     match cli.command {
+        Install { .. } => "install",
         Clean => "clean",
         Setup => "setup",
         Init { .. } => "init",

@@ -13,3 +13,11 @@
 *.mg
 /tools
 /runtimes
+
+# Per-package generated declarations, objects and CTFE artifacts.
+**/.compiled/
+/cache/
+
+/build/
+
+!/scripts/deploy.ps1

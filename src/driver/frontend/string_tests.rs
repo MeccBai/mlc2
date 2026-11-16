@@ -1,14 +1,10 @@
 use super::*;
-use mlc_builder::plan::ImportResolver;
 
 fn generate_source(source: &str) -> (tempfile::TempDir, Result<Generated, String>) {
     let root = tempfile::tempdir().unwrap();
     let entry = root.path().join("main.m2");
     std::fs::write(&entry, source).unwrap();
-    let resolver = ImportResolver {
-        lib_dirs: vec![super::test_support::library().join("universal")],
-    };
-    let plan = BuildPlan::discover(&entry, &resolver).unwrap();
+    let plan = super::test_support::plan(&entry);
     let generated = generate(&plan, "x86_64-pc-windows-msvc", TargetKind::Bin);
     (root, generated)
 }

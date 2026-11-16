@@ -43,8 +43,8 @@ fn init_creates_a_valid_project_and_never_overwrites_existing_files() {
     success(
         Command::new(env!("CARGO_BIN_EXE_mlc"))
             .current_dir(&project)
-            .args(["ll", "src/main.m2", "--config", "config.toml", "--lib-dir"])
-            .arg(support::library())
+            .args(["ll", "src/main.m2", "--config", "config.toml"])
+            .env("MLC", support::library())
             .output()
             .unwrap(),
     );
@@ -109,7 +109,7 @@ fn missing_inputs_and_imports_report_expected_absolute_paths() {
         error.contains(
             &root
                 .path()
-                .join("objects/universal/absent/leaf.sym")
+                .join("lib/x86_64-pc-windows-msvc/absent/leaf.sym")
                 .display()
                 .to_string()
                 .replace('\\', "/")
@@ -119,121 +119,74 @@ fn missing_inputs_and_imports_report_expected_absolute_paths() {
 }
 
 #[test]
-fn setup_prepares_every_library_without_linking_and_reuses_objects() {
+fn setup_prepares_packages_and_reuses_objects() {
     let root = tempfile::tempdir().unwrap();
-    let library = root.path().join("lib");
-    fs::create_dir_all(library.join("universal/c_std")).unwrap();
+    let source = root.path().join("packages/demo/1.0.0/source");
+    fs::create_dir_all(&source).unwrap();
     fs::write(
-        library.join("universal/c_std/native.h"),
-        "int32_t abs(int32_t value);",
+        root.path().join("packages/packages.toml"),
+        "[[Packages]]\nName='demo'\nVersion='1.0.0'\n[Packages.Source]\nEntry='main.m2'\n",
     )
     .unwrap();
     fs::write(
-        library.join("universal/decl.toml"),
-        include_str!("fixtures/c_declarations.toml"),
+        source.join("main.m2"),
+        "import demo::native;export func value()->i32{return demo::native::abs(-3);}",
     )
     .unwrap();
-    fs::write(library.join("universal/shared.m2"), "import c_std::native;export func value()->i32{return c_std::native::abs(-3);}export func<T> id(value:T)->T{return value;}").unwrap();
-    fs::write(
-        library.join("universal/unreferenced.m2"),
-        "export func isolated()->i32{return 7;}",
-    )
-    .unwrap();
-    for target in ["x86_64-pc-windows-msvc", "aarch64-unknown-linux-gnu"] {
-        fs::create_dir_all(library.join(target)).unwrap();
-        fs::write(
-            library.join(target).join("api.m2"),
-            "import shared;export func answer()->i32{return shared::value();}",
-        )
-        .unwrap();
-    }
-    // An old per-mode declaration must not shadow newly converted headers.
-    let old_header = root.path().join("old.h");
-    fs::write(&old_header, "int32_t obsolete(void);").unwrap();
-    artifacts::convert_c_header(
-        &old_header,
-        &root
-            .path()
-            .join("objects/debug/x86_64-pc-windows-msvc/c_std/native.sym"),
-        "c_std::native",
-        "x86_64-pc-windows-msvc",
-    )
-    .unwrap();
-    let args = [
-        "setup",
-        "--lib-dir",
-        "lib",
-        "--linker",
-        "missing-linker",
-        "--archiver",
-        "missing-archiver",
-    ];
-    success(invoke(root.path(), &args));
-    let decl = artifacts::load(&root.path().join("objects/universal/c_std/native.sym")).unwrap();
-    assert_eq!(decl.manifest.config.object, artifacts::ObjectMode::None);
-    assert!(decl.manifest.config.target.is_empty());
-    assert!(root.path().join("objects/universal/decl.sym").is_file());
-    let mut timestamps = Vec::new();
-    for target in ["x86_64-pc-windows-msvc", "aarch64-unknown-linux-gnu"] {
-        for mode in ["debug", "release"] {
-            let objects = root.path().join("objects").join(mode).join(target);
-            for module in ["api", "shared", "unreferenced"] {
-                let artifact =
-                    artifacts::load(&objects.join(module).with_extension("sym")).unwrap();
-                let object = artifact.object.unwrap();
-                timestamps.push((
-                    object.clone(),
-                    fs::metadata(object).unwrap().modified().unwrap(),
-                ));
-            }
-            assert!(objects.join("shared.mg").is_file());
-        }
-    }
-    success(invoke(root.path(), &args));
-    for (path, modified) in timestamps {
-        assert_eq!(fs::metadata(path).unwrap().modified().unwrap(), modified);
-    }
-    assert!(!root.path().join("build").exists());
-    assert!(!root.path().join("debug/api.lib").exists());
+    fs::write(source.join("native.h"), "int32_t abs(int32_t value);").unwrap();
+    let run = || {
+        Command::new(env!("CARGO_BIN_EXE_mlc"))
+            .current_dir(root.path())
+            .env("MLC", root.path())
+            .args([
+                "setup",
+                "--debug",
+                "--triplet",
+                "x86_64-pc-windows-msvc",
+                "--linker",
+                "missing",
+                "--archiver",
+                "missing",
+            ])
+            .output()
+            .unwrap()
+    };
+    success(run());
+    let declaration = source.join(".compiled/declarations/x86_64-pc-windows-msvc/demo/native.sym");
+    assert!(declaration.is_file());
+    assert_eq!(
+        artifacts::load(&declaration)
+            .unwrap()
+            .manifest
+            .config
+            .object,
+        artifacts::ObjectMode::None
+    );
+    let object = source.join(".compiled/build/objects/debug/x86_64-pc-windows-msvc/demo.obj");
+    assert!(object.is_file(), "{}", object.display());
+    let modified = fs::metadata(&object).unwrap().modified().unwrap();
+    success(run());
+    assert_eq!(fs::metadata(object).unwrap().modified().unwrap(), modified);
+    assert!(!root.path().join("objects").exists());
+    assert!(!root.path().join("lib").exists());
 }
-
 #[test]
-fn setup_missing_library_path_is_reported_and_flags_select_output_layout() {
+fn setup_missing_catalogue_reports_its_path() {
     let root = tempfile::tempdir().unwrap();
-    let result = invoke(root.path(), &["setup", "--lib-dir", "missing"]);
-    assert!(!result.status.success());
+    let output = Command::new(env!("CARGO_BIN_EXE_mlc"))
+        .current_dir(root.path())
+        .env("MLC", root.path())
+        .arg("setup")
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
     assert!(
-        String::from_utf8_lossy(&result.stderr)
-            .contains(&root.path().join("missing").display().to_string())
+        String::from_utf8_lossy(&output.stderr).contains(
+            &root
+                .path()
+                .join("packages/packages.toml")
+                .display()
+                .to_string()
+        )
     );
-    fs::create_dir_all(root.path().join("lib/universal")).unwrap();
-    fs::write(
-        root.path().join("lib/universal/native.h"),
-        "int32_t abs(int32_t value);",
-    )
-    .unwrap();
-    fs::write(
-        root.path().join("lib/universal/value.m2"),
-        "import native;export func value()->i32{return native::abs(-1);}",
-    )
-    .unwrap();
-    success(invoke(
-        root.path(),
-        &[
-            "setup",
-            "--lib-dir",
-            "lib",
-            "--triplet",
-            "x86_64-pc-windows-msvc",
-            "--release",
-            "-o",
-            "cache",
-        ],
-    ));
-    assert!(
-        root.path()
-            .join("cache/objects/release/x86_64-pc-windows-msvc/value.obj")
-            .is_file()
-    );
-    assert!(!root.path().join("cache/objects/debug").exists());
 }

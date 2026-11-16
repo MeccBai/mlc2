@@ -5,6 +5,7 @@ mod frontend;
 mod initialize;
 mod ir_dump;
 mod link;
+mod packages;
 mod progress;
 mod setup;
 use crate::cli::{Cli, Commands};
@@ -21,6 +22,7 @@ use std::{collections::HashMap, path::Path};
 
 pub fn run(cli: Cli) -> Result<i32, Report> {
     let operation = match &cli.command {
+        Commands::Install { .. } => Some("Install"),
         Commands::Build { .. } => Some("Build"),
         Commands::Setup => Some("Setup"),
         Commands::Fmt { .. } => Some("Format"),
@@ -35,6 +37,10 @@ pub fn run(cli: Cli) -> Result<i32, Report> {
 fn run_inner(cli: Cli, progress: &Progress) -> Result<i32, Report> {
     let root = std::env::current_dir().map_err(|e| e.to_string())?;
     let targets = match &cli.command {
+        Commands::Install {
+            target,
+            package_type,
+        } => return packages::install(&cli, &root, target, *package_type, progress),
         Commands::Clean => return clean::run(&root, cli.output.as_deref()).map_err(Into::into),
         Commands::Setup => return setup::run(&cli, &root, progress),
         Commands::Init { project } => return initialize::run(&root, project).map_err(Into::into),
@@ -214,7 +220,19 @@ fn build(
         .map(|p| root.join(p))
         .unwrap_or_else(|| paths.build_root.clone());
     let mode = cli.build_mode(paths.mode);
+    if let Some(max_time) = cli.package_ctfe_max_time {
+        paths.ctfe_max_time = max_time;
+    }
+    if cli.package_std_type.is_some() {
+        paths.std_type = cli.package_std_type;
+    }
     paths.configure_output(output_root.clone(), mode);
+    if let Some(requirements) = &cli.package_requires {
+        paths.requirements = requirements.clone();
+    }
+    paths.package_identity = cli.package_identity.clone();
+    paths.resolve_packages()?;
+    packages::prepare(cli, global, &mut paths, progress)?;
     let output = output_root.join(mode.directory());
     let plan = BuildPlan::discover_with_paths(entry, &paths)?;
     let debug = mode.debug_info() && (!objects_only || paths.triplet.contains("windows"));
@@ -395,6 +413,7 @@ fn build(
     }
     std::fs::create_dir_all(&paths.output).map_err(|e| e.to_string())?;
     let mut objects = report.objects;
+    packages::link_inputs(&paths, &mut objects, kind);
     if let Some(ir) = generated.supplement {
         progress.stage("Compiling generic instances", 1);
         let object = paths.output.join("__mlc_instances.obj");
@@ -418,6 +437,7 @@ fn build(
     }
     let stem = name
         .map(str::to_owned)
+        .or_else(|| cli.package_identity.as_ref().map(|(_, name)| name.clone()))
         .or_else(|| entry.file_stem().map(|s| s.to_string_lossy().into_owned()))
         .ok_or("Entry has no filename")?;
     let artifact = link::output_path(&output, &stem, kind, &paths.triplet);
@@ -476,6 +496,9 @@ fn build(
     progress.stage("Linking", 1);
     let link_hit = tool.is_some()
         && cli.link_args.is_empty()
+        && (kind != TargetKind::Shared
+            || !paths.triplet.contains("windows")
+            || cache::matches(&artifact.with_extension("lib"), &link_key))
         && cache::matches(&artifact, &link_key)
         && (!debug
             || kind == TargetKind::Static
@@ -485,17 +508,25 @@ fn build(
         if debug && kind != TargetKind::Static {
             cache::record(&artifact.with_extension("pdb"), &link_key)?;
         }
+        if kind == TargetKind::Shared && paths.triplet.contains("windows") {
+            cache::record(&artifact.with_extension("lib"), &link_key)?;
+        }
         cache::record(&artifact, &link_key)?;
     }
-    crate::output::artifact("linked", &artifact);
+    packages::copy_runtimes(&paths, &output)?;
+    if cli.package_identity.is_none() {
+        crate::output::artifact("linked", &artifact);
+    }
     progress.link(link_hit);
     progress.advance();
     progress.clear();
-    crate::output::info(format!(
-        "{} {}",
-        "Built".bright_green(),
-        artifact.display().to_string().underline()
-    ));
+    if cli.package_identity.is_none() {
+        crate::output::info(format!(
+            "{} {}",
+            "Built".bright_green(),
+            artifact.display().to_string().underline()
+        ));
+    }
     Ok(Some(artifact))
 }
 

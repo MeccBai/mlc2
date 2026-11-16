@@ -52,8 +52,8 @@ func main()->i32 {
     .unwrap();
     let output = Command::new(env!("CARGO_BIN_EXE_mlc"))
         .current_dir(root.path())
-        .args(["ll", "main.m2", "--lib-dir"])
-        .arg(support::library())
+        .args(["ll", "main.m2"])
+        .env("MLC", support::library())
         .output()
         .unwrap();
     assert!(

@@ -10,3 +10,5 @@ pub mod plan;
 pub mod project;
 pub mod schedule;
 pub use mlc_core::diagnostic;
+
+pub mod packages;

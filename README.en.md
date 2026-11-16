@@ -122,27 +122,13 @@ cargo test -p mlc_syntax -p mlc_core -p ffi_parser -p mlc_formatter
 cargo test --workspace
 ```
 
-When running from a Cargo output directory, the compiler does not automatically locate the repository's `lib`. Prepare declaration symbols from the repository root, then use `--lib-dir lib`:
+For development, point MLC at the repository root and prepare the registered standard packages:
 
 ```powershell
-$mlc = (Resolve-Path ./target/release/mlc.exe).Path
-$library = (Resolve-Path ./lib).Path
-Get-ChildItem $library -Recurse -Filter *.h | ForEach-Object {
-    $relative = [IO.Path]::GetRelativePath($library, $_.FullName)
-    $parts = $relative -split '[/\\]'
-    $module = ($parts[1..($parts.Length - 1)] -join '::') -replace '\.h$', ''
-    $output = Join-Path objects ([IO.Path]::ChangeExtension($relative, '.sym'))
-    & $mlc symbols $_.FullName --module $module --triplet $parts[0] -o $output
-    if ($LASTEXITCODE -ne 0) { throw "Header conversion failed: $relative" }
-}
-& $mlc symbols lib/universal/std/mem.toml -o objects/universal/std/mem.sym
-if ($LASTEXITCODE -ne 0) { throw 'std::mem conversion failed' }
-& $mlc ll main.m2 --lib-dir lib
+$env:MLC = (Get-Location).Path
+./target/release/mlc.exe setup
+./target/release/mlc.exe run crates/examples/sources/hello_world.m2
 ```
-
-`cargo build` alone does not create a complete installation or download CRT libraries and linker tools. Running/linking programs also requires configured `tools` and `runtimes`; a development setup can explicitly use a linker on PATH with `--linker lld-link`. See the [distribution guide](docs/distribution.md) for tool placement, library paths, and packaging.
-
-Windows defaults to `x86_64-pc-windows-msvc`; GNU targets remain an explicit option. LLVM object generation for another target does not imply a complete standard library, linker profile, or runtime for it. Embedded toolchain integration remains future work.
 
 ## Pipeline and workspace
 

@@ -95,8 +95,8 @@ mlc example hello-world   # 仅打印源码，不编译或运行
 mlc example generics
 mlc ll main.m2             # 仅生成 LLVM IR，默认 build/ll/<mode>/<triplet>
 mlc ll main.m2 -o ir       # 指定 .ll 输出目录
-mlc symbols lib/universal/c_std/io.h --module c_std::io --triplet universal  # 输出同名 io.sym
-mlc symbols c_api.toml -o objects/universal/c_api.sym
+mlc symbols packages/c_std/0.2.0/source/io.h --module c_std::io --triplet universal  # 输出同名 io.sym
+mlc symbols c_api.toml -o declarations/c_api.sym
 mlc symbols native.h       # 固定宽度 C 声明 → native.sym
 mlc symbols native.h --module c_std::native --triplet x86_64-pc-windows-msvc
 ```
@@ -151,8 +151,8 @@ tools/
   ld.lld.exe
   lld-link.exe
   llvm-ar.exe
-lib/                         # universal/<triplet> 源码
-objects/                     # universal/<triplet> 符号和对象缓存
+packages/packages.toml                # 安装包注册表
+packages/                    # 版本化的源码、静态库、动态库
 runtimes/
   x86_64-pc-windows-msvc/
     msvcrt.lib, vcruntime.lib, ucrt.lib, kernel32.lib
@@ -195,15 +195,7 @@ BuildPlan 已拒绝循环依赖，所以只需完成标记，不需要“初始�
 
 ## 编排和缓存边界
 
-安装打包使用统一脚本，显式指定目标目录：
-
-```powershell
-pwsh -NoProfile -File ./scripts/copy_to.ps1 -Profile debug -Destination D:\mlc
-pwsh -NoProfile -File ./scripts/copy_to.ps1 -Profile release -Destination D:\mlc
-```
-
-脚本构建对应 profile，部署编译器、库和声明产物，并从指定目录复制工具及运行库。
-具体选项和缺失依赖处理见 [安装分发](distribution.md)。
+运行 `./scripts/deploy.ps1 -Profile debug` 或 `-Profile release` 构建并部署到 `$env:MLC`；`-SkipBuild` 使用已有产物。安装布局见 [安装分发](distribution.md)。标准库与普通库统一放入版本化的 packages 目录。
 
 Package 分析及 IR 生成在主线程完成，不把 Rc 送进构建线程；taskflowrs
 调度各源码的 LLVM object 生成和缓存发布。声明文件仅 export，不生成空函数体。
@@ -256,17 +248,15 @@ Use `--default` (neither optimization nor debug information), `--debug` (debug i
 
 构建目录按模式隔离：对象为 `build/objects/<mode>/<triplet>/`，IR 为 `build/ll/<mode>/<triplet>/`，最终产物为 `build/<mode>/main.exe`（PDB 同目录）。`-o` 替换整个 build 根目录。
 
-标准库只使用 debug/release 两档。默认映射：default/debug → debug，release/rel-with-info → release。可在 Project.toml 的 `[Project]` 或 target 中写 `std_type = "debug"` 或 `std_type = "release"`，target 优先，没有对应 CLI 选项。标准库缓存为 `<安装根>/objects/<std_type>/<triplet>/`；显式 LibCacheDir 同样追加 `<std_type>/<triplet>`。纯声明 `objects/universal/` 保持共享。
+标准库只使用 debug/release 两档。默认映射：default/debug → debug，release/rel-with-info → release。可在 Project.toml 的 `[Project]` 或 target 中写 `std_type = "debug"` 或 `std_type = "release"`，target 优先，没有对应 CLI 选项。标准库缓存为 packages/std/<version>/source/.compiled/objects/<std_type>/<triplet>/，C 声明使用各包的 .compiled/declarations/<triplet>/。
 
-通用固定宽度 C 声明可使用 `mlc symbols portable.h --triplet universal --module c_std::portable`，安装到 `objects/universal/`。这不会放宽头文件语法限制；ABI 不同的接口仍必须绑定具体 triplet。新增常用 C API 的模块和限制见 [c_std](c_std.md)。
+通用固定宽度 C 声明可使用 `mlc symbols portable.h --triplet universal --module c_std::portable`，由 `mlc setup` 写入包内声明缓存。这不会放宽头文件语法限制；ABI 不同的接口仍必须绑定具体 triplet。新增常用 C API 的模块和限制见 [c_std](c_std.md)。
 ## Initialize a project and prepare libraries
 
 ```powershell
-mlc setup                  # prepare all installed lib inputs for debug and release
+mlc setup                  # prepare registered Source packages for debug and release
 mlc setup --release        # prepare only the release library variant
 mlc setup --triplet x86_64-pc-windows-msvc
-mlc setup --lib-dir ./lib   # use a different library source root
-mlc setup --lib-dir ./lib -o ./cache
 
 mlc init hello
 cd hello
@@ -276,9 +266,7 @@ mlc run hello
 
 `init <project>` creates a new directory containing `Project.toml` and `src/main.m2` with a Hello World program. The executable target uses the directory name. Existing directories/files are never overwritten. A parent directory supplied as part of the path must already exist.
 
-`setup` defaults to `lib/` beside `mlc.exe`, scans every library input rather than only imported modules, and ignores Project.toml/user-wide configuration. It converts `.h` and declaration `.toml` inputs first, then compiles `.m2` modules for each available triplet. Source builds produce `.sym`, `.obj`/`.o` and generic `.mg` where needed, without invoking a linker or archiver. Generic instantiations remain consumer-specific.
-
-Declarations go to `objects/universal/` or `objects/<triplet>/`; source artifacts go to `objects/debug/<triplet>/` and `objects/release/<triplet>/`. On targets without debug-line support, the debug library variant remains unoptimized without source line metadata. Explicit build-mode flags select one library variant. `--triplet` restricts the target. `-o` selects a destination root, with `objects/` beneath it. Repeated setup reuses valid object caches. Library source inputs retain the layout `lib/<triplet-or-universal>/<module>.m2`, `.h` or `.toml`.
+`setup` reads packages/packages.toml beneath MLC, converts all package .h/.toml declarations first, and compiles all .m2 modules into each package's .compiled directory. It ignores Project.toml/user configuration and invokes no linker or archiver. --triplet and profile flags restrict preparation; setup rejects --lib-dir and -o.
 
 Missing imports report the actual source and symbol paths searched. Missing entries, declaration inputs, Project.toml, explicit config files and native tools/libraries include their expected paths. The optional default user configuration may still be absent.
 
@@ -308,3 +296,58 @@ MaxTime = 3.0
 
 必须是有限且大于零的秒数。3.0.0 不是合法 TOML 数值。显式 .m2 入口仍遵循原规则，
 忽略 Project.toml，使用默认 3 秒。LSP 不执行 CTFE，因此不消耗此预算。
+
+
+## Local package installation
+
+Declare a library target with Type = "lib" (also accepts "static" or "shared").
+Run mlc install <target> from its project directory. Installation always builds first;
+failed builds do not publish a package. The default representation is Source.
+
+~~~powershell
+mlc install my_library
+mlc install my_library --release
+mlc install my_library --package-type static
+mlc install my_library --package-type shared
+~~~
+
+Packages are installed beneath $MLC/packages/<target>/<Project.Version>/source/ for Source,
+or <debug|release>/<static|shared>/ for binary representations.
+The installation root falls back to the compiler directory when MLC is unset.
+Project.Version must be an exact major.minor.patch version. An installed representation
+is immutable; publish changes with a new version. Source installations include the
+imported project sources and successful build artifacts in .compiled/.
+
+The installation's packages/packages.toml records available representations, entries, binary
+triplets and transitive requirements. Source is registered once at [Packages.Source]. Each declared Debug/Release profile must contain Static or Shared; both can coexist. Default/Debug consumers use debug binaries;
+Release/RelWithInfo consumers use release binaries. The Source tree is shared by all profiles. Source packages are compiled and
+cached separately in $MLC/cache/artifacts/ for the consumer's triplet and chosen linkage.
+
+~~~toml
+[Project]
+Name = "application"
+Version = "1.0.0"
+OutputDir = "build"
+
+[[Project.Targets]]
+Name = "app"
+Entry = "src/main.m2"
+Type = "bin"
+Profile = "default"
+
+[[Project.Targets.Requires]]
+Name = "my_library"
+Version = "1.5.1"
+Type = "Source"
+LinkType = "Shared"
+~~~
+
+Import packages by their target name. Source defaults to Static linkage when LinkType
+is omitted; it also accepts Shared. Type = "Static" and Type = "Shared" select their
+fixed representation and reject LinkType. Binary packages must match the target triplet.
+Shared runtimes are copied beside the resulting executable. Missing versions/profiles,
+conflicting requirements and dependency cycles are errors. Only direct dependencies
+can be imported by a project module. Versions resolve from the local catalogue; there
+is no network package download or version-range resolution.
+
+std and c_std use the same package layout. The old installation lib/ and objects/ directories are not searched.

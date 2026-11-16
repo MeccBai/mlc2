@@ -22,6 +22,7 @@ pub(super) fn run(cwd: &Path, project: &Path) -> Result<i32, String> {
             version: "0.1.0".into(),
             output_dir: "build".into(),
             targets: vec![Target {
+                requires: vec![],
                 mode: None,
                 std_type: None,
                 lib_dirs: None,

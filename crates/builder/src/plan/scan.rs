@@ -147,12 +147,21 @@ impl Scanner<'_> {
                 .paths
                 .map(|paths| paths.cached_declaration_roots(&import.path().join("::")))
                 .unwrap_or_default();
-            let dependency = self.resolver.resolve_with_modes(
-                &file,
-                &import,
-                self.paths.map(|paths| (paths.mode, paths.std_mode())),
-                &cached_declarations,
-            )?;
+            let dependency = if let Some(package) = self
+                .paths
+                .map(|p| p.package_import(&file, &import))
+                .transpose()?
+                .flatten()
+            {
+                package
+            } else {
+                self.resolver.resolve_with_modes(
+                    &file,
+                    &import,
+                    self.paths.map(|paths| (paths.mode, paths.std_mode())),
+                    &cached_declarations,
+                )?
+            };
             let dependency = self.visit(dependency)?;
             if !self.targets[id.0].requires.contains(&dependency) {
                 self.targets[id.0].requires.push(dependency);
@@ -166,6 +175,9 @@ impl Scanner<'_> {
     }
 
     fn module_name(&self, file: &Path) -> String {
+        if let Some(name) = self.paths.and_then(|p| p.package_module_name(file)) {
+            return name;
+        }
         // Canonical paths also normalize relative library roots and Windows prefixes.
         let library_relative = self.resolver.source_roots().iter().find_map(|root| {
             let root = root.canonicalize().ok()?;

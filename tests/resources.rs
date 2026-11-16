@@ -25,8 +25,8 @@ fn resource_errors_are_reported_before_generation() {
         .unwrap();
         let compile = Command::new(env!("CARGO_BIN_EXE_mlc"))
             .current_dir(root.path())
-            .args(["ll", "main.m2", "--lib-dir"])
-            .arg(&lib)
+            .args(["ll", "main.m2"])
+            .env("MLC", &lib)
             .output()
             .unwrap();
         let error = String::from_utf8_lossy(&compile.stderr);
@@ -92,8 +92,8 @@ func main() -> i32 {
     let lib = support::library();
     let compile = Command::new(env!("CARGO_BIN_EXE_mlc"))
         .current_dir(root.path())
-        .args(["ll", "main.m2", "--lib-dir"])
-        .arg(lib)
+        .args(["ll", "main.m2"])
+        .env("MLC", lib)
         .output()
         .unwrap();
     assert!(

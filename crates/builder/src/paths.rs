@@ -9,6 +9,11 @@ pub const HOST_TRIPLET: &str = env!("MLC_HOST_TRIPLET");
 
 #[derive(Debug, Clone)]
 pub struct PathResolver {
+    pub package_root: PathBuf,
+    pub requirements: Vec<crate::packages::Requirement>,
+    pub packages: Vec<crate::packages::Resolved>,
+    pub toolchain_packages: Vec<crate::packages::Resolved>,
+    pub package_identity: Option<(PathBuf, String)>,
     pub ctfe_max_time: std::time::Duration,
     pub mode: crate::project::BuildMode,
     pub std_type: Option<crate::project::StdType>,
@@ -84,10 +89,6 @@ impl PathResolver {
                 .map(|p| p.project.output_dir.as_path())
                 .unwrap_or(Path::new("build")),
         );
-        let installation = executable
-            .parent()
-            .filter(|p| !p.as_os_str().is_empty())
-            .ok_or("Executable has no installation root")?;
         let dirs = selected
             .and_then(|t| t.lib_dirs.as_ref())
             .or_else(|| project.as_ref().and_then(|p| p.project.lib_dirs.as_ref()));
@@ -98,7 +99,7 @@ impl PathResolver {
         } else if let Some(dirs) = &global.lib_dirs {
             dirs.iter().map(|dir| dir.join(triplet)).collect()
         } else {
-            vec![installation.join(crate::manifest::LIB_DIR).join(triplet)]
+            vec![]
         };
         let cache = selected.and_then(|t| t.lib_cache_dir.as_ref()).or_else(|| {
             project
@@ -114,6 +115,11 @@ impl PathResolver {
             .or_else(|| project.as_ref().and_then(|project| project.project.mode))
             .unwrap_or_default();
         let mut paths = Self {
+            package_root: crate::packages::installation(executable),
+            requirements: selected.map(|t| t.requires.clone()).unwrap_or_default(),
+            packages: vec![],
+            toolchain_packages: vec![],
+            package_identity: None,
             ctfe_max_time: project
                 .as_ref()
                 .map(|p| p.ctfe.max_time)
@@ -178,15 +184,27 @@ impl PathResolver {
         } else {
             self.mode
         };
-        vec![
-            cache.join(mode.directory()).join(&self.triplet),
-            cache.join(&self.triplet),
-            cache.join("universal"),
-        ]
+        vec![cache.join(mode.directory()).join(&self.triplet)]
     }
 
     pub fn artifact_stems(&self, file: &Path, module: &str) -> Result<Vec<PathBuf>, String> {
         let relative = module_path(module)?;
+        if let Some(package) = self
+            .toolchain_packages
+            .iter()
+            .find(|p| p.root.canonicalize().is_ok_and(|r| file.starts_with(r)))
+        {
+            return Ok(vec![
+                package
+                    .root
+                    .join(".compiled/objects")
+                    .join(self.std_mode().directory())
+                    .join(&self.triplet)
+                    .join(&relative),
+                self.output.join("packages").join(&relative),
+            ]);
+        }
+
         let library = self
             .imports
             .source_roots()
@@ -204,7 +222,7 @@ impl PathResolver {
             .join(mode.directory())
             .join(&self.triplet)
             .join("lib");
-        Ok(if let Some(root) = library {
+        Ok(if library.is_some() {
             vec![
                 self.lib_cache
                     .as_ref()
@@ -218,9 +236,8 @@ impl PathResolver {
                             .join(&relative)
                     })
                     .unwrap_or_else(|| {
-                        let mut objects = ImportResolver::object_root(&root);
-                        objects.pop();
-                        objects
+                        self.package_root
+                            .join("cache/loose")
                             .join(mode.directory())
                             .join(&self.triplet)
                             .join(&relative)
@@ -261,4 +278,268 @@ fn module_path(module: &str) -> Result<PathBuf, String> {
         path.push(segment);
     }
     Ok(path)
+}
+
+impl PathResolver {
+    pub fn resolve_packages(&mut self) -> Result<(), String> {
+        let registry = crate::packages::Registry::load(&self.package_root)?;
+        self.packages = registry.resolve(
+            &self.package_root,
+            &self.requirements,
+            self.mode,
+            &self.triplet,
+        )?;
+        self.toolchain_packages.clear();
+        for name in ["c_std", "std"] {
+            if self.packages.iter().any(|p| p.requirement.name == name) {
+                continue;
+            }
+            if registry
+                .packages
+                .iter()
+                .any(|p| p.name == name && p.version == env!("CARGO_PKG_VERSION"))
+            {
+                let requirement = crate::packages::Requirement {
+                    name: name.into(),
+                    version: env!("CARGO_PKG_VERSION").into(),
+                    kind: crate::packages::PackageType::Source,
+                    link_type: None,
+                };
+                for package in registry.resolve(
+                    &self.package_root,
+                    &[requirement],
+                    self.std_mode(),
+                    &self.triplet,
+                )? {
+                    if !self
+                        .toolchain_packages
+                        .iter()
+                        .any(|p| p.requirement.name == package.requirement.name)
+                    {
+                        self.toolchain_packages.push(package);
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+    pub fn package_module_name(&self, file: &Path) -> Option<String> {
+        if let Some((entry, name)) = &self.package_identity {
+            if entry.canonicalize().ok().as_deref() == Some(file) {
+                return Some(name.clone());
+            }
+            if let Some(relative) = entry
+                .parent()
+                .and_then(|p| p.canonicalize().ok())
+                .and_then(|p| file.strip_prefix(p).ok())
+            {
+                return Some(format!(
+                    "{name}::{}",
+                    relative
+                        .with_extension("")
+                        .components()
+                        .map(|p| p.as_os_str().to_string_lossy())
+                        .collect::<Vec<_>>()
+                        .join("::")
+                ));
+            }
+        }
+        for package in self.packages.iter().chain(&self.toolchain_packages) {
+            if let Some(entry) = &package.entry {
+                if entry.canonicalize().ok().as_deref() == Some(file) {
+                    return Some(package.requirement.name.clone());
+                }
+                if let Some(relative) = entry
+                    .parent()
+                    .and_then(|p| p.canonicalize().ok())
+                    .and_then(|p| file.strip_prefix(p).ok())
+                {
+                    return Some(format!(
+                        "{}::{}",
+                        package.requirement.name,
+                        relative
+                            .with_extension("")
+                            .components()
+                            .map(|p| p.as_os_str().to_string_lossy())
+                            .collect::<Vec<_>>()
+                            .join("::")
+                    ));
+                }
+            }
+        }
+        None
+    }
+    pub fn package_import(
+        &self,
+        importer: &Path,
+        import: &mlc_syntax::ImportModule,
+    ) -> Result<Option<PathBuf>, String> {
+        let segments = import.path();
+        let Some(first) = segments.first() else {
+            return Ok(None);
+        };
+        let contains = |root: &Path| root.canonicalize().is_ok_and(|r| importer.starts_with(r));
+        let owner = self
+            .packages
+            .iter()
+            .chain(&self.toolchain_packages)
+            .find(|p| contains(&p.root) || contains(&p.symbols));
+        let package = self
+            .packages
+            .iter()
+            .chain(&self.toolchain_packages)
+            .find(|p| p.requirement.name == *first);
+        if let Some(package) = package {
+            let permitted = self
+                .toolchain_packages
+                .iter()
+                .any(|p| p.requirement.name == *first)
+                || owner
+                    .map(|owner| {
+                        owner.requirement.name == *first
+                            || owner.package.requires.iter().any(|r| r.name == *first)
+                    })
+                    .unwrap_or_else(|| self.requirements.iter().any(|r| r.name == *first));
+            if !permitted {
+                return Err(format!(
+                    "Package {first} is not a direct dependency of this module"
+                ));
+            }
+            let relative = segments.iter().collect::<PathBuf>();
+            let candidate = if package.library.is_some() {
+                package.symbols.join(relative).with_extension("sym")
+            } else {
+                let root = package
+                    .entry
+                    .as_ref()
+                    .and_then(|p| p.parent())
+                    .unwrap_or(&package.root);
+                if segments.len() == 1 {
+                    package.entry.clone().ok_or("Declaration-only packages have no root module; import a declaration submodule")?
+                } else {
+                    root.join(segments[1..].iter().collect::<PathBuf>())
+                        .with_extension("m2")
+                }
+            };
+            let candidate = if candidate.is_file() {
+                candidate
+            } else if package.library.is_none() {
+                let root = package
+                    .entry
+                    .as_ref()
+                    .and_then(|p| p.parent())
+                    .unwrap_or(&package.root);
+                let relative = if segments.len() == 1 {
+                    PathBuf::from(first)
+                } else {
+                    segments[1..].iter().collect()
+                };
+                let declaration = [
+                    package.root.join("targets").join(&self.triplet),
+                    root.to_owned(),
+                ]
+                .into_iter()
+                .find_map(|root| {
+                    ["h", "toml"]
+                        .into_iter()
+                        .map(|extension| root.join(&relative).with_extension(extension))
+                        .find(|p| p.is_file())
+                });
+                if declaration.is_some() {
+                    let symbol = package
+                        .root
+                        .join(".compiled/declarations")
+                        .join(&self.triplet)
+                        .join(segments.iter().collect::<PathBuf>())
+                        .with_extension("sym");
+                    if !symbol.is_file() {
+                        return Err(format!(
+                            "Package declaration is not prepared. Run mlc setup.\nExpected path: {}",
+                            symbol.display()
+                        ));
+                    }
+                    symbol
+                } else {
+                    candidate
+                }
+            } else {
+                candidate
+            };
+            if !candidate.is_file() {
+                return Err(format!(
+                    "Package module not found\nExpected path: {}",
+                    candidate.display()
+                ));
+            }
+            return candidate
+                .canonicalize()
+                .map(Some)
+                .map_err(|e| e.to_string());
+        }
+        if let Some(owner) = owner.filter(|p| p.library.is_some()) {
+            let candidate = owner
+                .symbols
+                .join(&owner.requirement.name)
+                .join(segments.iter().collect::<PathBuf>())
+                .with_extension("sym");
+            if candidate.is_file() {
+                return candidate
+                    .canonicalize()
+                    .map(Some)
+                    .map_err(|e| e.to_string());
+            }
+        }
+        if let Some((entry, name)) = &self.package_identity {
+            let relative: PathBuf = if first == name {
+                segments[1..].iter().collect()
+            } else {
+                segments.iter().collect()
+            };
+            let root = entry.parent().unwrap();
+            if ["h", "toml"].into_iter().any(|ext| {
+                root.join(&relative).with_extension(ext).is_file()
+                    || root
+                        .join("targets")
+                        .join(&self.triplet)
+                        .join(&relative)
+                        .with_extension(ext)
+                        .is_file()
+            }) {
+                let candidate = root
+                    .join(".compiled/declarations")
+                    .join(&self.triplet)
+                    .join(name)
+                    .join(&relative)
+                    .with_extension("sym");
+                if candidate.is_file() {
+                    return candidate
+                        .canonicalize()
+                        .map(Some)
+                        .map_err(|e| e.to_string());
+                }
+                return Err(format!(
+                    "Package declaration is not prepared. Run mlc setup.\nExpected path: {}",
+                    candidate.display()
+                ));
+            }
+            if first == name {
+                let candidate = if segments.len() == 1 {
+                    entry.clone()
+                } else {
+                    entry
+                        .parent()
+                        .unwrap()
+                        .join(segments[1..].iter().collect::<PathBuf>())
+                        .with_extension("m2")
+                };
+                if candidate.is_file() {
+                    return candidate
+                        .canonicalize()
+                        .map(Some)
+                        .map_err(|e| e.to_string());
+                }
+            }
+        }
+        Ok(None)
+    }
 }

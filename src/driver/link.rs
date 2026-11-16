@@ -125,6 +125,14 @@ pub fn link(
                 ));
             }
         }
+        if kind == TargetKind::Shared && triplet.contains("windows") {
+            let import = staged.with_extension("lib");
+            if triplet.ends_with("msvc") {
+                command.arg(format!("/implib:{}", import.display()));
+            } else {
+                command.arg(format!("--out-implib={}", import.display()));
+            }
+        }
         command.args(&cli.link_args);
         command
     };
@@ -151,6 +159,12 @@ pub fn link(
         published
             .persist(output.with_extension("pdb"))
             .map_err(|e| e.to_string())?;
+    }
+    if kind == TargetKind::Shared && triplet.contains("windows") {
+        let import = staged.with_extension("lib");
+        if import.is_file() {
+            std::fs::copy(import, output.with_extension("lib")).map_err(|e| e.to_string())?;
+        }
     }
     let published = tempfile::NamedTempFile::new_in(parent).map_err(|e| e.to_string())?;
     std::fs::copy(&staged, published.path()).map_err(|e| e.to_string())?;

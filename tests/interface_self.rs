@@ -9,8 +9,8 @@ fn compile(source: &str, root: &Path) -> std::process::Output {
     fs::write(root.join("main.m2"), source).unwrap();
     Command::new(env!("CARGO_BIN_EXE_mlc"))
         .current_dir(root)
-        .args(["ll", "main.m2", "--lib-dir"])
-        .arg(support::library())
+        .args(["ll", "main.m2"])
+        .env("MLC", support::library())
         .output()
         .unwrap()
 }

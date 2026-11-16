@@ -14,6 +14,7 @@ struct Client {
 impl Client {
     fn new() -> Self {
         let mut child = Command::new(env!("CARGO_BIN_EXE_mlc-lsp"))
+            .env("MLC", support::library())
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -329,7 +330,7 @@ fn semantic_errors_return_diagnostics_without_discarding_all_results() {
 fn println_uses_source_macro_parameter_names_and_signature() {
     let root = tempfile::tempdir().unwrap();
     let path = root.path().join("main.m2");
-    fs::write(root.path().join("Project.toml"),format!("[Project]\nName='lsp'\nVersion='0.1.0'\nOutputDir='build'\nTargets=[]\nLibDirs=['{}']\n",support::library().display())).unwrap();
+
     let text = "import std;using println=std::println;func main(){println!(\"value={}\",50);}";
     fs::write(&path, text).unwrap();
     let uri = uri(&path);
