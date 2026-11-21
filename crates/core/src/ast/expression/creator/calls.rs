@@ -17,6 +17,54 @@ impl Expression {
         symbols: &mut dyn Resolution,
         context: Option<&StatementContext>,
     ) -> Self {
+        if let TempExpr::Member {
+            base,
+            name,
+            indirect: false,
+            ..
+        } = &callee.0
+        {
+            if name == "value" {
+                let owner = Self::new(config, (**base).clone(), symbols, context);
+                let ty = owner.type_inference(config, symbols);
+                if !ty.is_empty()
+                    && matches!(
+                        symbols.get_type(ty).unqualified(),
+                        crate::ast::types::CompileType::Enum(_)
+                    )
+                {
+                    if !args.is_empty() {
+                        config.submit_error(
+                            CompileError::IllegalUse(IllegalUseError::ArgumentCountMismatch),
+                            span,
+                        );
+                        return Self::Poison(span);
+                    }
+                    let underlying = match symbols.get_type(ty).unqualified() {
+                        crate::ast::types::CompileType::Enum(e) => e.underlying,
+                        _ => unreachable!(),
+                    };
+                    if let Self::InitListE(
+                        crate::ast::expression::InitialList::List { values, .. },
+                        _,
+                    ) = &owner
+                    {
+                        return values[0].clone().with_span(span);
+                    }
+                    if let Self::ConstValueE(mut value, _) = owner {
+                        value.ty = underlying;
+                        return Self::ConstValueE(value, span);
+                    }
+                    return Self::UnaryExprE(
+                        crate::ast::expression::UnaryExpr::Operator {
+                            op: crate::ast::expression::Operator::EnumValue,
+                            value: Box::new(crate::ast::expression::CompAtom::from_expr(owner)),
+                        },
+                        span,
+                    );
+                }
+            }
+        }
         let indirect = matches!(&callee.0, TempExpr::Member { indirect: true, .. });
         let (owner, mut interface, generic) =
             match Self::search_interface(config, callee, symbols, context) {
@@ -144,6 +192,7 @@ impl Expression {
         }
         if let TempExpr::Path(path) = &callee.0 {
             if path.segments.len() == 1
+                || path.segments == ["std", "mem", "address"]
                 || path.segments.join("::") == "str::len"
                 || path.segments.starts_with(&["std".into(), "bit".into()])
             {

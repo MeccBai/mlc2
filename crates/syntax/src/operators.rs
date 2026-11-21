@@ -29,6 +29,8 @@ pub enum Operator {
     BitNot,
     /// Compiler-only reinterpretation of a scalar as its unsigned bit pattern.
     BitPattern,
+    /// Compiler-only access to an enum's underlying value.
+    EnumValue,
 
     LogicalAnd,
     LogicalOr,

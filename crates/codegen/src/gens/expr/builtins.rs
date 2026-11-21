@@ -37,7 +37,7 @@ impl Expander<'_> {
         }
         // Literals have a default frontend i32 type. Explicit casts must not
         // truncate large literals to that default before converting to their target.
-        let mut input = if kind == Builtin::Dealloc {
+        let mut input = if matches!(kind, Builtin::Dealloc | Builtin::Address) {
             self.expression_expected(argument, Some(symbol.params[0].0))
         } else if let Expression::ConstValueE(value, ..) = argument {
             if let Ok(integer) = value.value.parse::<i128>() {
@@ -72,6 +72,23 @@ impl Expander<'_> {
         };
         let operand = self.load(&mut input.value);
         match kind {
+            Builtin::Address => {
+                let target = self.allocate();
+                input.value.code.push(Instruction::Cast {
+                    target,
+                    op: Cast::IntToPtr,
+                    value: TypedValue {
+                        ty: input.value.ty,
+                        value: operand,
+                    },
+                    to: LlvmType::Ptr,
+                });
+                input.value.ty = LlvmType::Ptr;
+                input.value.reg = Some(target);
+                input.value.in_reg = true;
+                input.signed = false;
+                input
+            }
             Builtin::Todo
             | Builtin::Size
             | Builtin::BitAnd

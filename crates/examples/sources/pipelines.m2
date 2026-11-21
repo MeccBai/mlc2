@@ -16,6 +16,7 @@ func twice(value: i32) -> i32 {
 
 
 func main() -> i32 {
+    val scalar = 7 |> twice; // A scalar supplies one argument.
     val result = {2, 5} |> add |> twice; // Equivalent to twice(add(2,5)).
     println!("result={}", result);
     return 0;

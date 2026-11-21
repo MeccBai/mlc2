@@ -3,6 +3,7 @@
 pub enum Builtin {
     Todo,
     Alloc,
+    Address,
     Cast,
     Dealloc,
     ConstCStr,
@@ -24,6 +25,12 @@ pub struct BuiltinDefinition {
 }
 
 pub const FUNCTIONS: &[BuiltinDefinition] = &[
+    BuiltinDefinition {
+        name: "std::mem::address",
+        kind: Builtin::Address,
+        type_arguments: 1,
+        arguments: 1,
+    },
     BuiltinDefinition {
         name: "std::bit::and",
         kind: Builtin::BitAnd,

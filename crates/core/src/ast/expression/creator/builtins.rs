@@ -141,16 +141,36 @@ impl Expression {
         } else {
             target
         };
-        let args: Vec<_> = args
+        let mut args: Vec<_> = args
             .into_iter()
             .map(|arg| Expression::new(config, arg, symbols, context).const_fold(config, symbols))
             .collect();
         if config.is_poisoned() {
             return Self::Poison(span);
         }
-        let source = args[0].type_inference(config, symbols);
+        let mut source = args[0].type_inference(config, symbols);
         if source.is_empty() {
             return Self::invalid_builtin(config, definition.name, span);
+        }
+        if kind == Builtin::Address {
+            let address_type = symbols.get_base(DataType::Integer, config.ptr_size * 8, false);
+            if !source.is_integer(symbols) {
+                return Self::invalid_builtin(config, definition.name, span);
+            }
+            if matches!(args[0], Self::ConstValueE(..)) {
+                args[0].check_constant_range(address_type, config, symbols, span);
+                if config.is_poisoned() {
+                    return Self::Poison(span);
+                }
+                args[0] = args[0].clone().normalize_initializer(address_type, symbols);
+                source = args[0].type_inference(config, symbols);
+            }
+            if symbols.get_type(source).unqualified()
+                != symbols.get_type(address_type).unqualified()
+                || target.has_res(symbols)
+            {
+                return Self::invalid_builtin(config, definition.name, span);
+            }
         }
         let valid = match kind {
             Builtin::Todo
@@ -166,6 +186,7 @@ impl Expression {
             }
             Builtin::StrLen => matches!(symbols.get_type(source).unqualified(), CompileType::Str),
             Builtin::Alloc => source.is_integer(symbols),
+            Builtin::Address => true,
             Builtin::Cast => matches!(
                 (
                     symbols.get_type(source).unqualified(),
@@ -226,6 +247,7 @@ impl Expression {
                 )
             }
             Builtin::Cast => Some(target.with_immutability(false, symbols)),
+            Builtin::Address => Some(target.make_ref(symbols, true)),
             Builtin::Dealloc => None,
         };
         let name = crate::ast::symbol_name::SymbolName::builtin(

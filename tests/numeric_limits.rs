@@ -1,4 +1,19 @@
 use std::{fs, process::Command};
+
+#[test]
+fn typed_enums_use_underlying_layout_and_value_has_no_call() {
+    let (root, ir) = ll(
+        "unit Point{pub x:i32;};enum Points(Point){Origin(Point{3})};enum Flag(i8){On(1),Off(0)};enum Number(f64){Pi(3.5)};enum Pair([i32:2]){Both([3,4])};enum Text(str){Hello(\"hello\")};export func read(flag:Flag)->i8{return flag.value();}func main()->i32{var flag=Flag::On;var byte=flag.value();var number=Number::Pi;var fraction=number.value();var pair=Pair::Both;var values=pair.value();var text=Text::Hello;var word=text.value();var wrapped=Points::Origin;var point=wrapped.value();return values[0]+point.x;}",
+        true,
+    );
+    assert!(!ir.contains("call i8 @\"value\""), "{ir}");
+    assert!(ir.contains("i8"), "{ir}");
+    assert!(ir.contains("double"), "{ir}");
+    mlc_builder::llvm::IrCompiler::init(mlc_manifest::Target::default().triplet())
+        .unwrap()
+        .emit(ir, &root.path().join("enums.obj"))
+        .unwrap();
+}
 fn ll(source: &str, expected: bool) -> (tempfile::TempDir, String) {
     let root = tempfile::tempdir().unwrap();
     fs::write(root.path().join("main.m2"), source).unwrap();

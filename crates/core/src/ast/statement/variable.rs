@@ -233,8 +233,15 @@ impl Variable {
         }
         .with_immutability(temp_var.value_type != ValueType::Flex, symbols);
         // Native str bindings keep their compile-time payload and cannot be rebound.
-        let native_str =
-            !ty.is_empty() && matches!(symbols.get_type(ty).unqualified(), types::CompileType::Str);
+        let native_str = !ty.is_empty()
+            && match symbols.get_type(ty).unqualified() {
+                types::CompileType::Str => true,
+                types::CompileType::Enum(e) => matches!(
+                    symbols.get_type(e.underlying).unqualified(),
+                    types::CompileType::Str
+                ),
+                _ => false,
+            };
         let ty = if native_str {
             ty.with_immutability(true, symbols)
         } else {

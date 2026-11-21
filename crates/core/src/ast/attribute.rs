@@ -19,10 +19,11 @@ static UNIT_ATTRIBUTE_MAP: LazyLock<HashMap<&'static str, UnitAttribute>> = Lazy
     m
 });
 
-#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub enum FuncAttibute {
     Empty,
     Cabi,
+    Interrupt(String),
     Builtin(Builtin),
 }
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
@@ -40,6 +41,12 @@ impl FuncAttibute {
             .collect()
     }
     pub fn new(config: &mut Config, name: &str, span: Span) -> Self {
+        if let Some(handler) = name
+            .strip_prefix("interrupt(")
+            .and_then(|s| s.strip_suffix(')'))
+        {
+            return Self::Interrupt(handler.to_owned());
+        }
         match FUNC_ATTRIBUTE_MAP.get(name) {
             Some(attr) => attr.clone(),
             None => {

@@ -76,6 +76,15 @@ where
     I: ValueInput<'tokens, Token = TokenPack, Span = Span>,
 {
     ident()
+        .then(
+            ident()
+                .delimited_by(keyword(Token::LParen), keyword(Token::RParen))
+                .or_not(),
+        )
+        .map(|(name, argument)| match argument {
+            Some(argument) => format!("{name}({argument})"),
+            None => name,
+        })
         .separated_by(operator(Token::Comma))
         .allow_trailing()
         .collect::<Vec<_>>()

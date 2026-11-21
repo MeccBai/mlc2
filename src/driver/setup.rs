@@ -21,7 +21,7 @@ pub(super) fn run(cli: &Cli, _cwd: &Path, progress: &Progress) -> Result<i32, Re
     let registry = Registry::load(&root)?;
     if registry.packages.is_empty() {
         return Err(format!(
-            "No packages registered\nExpected path: {}",
+            "No packages registered\nExpected path: {}\nSet MLC to the directory containing packages/packages.toml, or unset MLC to use automatic discovery.",
             root.join("packages/packages.toml").display()
         )
         .into());

@@ -19,5 +19,6 @@
 /cache/
 
 /build/
+/embedded
 
 !/scripts/deploy.ps1

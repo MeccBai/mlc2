@@ -11,6 +11,8 @@ mlc example formatting > formatting.m2
 mlc run formatting.m2
 mlc example const-functions > const_functions.m2
 mlc run const_functions.m2
+mlc example pipelines > pipelines.m2
+mlc run pipelines.m2
 ```
 
 Listing and printing source need no project, configuration, or LLVM initialization.

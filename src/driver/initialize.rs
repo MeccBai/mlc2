@@ -13,6 +13,11 @@ pub(super) fn run(cwd: &Path, project: &Path) -> Result<i32, String> {
     let config = ProjectFile {
         ctfe: Default::default(),
         project: Project {
+            embedded: false,
+            startup: None,
+            board: None,
+            linker_script: None,
+            cpu: None,
             mode: None,
             std_type: None,
             lib_dirs: None,

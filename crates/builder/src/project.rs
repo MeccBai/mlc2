@@ -44,6 +44,8 @@ impl BuildMode {
 pub enum StdType {
     Debug,
     Release,
+    #[serde(alias = "None")]
+    None,
 }
 impl StdType {
     pub const fn for_mode(mode: BuildMode) -> Self {
@@ -57,6 +59,7 @@ impl StdType {
         match self {
             Self::Debug => BuildMode::Debug,
             Self::Release => BuildMode::Release,
+            Self::None => BuildMode::Default,
         }
     }
 }
@@ -74,8 +77,14 @@ pub struct ProjectFile {
 pub struct Project {
     #[serde(default)]
     pub mode: Option<BuildMode>,
-    #[serde(default, rename = "std_type")]
+    #[serde(default, rename = "Std", alias = "std_type")]
     pub std_type: Option<StdType>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub embedded: bool,
+    pub startup: Option<PathBuf>,
+    pub board: Option<PathBuf>,
+    pub linker_script: Option<PathBuf>,
+    pub cpu: Option<String>,
     #[serde(default)]
     pub lib_dirs: Option<Vec<PathBuf>>,
     #[serde(default)]
@@ -95,7 +104,7 @@ pub struct Target {
     pub requires: Vec<crate::packages::Requirement>,
     #[serde(default)]
     pub mode: Option<BuildMode>,
-    #[serde(default, rename = "std_type")]
+    #[serde(default, rename = "Std", alias = "std_type")]
     pub std_type: Option<StdType>,
     #[serde(default)]
     pub lib_dirs: Option<Vec<PathBuf>>,

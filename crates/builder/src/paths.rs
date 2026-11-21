@@ -290,6 +290,9 @@ impl PathResolver {
             &self.triplet,
         )?;
         self.toolchain_packages.clear();
+        if self.std_type == Some(crate::project::StdType::None) {
+            return Ok(());
+        }
         for name in ["c_std", "std"] {
             if self.packages.iter().any(|p| p.requirement.name == name) {
                 continue;

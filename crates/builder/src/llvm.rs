@@ -55,6 +55,31 @@ impl IrCompiler {
         level: LLVMCodeGenOptLevel,
         relocation: LLVMRelocMode,
     ) -> Result<Self, BackendError> {
+        Self::with_cpu(triplet, config, level, relocation, c"generic")
+    }
+
+    pub fn for_embedded(triplet: &str, cpu: &str, optimize: bool) -> Result<Self, BackendError> {
+        let cpu = CString::new(cpu).map_err(|e| BackendError::Config(e.to_string()))?;
+        Self::with_cpu(
+            triplet,
+            BackendConfig::current()?,
+            if optimize {
+                LLVMCodeGenOptLevel::LLVMCodeGenLevelDefault
+            } else {
+                LLVMCodeGenOptLevel::LLVMCodeGenLevelNone
+            },
+            LLVMRelocMode::LLVMRelocStatic,
+            &cpu,
+        )
+    }
+
+    fn with_cpu(
+        triplet: &str,
+        config: BackendConfig,
+        level: LLVMCodeGenOptLevel,
+        relocation: LLVMRelocMode,
+        cpu: &std::ffi::CStr,
+    ) -> Result<Self, BackendError> {
         target::initialize(triplet)?;
         let triplet = CString::new(triplet).map_err(|e| BackendError::Config(e.to_string()))?;
         let mut target = std::ptr::null_mut();
@@ -66,7 +91,7 @@ impl IrCompiler {
             let machine = LLVMCreateTargetMachine(
                 target,
                 triplet.as_ptr(),
-                c"generic".as_ptr(),
+                cpu.as_ptr(),
                 c"".as_ptr(),
                 level,
                 relocation,

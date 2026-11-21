@@ -55,11 +55,21 @@ impl SymbolTable {
                     .iter()
                     .map(|v| (&v.name, v.name_span))
                     .collect(),
-                TempGlobalStmt::Enum(enumeration) => enumeration
-                    .variants
-                    .iter()
-                    .map(|(v, span)| (v, *span))
-                    .collect(),
+                TempGlobalStmt::Enum(enumeration) => {
+                    let mut variants = std::collections::HashSet::new();
+                    for (variant, span) in &enumeration.variants {
+                        if !variants.insert(variant) {
+                            config.submit_error(
+                                CompileError::IllegalUse(IllegalUseError::DuplicateSymbol {
+                                    name: SymbolName::member(&name, variant),
+                                }),
+                                *span,
+                            );
+                            return;
+                        }
+                    }
+                    Vec::new()
+                }
                 _ => Vec::new(),
             };
             self.declaration_spans.insert(name.clone(), span);

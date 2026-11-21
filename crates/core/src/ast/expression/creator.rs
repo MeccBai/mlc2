@@ -53,6 +53,36 @@ impl Expression {
         let expression = Self::create(config, temp_expr, symbols, context);
         if !config.is_poisoned() {
             if let Self::FuncCallE(call, span) = &expression {
+                if call.callee.is_none()
+                    && match call.func {
+                        EnumBool::False(index) => symbols
+                            .get_function_regular(index)
+                            .attributes
+                            .iter()
+                            .any(|attribute| {
+                                matches!(
+                                    attribute,
+                                    crate::ast::attribute::FuncAttibute::Interrupt(_)
+                                )
+                            }),
+                        EnumBool::True(index) => symbols
+                            .get_interface(index, false)
+                            .attributes
+                            .iter()
+                            .any(|attribute| {
+                                matches!(
+                                    attribute,
+                                    crate::ast::attribute::FuncAttibute::Interrupt(_)
+                                )
+                            }),
+                    }
+                {
+                    config.submit_error(
+                        CompileError::IllegalUse(IllegalUseError::InterruptCall),
+                        *span,
+                    );
+                    return Self::Poison(*span);
+                }
                 crate::ast::function::constant::check_call_boundary(
                     call, symbols, config, context, *span,
                 );
@@ -96,13 +126,38 @@ impl Expression {
             Path(path) => {
                 if path.segments.len() > 1 {
                     return match symbols.enum_value(config, &path) {
-                        Ok(value) => Self::ConstValueE(
-                            ConstValue {
-                                value: value.value.to_string(),
-                                ty: value.enum_type,
-                            },
-                            span,
-                        ),
+                        Ok(value) => {
+                            let CompileType::Enum(enumeration) =
+                                symbols.get_type(value.enum_type).unqualified()
+                            else {
+                                unreachable!()
+                            };
+                            let Some(initializer) = enumeration.values.get(value.value).cloned()
+                            else {
+                                config.submit_error(
+                                    CompileError::IllegalUse(
+                                        IllegalUseError::InvalidBuiltinArgument {
+                                            name: "enum value is not initialized".into(),
+                                        },
+                                    ),
+                                    span,
+                                );
+                                return Self::Poison(span);
+                            };
+                            match initializer {
+                                Self::ConstValueE(mut constant, _) => {
+                                    constant.ty = value.enum_type;
+                                    Self::ConstValueE(constant, span)
+                                }
+                                initializer => Self::InitListE(
+                                    InitialList::List {
+                                        onwer: Some(value.enum_type),
+                                        values: vec![initializer],
+                                    },
+                                    span,
+                                ),
+                            }
+                        }
                         Err(error) => {
                             config.submit_error(CompileError::Resolve(error), span);
                             Self::Poison(span)

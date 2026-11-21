@@ -43,6 +43,7 @@ pub struct Generated {
     pub modules: Vec<(usize, String)>,
     pub supplement: Option<String>,
     pub global_inits: Vec<(usize, String)>,
+    pub entry_return: Option<LlvmType>,
 }
 
 #[cfg(test)]
@@ -88,6 +89,7 @@ pub fn generate_with_config(
         &HashMap::new(),
         None,
         std::time::Duration::from_secs(3),
+        None,
     )
     .map_err(|report| report.to_string())
 }
@@ -107,6 +109,7 @@ pub fn generate_with_module_configs(
     >,
     cache_root: Option<std::path::PathBuf>,
     ctfe_max_time: std::time::Duration,
+    embedded_compiler: Option<&mlc_builder::llvm::IrCompiler>,
 ) -> Result<Generated, Report> {
     let cache_root = cache_root.unwrap_or_else(|| {
         plan.targets[plan.entry.0]
@@ -115,9 +118,12 @@ pub fn generate_with_module_configs(
             .unwrap_or_else(|| std::path::Path::new("."))
             .join("build/ctfe")
     });
-    let target_layout = mlc_builder::llvm::IrCompiler::init(triplet)
-        .map_err(|error| error.to_string())?
-        .target_layout();
+    let target_layout = match embedded_compiler {
+        Some(compiler) => compiler.target_layout(),
+        None => mlc_builder::llvm::IrCompiler::init(triplet)
+            .map_err(|error| error.to_string())?
+            .target_layout(),
+    };
     let mut package = PackageSymbolTable::new();
     let mut asts = vec![];
     let mut parsed_modules = HashMap::new();
@@ -216,7 +222,7 @@ pub fn generate_with_module_configs(
         },
     );
     let asts = source_ids.into_iter().zip(optimized);
-    names::qualify(&mut package, plan);
+    names::qualify(&mut package, plan, embedded_compiler.is_some())?;
     let mut modules = vec![];
     let mut initializers = vec![];
     let mut global_inits = vec![];
@@ -368,8 +374,14 @@ pub fn generate_with_module_configs(
             + "\n";
     }
     let mut extra = has_instances;
+    let mut entry_return = None;
     if kind == TargetKind::Bin {
         let (name, result) = entry.ok_or("Executable entry file must define main")?;
+        entry_return = Some(if name == "main" {
+            result.clone()
+        } else {
+            LlvmType::Int(32)
+        });
         if name != "main" {
             for init in &initializers {
                 ir.push_str(&format!(
@@ -413,6 +425,7 @@ pub fn generate_with_module_configs(
         modules,
         supplement: extra.then_some(ir),
         global_inits,
+        entry_return,
     })
 }
 

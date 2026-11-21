@@ -134,6 +134,9 @@ impl Expander<'_> {
     }
 
     fn signed(&self, ty: TypeIndex) -> bool {
+        if let CompileType::Enum(e) = self.symbols.get_type(ty).unqualified() {
+            return self.signed(e.underlying);
+        }
         matches!(self.symbols.get_type(ty).unqualified(), CompileType::Base(base)
             if base.data_type() == DataType::Integer && base.signed())
     }

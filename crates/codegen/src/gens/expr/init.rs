@@ -27,6 +27,9 @@ impl Expander<'_> {
         if owner.is_empty() {
             fail("Initializer has an empty destination type");
         }
+        if let CompileType::Enum(enumeration) = self.symbols.get_type(owner).unqualified() {
+            return self.expression_expected(&values[0], Some(enumeration.underlying));
+        }
         if matches!(self.symbols.get_type(owner).unqualified(), CompileType::Unit(unit) if unit.variant.is_some())
         {
             return self.variant_initializer(owner, values);

@@ -22,6 +22,33 @@ where
             return Expression::Poison(span);
         }
         match expression {
+            Expression::UnaryExprE(
+                UnaryExpr::Operator {
+                    op: Operator::EnumValue,
+                    value,
+                },
+                ..,
+            ) => {
+                let value = value.to_expression().const_fold(config, symbols);
+                match value {
+                    Expression::ConstValueE(mut value, _) => {
+                        if let CompileType::Enum(e) = symbols.get_type(value.ty).unqualified() {
+                            value.ty = e.underlying;
+                        }
+                        Expression::ConstValueE(value, span)
+                    }
+                    Expression::InitListE(InitialList::List { mut values, .. }, _) => {
+                        values.remove(0).with_span(span)
+                    }
+                    value => Expression::UnaryExprE(
+                        UnaryExpr::Operator {
+                            op: Operator::EnumValue,
+                            value: Box::new(CompAtom::from_expr(value)),
+                        },
+                        span,
+                    ),
+                }
+            }
             Expression::VarValueE(var, ..) if var.constant => {
                 (*var.init_val).clone().with_span(span)
             }

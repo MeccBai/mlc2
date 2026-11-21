@@ -78,6 +78,18 @@ impl FuncSymbol {
     ) -> (Self, Span) {
         let name_span = prototype.name_span;
         let mut attributes = FuncAttibute::parse(config, prototype.attributes, name_span);
+        if prototype.visibility == TempVisibility::Export
+            && attributes
+                .iter()
+                .any(|attribute| matches!(attribute, FuncAttibute::Interrupt(_)))
+        {
+            config.submit_error(
+                CompileError::IllegalUse(
+                    crate::diagnostic::error::IllegalUseError::InterruptExport,
+                ),
+                name_span,
+            );
+        }
         if let Some(kind) = builtins::module_builtin(&config.symbol_prefix(), &prototype.name) {
             attributes.insert(FuncAttibute::Builtin(kind));
         }
@@ -189,6 +201,16 @@ impl InterfaceSymbol {
             TempVisibility::Export => (false, true),
             TempVisibility::Api => (true, true),
         };
+        if exported
+            && attributes
+                .iter()
+                .any(|attribute| matches!(attribute, FuncAttibute::Interrupt(_)))
+        {
+            config.submit_error(
+                CompileError::IllegalUse(crate::diagnostic::error::IllegalUseError::InterruptExport),
+                name_span,
+            );
+        }
 
         let owner = prototype
             .owner

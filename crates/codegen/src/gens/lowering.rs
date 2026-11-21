@@ -45,10 +45,9 @@ impl IrGenerator {
         LlvmType::Named(format!("struct.{}", unit.name))
     }
 
-    /// Current enums are ordinal-only; keep their representation policy here.
-    /// This agrees with EnumType's four-byte size and alignment.
-    pub fn enum_lowering(_enumeration: &EnumType) -> LlvmType {
-        LlvmType::Int(32)
+    /// Enum identity is semantic; its runtime representation is its underlying type.
+    pub fn enum_lowering(enumeration: &EnumType, symbols: &PackageSymbolTable) -> LlvmType {
+        Self::type_lowering(enumeration.underlying, symbols)
     }
 
     pub fn type_lowering(index: TypeIndex, symbols: &PackageSymbolTable) -> LlvmType {
@@ -58,7 +57,7 @@ impl IrGenerator {
                 LlvmType::Struct(vec![LlvmType::Ptr, LlvmType::Int(64)])
             }
             Base(base) => Self::base_lowering(base),
-            Enum(enumeration) => Self::enum_lowering(enumeration),
+            Enum(enumeration) => Self::enum_lowering(enumeration, symbols),
             Ref(ref_ty) => LlvmType::Ptr,
             crate::ast::types::CompileType::Function(_) => LlvmType::Ptr,
             List(list) => Self::list_lowering(list, symbols),

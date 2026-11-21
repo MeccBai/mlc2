@@ -29,8 +29,12 @@ pub(super) fn parse(
 
     imports.into_iter().for_each(|_import| {});
 
-    enums.into_iter().for_each(|temp_enum| {
-        let (enum_type, _span) = EnumType::new(&config, temp_enum);
+    enums.iter().cloned().for_each(|temp_enum| {
+        let (enum_type, _span) = EnumType::new(
+            &config,
+            temp_enum,
+            symbols.get_base(crate::ast::types::base_type::DataType::Integer, 32, true),
+        );
         let ident = get_ident(&enum_type.name);
         symbols
             .local_mut()
@@ -155,6 +159,98 @@ pub(super) fn parse(
         })
         .collect::<Vec<_>>();
 
+    for prototype in enums {
+        use crate::ast::expression::{ConstValue, Expression};
+        use crate::ast::types::{base_type::DataType, resolve_type};
+        let index = symbols
+            .local()
+            .types
+            .get_by_name(&get_ident(&config.symbol_name(&prototype.name)))
+            .unwrap();
+        let underlying = match prototype.underlying.clone() {
+            Some(ty) => match resolve_type(config, ty, symbols, None) {
+                Some(ty) => ty,
+                None => continue,
+            },
+            None => symbols.get_base(DataType::Integer, 32, true),
+        };
+        let mut visited = std::collections::HashSet::from([index]);
+        let mut cursor = underlying;
+        let mut recursive = false;
+        loop {
+            if !visited.insert(cursor) {
+                recursive = true;
+                break;
+            }
+            match symbols.get_type(cursor).unqualified() {
+                CompileType::Enum(e) => cursor = e.underlying,
+                _ => break,
+            }
+        }
+        if recursive {
+            config.submit_error(
+                crate::diagnostic::error::CompileError::IllegalUse(
+                    crate::diagnostic::error::IllegalUseError::InvalidBuiltinArgument {
+                        name: "recursive enum".into(),
+                    },
+                ),
+                prototype.name_span,
+            );
+            continue;
+        }
+        let mut enumeration = match symbols.get_type(index).unqualified() {
+            CompileType::Enum(e) => e.clone(),
+            _ => unreachable!(),
+        };
+        enumeration.underlying = underlying;
+        symbols
+            .local_mut()
+            .types
+            .set(&index, CompileType::Enum(enumeration.clone()));
+        for (ordinal, (_, span)) in prototype.variants.iter().enumerate() {
+            let value = match prototype.values.get(ordinal).cloned().flatten() {
+                Some(value) => {
+                    Expression::new(config, value, symbols, None).const_fold(config, symbols)
+                }
+                None => Expression::ConstValueE(
+                    ConstValue {
+                        value: ordinal.to_string(),
+                        ty: underlying,
+                    },
+                    *span,
+                ),
+            };
+            if config.is_poisoned() {
+                break;
+            }
+            if !value.is_const(symbols) {
+                config.submit_error(
+                    crate::diagnostic::error::CompileError::IllegalUse(
+                        crate::diagnostic::error::IllegalUseError::InvalidBuiltinArgument {
+                            name: "enum constant".into(),
+                        },
+                    ),
+                    *span,
+                );
+                break;
+            }
+            if !crate::TypeInfer::new(config, symbols).check(
+                &value,
+                underlying,
+                crate::infer::CheckMode::Initialization,
+                *span,
+            ) {
+                break;
+            }
+            enumeration
+                .values
+                .push(value.normalize_initializer(underlying, symbols));
+            symbols
+                .local_mut()
+                .types
+                .set(&index, CompileType::Enum(enumeration.clone()));
+        }
+    }
     PendingBodies {
         globals,
         functions: temp_funcs,

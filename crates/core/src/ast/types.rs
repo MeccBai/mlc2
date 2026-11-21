@@ -128,7 +128,7 @@ impl CompileType {
             Ref(reference) => reference.size(arena),
             Unit(unit) => unit.size(arena),
             List(list) => list.size(arena),
-            Enum(enm) => enm.size(),
+            Enum(enm) => enm.size(arena),
             Generic(_) => ice("Cannot get size of a Generic type."),
         }
     }
@@ -194,7 +194,7 @@ impl TypeIndex {
             Ref(ref_type) => ref_type.size(arena),
             Unit(unit) => unit.size(arena),
             List(list) => list.size(arena),
-            Enum(enm) => enm.size(),
+            Enum(enm) => enm.size(arena),
             _ => {
                 ice("Cannot get size of a Generic type.");
             }
@@ -210,7 +210,7 @@ impl TypeIndex {
             Ref(ref_type) => ref_type.align(arena),
             Unit(unit) => unit.align(arena),
             List(list) => list.align(arena),
-            Enum(enm) => enm.align(),
+            Enum(enm) => enm.align(arena),
             _ => {
                 ice("Cannot get alignment of a Generic type.");
             }

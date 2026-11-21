@@ -79,6 +79,10 @@ impl TypeInfer<'_> {
             UnaryExpr::Operator { op, value } => {
                 let value_type = value.type_inference(config, symbols);
                 match op {
+                    Operator::EnumValue => match symbols.get_type(value_type).unqualified() {
+                        CompileType::Enum(enumeration) => enumeration.underlying,
+                        _ => unreachable!("enum value requires an enum"),
+                    },
                     Operator::BitPattern => {
                         let CompileType::Base(base) = symbols.get_type(value_type).unqualified()
                         else {

@@ -71,6 +71,8 @@ pub enum IllegalUseError {
     },
     ArrayInitializerRequiresBrackets,
     CAbi(CAbiError),
+    InterruptExport,
+    InterruptCall,
     InvalidExportTable,
     DuplicateFileId,
     DuplicateSymbol {

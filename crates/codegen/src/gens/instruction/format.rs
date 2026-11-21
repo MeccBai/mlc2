@@ -142,9 +142,9 @@ impl fmt::Display for Instruction {
             } => {
                 write!(f, "switch {value}, label %{default} [")?;
                 for (case, label) in cases {
-                    write!(f, "\n    {} {case}, label %{label}", value.ty)?;
+                    write!(f, " {} {case}, label %{label}", value.ty)?;
                 }
-                write!(f, "\n  ]")
+                write!(f, " ]")
             }
             Self::IndirectCall {
                 func,

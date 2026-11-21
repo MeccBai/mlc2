@@ -165,12 +165,7 @@ pub trait Resolution: TypeStorage {
         let owner = path.segments[..path.segments.len().saturating_sub(1)].join("::");
         let variant = path.segments.last().cloned().unwrap_or_default();
         let index = self
-            .local_type(&config.symbol_name(&owner))
-            .or_else(|| self.local_type(&owner))
-            .or_else(|| match self.named_export(config, &owner) {
-                Some(ExportSymbol::Type(index)) => Some(index),
-                _ => None,
-            })
+            .named_type(config, &owner)
             .ok_or_else(|| ResolveError::UnknownEnum {
                 name: owner.clone(),
             })?;
@@ -214,6 +209,21 @@ pub trait Resolution: TypeStorage {
     fn named_export(&self, config: &Config, name: &str) -> Option<ExportSymbol> {
         self.lookup_export(name)
             .or_else(|| self.lookup_export(&config.symbol_name(name)))
+    }
+
+    fn named_type(&self, config: &Config, name: &str) -> Option<TypeIndex> {
+        let lookup = |name: &str| {
+            self.local_type(&config.symbol_name(name))
+                .or_else(|| self.local_type(name))
+                .or_else(|| match self.named_export(config, name) {
+                    Some(ExportSymbol::Type(index)) => Some(index),
+                    _ => None,
+                })
+        };
+        lookup(name).or_else(|| {
+            self.using_target(config, name)
+                .and_then(|target| lookup(&target))
+        })
     }
 
     fn find_interface(&self, name: &str) -> Option<InterfaceIndex> {

@@ -7,6 +7,9 @@ pub(super) fn initialize(triplet: &str) -> Result<(), BackendError> {
     let family = match triplet.split('-').next() {
         Some("x86_64" | "i386" | "i486" | "i586" | "i686") => "x86",
         Some("aarch64" | "arm64") => "aarch64",
+        Some(arch) if arch.starts_with("thumb") || arch.starts_with("armv") || arch == "arm" => {
+            "arm"
+        }
         _ => {
             return Err(BackendError::Target(format!(
                 "unsupported triplet: {triplet}"
@@ -25,6 +28,12 @@ pub(super) fn initialize(triplet: &str) -> Result<(), BackendError> {
                 LLVMInitializeX86TargetMC();
                 LLVMInitializeX86AsmPrinter();
                 LLVMInitializeX86AsmParser();
+            } else if family == "arm" {
+                LLVMInitializeARMTargetInfo();
+                LLVMInitializeARMTarget();
+                LLVMInitializeARMTargetMC();
+                LLVMInitializeARMAsmPrinter();
+                LLVMInitializeARMAsmParser();
             } else {
                 LLVMInitializeAArch64TargetInfo();
                 LLVMInitializeAArch64Target();

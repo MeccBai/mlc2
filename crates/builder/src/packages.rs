@@ -145,10 +145,22 @@ pub fn installation(executable: &Path) -> PathBuf {
         .unwrap_or_else(|| {
             let root = executable.parent().unwrap_or(Path::new("."));
             if root.file_name().is_some_and(|s| s == "bin") {
-                root.parent().unwrap().to_owned()
-            } else {
-                root.to_owned()
+                return root.parent().unwrap_or(root).to_owned();
             }
+            if !root.join("packages/packages.toml").is_file() {
+                // Cargo places development binaries under target/<profile>, with
+                // an additional target triple directory for cross builds.
+                for target in root.ancestors().skip(1).take(2) {
+                    if target.file_name().is_some_and(|name| name == "target")
+                        && let Some(workspace) = target.parent()
+                        && workspace.join("Cargo.toml").is_file()
+                        && workspace.join("packages/packages.toml").is_file()
+                    {
+                        return workspace.to_owned();
+                    }
+                }
+            }
+            root.to_owned()
         })
 }
 pub fn profile(mode: BuildMode) -> BuildMode {

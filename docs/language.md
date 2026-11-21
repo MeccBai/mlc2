@@ -430,9 +430,10 @@ func main() -> i32 { return read_value(Item{42}); }
 ## 14. Enum
 
 ```rust
-enum State { Waiting,Running,Stopped };
+enum State(i32) { Waiting(0),Running(1),Stopped(2) };
 func main() -> i32 {
     var state:State = State::Running;
+    var raw = state.value(); // i32: 1
     match (state) {
         State::Waiting => { return 0; },
         State::Running => { return 1; },
@@ -441,8 +442,12 @@ func main() -> i32 {
 }
 ```
 
-枚举不携带数据，序号从 0 开始，底层降为 i32，但保持枚举类型身份。
-不支持显式指定序号、整数与 Enum 隐式互换或不带前缀的枚举值。
+`enum Name(Type)` 指定底层类型，枚举项 `Variant(constant)` 的表达式必须是常量，
+且能初始化底层类型。底层可以是整数、浮点、字符串、数组或 Unit 等类型；
+大小、对齐和运行时表示采用底层类型，编译期仍保留独立的枚举类型身份。
+`Enum::Variant` 直接取值，不是构造调用。`value()` 是零参数内建访问，返回底层类型的右值，不产生函数调用。
+枚举项在所属枚举内部保存和查找，不注册为全局值。枚举与底层类型、不同枚举之间不隐式互换。
+旧的 `enum Name { A,B }` 写法保留兼容，使用 i32 和从零开始的序号。
 值表达式的一阶名称用于变量，多阶名称用于 Enum::Value 或 module::Enum::Value；
 函数调用目标与类型位置使用各自的符号查询，不受此值表达式规则限制。
 

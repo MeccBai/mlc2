@@ -214,6 +214,10 @@ pub struct TempEnum {
     pub name: String,
     pub name_span: Span,
     pub variants: Vec<Spanned<String>>,
+    #[serde(default)]
+    pub underlying: Option<Spanned<TempType>>,
+    #[serde(default)]
+    pub values: Vec<Option<Spanned<TempExpr>>>,
     pub attributes: Vec<String>,
 }
 

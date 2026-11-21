@@ -277,7 +277,7 @@ impl Executor {
             .exported = true;
         let asts = mlc_optimizer::Optimizer::new(mlc_optimizer::OptimizeConfig::enabled())
             .optimize_all(asts, &mut package);
-        super::names::qualify(&mut package, &self.plan);
+        super::names::qualify(&mut package, &self.plan, false)?;
         let abi = package
             .get_function(wrapper_index, false)
             .llvm_func(&package)

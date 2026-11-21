@@ -39,7 +39,8 @@ enum RawItem {
     },
     Enum {
         name: Spanned<String>,
-        variants: Vec<Spanned<String>>,
+        variants: Vec<(Spanned<String>, Option<Spanned<super::out::TempExpr>>)>,
+        underlying: Option<Spanned<TempType>>,
     },
 }
 
@@ -137,7 +138,17 @@ where
     let enum_ = keyword(Token::Enum)
         .ignore_then(spanned_ident())
         .then(
+            type_parser()
+                .delimited_by(keyword(Token::LParen), keyword(Token::RParen))
+                .or_not(),
+        )
+        .then(
             spanned_ident()
+                .then(
+                    super::expr::expression_parser()
+                        .delimited_by(keyword(Token::LParen), keyword(Token::RParen))
+                        .or_not(),
+                )
                 .separated_by(operator(Token::Comma))
                 .at_least(1)
                 .allow_trailing()
@@ -145,7 +156,19 @@ where
                 .delimited_by(keyword(Token::LBrace), keyword(Token::RBrace)),
         )
         .then_ignore(keyword(Token::Semicolon).or_not())
-        .map(|(name, variants)| RawItem::Enum { name, variants });
+        .try_map(|((name, underlying), variants), span| {
+            if underlying.is_some() && variants.iter().any(|(_, value)| value.is_none()) {
+                return Err(Rich::custom(
+                    span,
+                    "Typed enum variants require a constant value in parentheses",
+                ));
+            }
+            Ok(RawItem::Enum {
+                name,
+                underlying,
+                variants,
+            })
+        });
 
     let global_variable = keyword(Token::Global)
         .ignore_then(choice((
@@ -276,11 +299,14 @@ where
                 RawItem::Enum {
                     name: (name, name_span),
                     variants,
+                    underlying,
                 } => TempGlobalStmt::Enum(TempEnum {
                     visibility,
                     name,
                     name_span,
-                    variants,
+                    values: variants.iter().map(|(_, value)| value.clone()).collect(),
+                    variants: variants.into_iter().map(|(name, _)| name).collect(),
+                    underlying,
                     attributes,
                 }),
             })

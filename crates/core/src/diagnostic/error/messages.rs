@@ -96,6 +96,8 @@ impl fmt::Display for IllegalUseError {
             DuplicateSymbol { name } => return write!(f, "Symbol `{name}` is already defined"),
             DuplicateVariable { name } => return write!(f, "Variable `{name}` is already defined; shadowing is not allowed"),
             CAbi(error) => return error.fmt(f),
+            InterruptExport => "Interrupt handlers cannot be exported",
+            InterruptCall => "Interrupt handlers cannot be called directly",
             InvalidStringLiteral => "Invalid string literal or escape sequence",
             ArrayInitializerRequiresBrackets => "Array initializers must use '[' and ']', not '{' and '}'",
             InvalidExportTable => "Invalid export table",

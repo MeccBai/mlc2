@@ -67,27 +67,7 @@ impl TypeInfer<'_> {
                 if let Some(ty) = bindings.resolve_generic(&path, symbols) {
                     return Some(ty);
                 }
-                let local = config.symbol_name(&path);
-                match symbols
-                    .local_type(&local)
-                    .or_else(|| symbols.local_type(&path))
-                    .or_else(|| match symbols.named_export(config, &path) {
-                        Some(crate::ast::symbols::ExportSymbol::Type(index)) => Some(index),
-                        _ => None,
-                    })
-                    .or_else(|| {
-                        symbols.using_target(config, &path).and_then(|name| {
-                            symbols
-                                .local_type(&name)
-                                .or_else(|| symbols.local_type(&config.symbol_name(&name)))
-                                .or_else(|| match symbols.named_export(config, &name) {
-                                    Some(crate::ast::symbols::ExportSymbol::Type(index)) => {
-                                        Some(index)
-                                    }
-                                    _ => None,
-                                })
-                        })
-                    }) {
+                match symbols.named_type(config, &path) {
                     Some(ty) => Some(ty),
                     None => {
                         config.submit_error(CompileError::Resolve(ResolveError::UnknownType), span);

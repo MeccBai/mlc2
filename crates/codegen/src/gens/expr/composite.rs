@@ -194,6 +194,9 @@ impl Expander<'_> {
             operand.signed = false;
             return operand;
         }
+        if *op == AstOp::EnumValue {
+            return operand;
+        }
         if *op == AstOp::BitPattern {
             let original = operand.value.ty.clone();
             let bits = match original {

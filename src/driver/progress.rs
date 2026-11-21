@@ -13,6 +13,7 @@ pub(super) struct Progress {
     started: Instant,
     operation: Option<&'static str>,
     terminal: bool,
+    pub(super) multiple_targets: bool,
 }
 
 #[derive(Default)]
@@ -35,9 +36,18 @@ impl Progress {
             state: Arc::new(Mutex::new(State::default())),
             started: Instant::now(),
             operation,
+            multiple_targets: false,
             terminal: !crate::output::enabled()
                 && operation.is_some()
                 && io::stderr().is_terminal(),
+        }
+    }
+
+    pub fn for_targets(&self) -> Self {
+        Self {
+            multiple_targets: true,
+            terminal: false,
+            ..self.clone()
         }
     }
 
@@ -48,6 +58,9 @@ impl Progress {
     }
 
     pub fn stage(&self, stage: &'static str, total: usize) {
+        if self.multiple_targets {
+            return;
+        }
         let mut state = self.state();
         state.stage = stage;
         state.done = 0;
@@ -56,7 +69,27 @@ impl Progress {
     }
 
     pub fn advance(&self) {
+        if self.multiple_targets {
+            return;
+        }
         let mut state = self.state();
+        state.done += 1;
+        self.draw(&state);
+    }
+
+    pub fn target_finished(&self, artifact: Option<&std::path::Path>) {
+        let mut state = self.state();
+        if let Some(artifact) = artifact {
+            self.erase_line();
+            crate::output::info(format!(
+                "{} {}",
+                "Built".bright_green(),
+                artifact.display().to_string().underline()
+            ));
+            if self.terminal {
+                let _ = io::stdout().flush();
+            }
+        }
         state.done += 1;
         self.draw(&state);
     }
@@ -72,8 +105,10 @@ impl Progress {
             NodeResult::Declaration(_) => state.declarations += 1,
             NodeResult::Failed { .. } | NodeResult::Blocked { .. } => (),
         }
-        state.done += 1;
-        self.draw(&state);
+        if !self.multiple_targets {
+            state.done += 1;
+            self.draw(&state);
+        }
     }
 
     pub fn object(&self, hit: bool) {
@@ -124,8 +159,14 @@ impl Progress {
     }
 
     pub fn clear(&self) {
+        let guard = self.state();
+        if !guard.stage.is_empty() {
+            self.erase_line();
+        }
+    }
+
+    fn erase_line(&self) {
         if self.terminal {
-            let _guard = self.state();
             let _ = write!(io::stderr().lock(), "\r{:72}\r", "");
             let _ = io::stderr().flush();
         }

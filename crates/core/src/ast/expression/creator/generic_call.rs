@@ -49,7 +49,10 @@ impl Expression {
             return Self::Poison(span);
         }
 
-        if path.segments.len() == 1 || path.segments.starts_with(&["std".into(), "bit".into()]) {
+        if path.segments.len() == 1
+            || path.segments.starts_with(&["std".into(), "bit".into()])
+            || path.segments == ["std", "mem", "address"]
+        {
             if let Some(definition) = crate::ast::builtins::lookup(&path.segments.join("::")) {
                 if params.len() != definition.type_arguments {
                     config.submit_error(

@@ -1,6 +1,7 @@
 use mlc_core::diagnostic::Report;
 mod cache;
 mod clean;
+mod embedded;
 mod frontend;
 mod initialize;
 mod ir_dump;
@@ -114,6 +115,9 @@ fn run_inner(cli: Cli, progress: &Progress) -> Result<i32, Report> {
                     root.join("project.toml").display()
                 )
             })?;
+            if project.project.embedded {
+                return embedded::run(&cli, &root, &project.project);
+            }
             let selected: Vec<_> = project
                 .project
                 .targets
@@ -143,6 +147,9 @@ fn run_inner(cli: Cli, progress: &Progress) -> Result<i32, Report> {
         }
         None => GlobalConfig::load_default()?,
     };
+    if matches!(cli.command, Commands::Build { .. }) && targets.len() > 1 {
+        return build_targets(cli, &global, &root, targets, progress);
+    }
     for (entry, name, kind) in targets {
         let kind = cli.kind.map(Into::into).unwrap_or(kind);
         if matches!(cli.command, Commands::Run { .. }) && kind != TargetKind::Bin {
@@ -181,6 +188,86 @@ fn run_inner(cli: Cli, progress: &Progress) -> Result<i32, Report> {
         }
     }
     Ok(0)
+}
+
+fn build_targets(
+    cli: Cli,
+    global: &GlobalConfig,
+    root: &Path,
+    targets: Vec<(std::path::PathBuf, Option<String>, TargetKind)>,
+    progress: &Progress,
+) -> Result<i32, Report> {
+    let jobs = cli.jobs.unwrap_or_else(|| {
+        std::thread::available_parallelism()
+            .map(usize::from)
+            .unwrap_or(1)
+    });
+    if jobs == 0 {
+        return Err("--jobs must be greater than zero".into());
+    }
+    let mut names = std::collections::HashSet::new();
+    for (_, name, _) in &targets {
+        let name = name.as_deref().expect("project target name");
+        if !valid_target_name(name) || !names.insert(name.to_lowercase()) {
+            return Err(format!("Invalid or duplicate project target name: {name}").into());
+        }
+    }
+    let workers = jobs.min(targets.len());
+    let mut child = cli.clone();
+    child.jobs = Some(jobs / workers);
+    let next = std::sync::atomic::AtomicUsize::new(0);
+    progress.stage("Building project targets", targets.len());
+    let nested = progress.for_targets();
+    let mut failures = std::thread::scope(|scope| {
+        let handles: Vec<_> = (0..workers)
+            .map(|_| {
+                scope.spawn(|| {
+                    let mut failures = Vec::new();
+                    loop {
+                        let index = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                        let Some((entry, name, kind)) = targets.get(index) else {
+                            break;
+                        };
+                        match build(
+                            &child,
+                            global,
+                            root,
+                            entry,
+                            name.as_deref(),
+                            cli.kind.map(Into::into).unwrap_or(*kind),
+                            &nested,
+                            false,
+                        ) {
+                            Ok(artifact) => progress.target_finished(artifact.as_deref()),
+                            Err(report) => {
+                                failures.push((index, report));
+                                progress.target_finished(None);
+                            }
+                        }
+                    }
+                    failures
+                })
+            })
+            .collect();
+        handles
+            .into_iter()
+            .flat_map(|handle| handle.join().unwrap())
+            .collect::<Vec<_>>()
+    });
+    if failures.is_empty() {
+        return Ok(0);
+    }
+    failures.sort_by_key(|(index, _)| *index);
+    Err(Report::new(
+        failures
+            .into_iter()
+            .flat_map(|(_, report)| report.diagnostics)
+            .collect(),
+    ))
+}
+
+fn valid_target_name(name: &str) -> bool {
+    !name.is_empty() && name != "." && name != ".." && !name.contains(['/', '\\', ':'])
 }
 
 fn build(
@@ -231,10 +318,20 @@ fn build(
         paths.requirements = requirements.clone();
     }
     paths.package_identity = cli.package_identity.clone();
-    paths.resolve_packages()?;
-    packages::prepare(cli, global, &mut paths, progress)?;
+    {
+        // Package preparation can recursively build into shared installation caches.
+        static PACKAGE_PREPARATION: std::sync::Mutex<()> = std::sync::Mutex::new(());
+        let _guard = (progress.multiple_targets && name.is_some())
+            .then(|| PACKAGE_PREPARATION.lock().unwrap());
+        paths.resolve_packages()?;
+        packages::prepare(cli, global, &mut paths, progress)?;
+    }
     let output = output_root.join(mode.directory());
-    let plan = BuildPlan::discover_with_paths(entry, &paths)?;
+    let mut plan = BuildPlan::discover_with_paths(entry, &paths)?;
+    let isolated_target = name.filter(|_| progress.multiple_targets);
+    if let Some(name) = isolated_target {
+        paths.output = paths.output.join(".targets").join(name);
+    }
     let debug = mode.debug_info() && (!objects_only || paths.triplet.contains("windows"));
     if debug && !paths.triplet.contains("windows") {
         return Err("Debug line tables currently require a Windows target".into());
@@ -295,8 +392,12 @@ fn build(
             optimized,
         },
         &module_configs,
-        Some(output_root.join("ctfe")),
+        Some(isolated_target.map_or_else(
+            || output_root.join("ctfe"),
+            |name| output_root.join("ctfe/.targets").join(name),
+        )),
         paths.ctfe_max_time,
+        None,
     )?;
     if matches!(cli.command, Commands::Ll { .. }) {
         let directory = output_root
@@ -324,6 +425,20 @@ fn build(
             .collect();
         ir_dump::write(&plan, generated, &directory, &module_directories)?;
         return Ok(None);
+    }
+    if isolated_target.is_some() {
+        for module in &mut plan.targets {
+            if !module.artifact_stems.is_empty() {
+                module.artifact_stems = vec![
+                    paths.output.join(
+                        module
+                            .module_name
+                            .split("::")
+                            .collect::<std::path::PathBuf>(),
+                    ),
+                ];
+            }
+        }
     }
     let module_fingerprints = generated
         .modules
@@ -397,7 +512,21 @@ fn build(
         crate::output::warning(warning.clone());
     }
     if !report.succeeded() {
-        return Err(format!("{}: {:?}", "Build failed".red(), report.results).into());
+        let failures = report
+            .results
+            .iter()
+            .filter_map(|result| match result {
+                mlc_builder::schedule::NodeResult::Failed { file, error } => {
+                    Some(format!("{}: {error}", file.display()))
+                }
+                mlc_builder::schedule::NodeResult::Blocked { file, .. } => Some(format!(
+                    "{}: blocked by a failed dependency",
+                    file.display()
+                )),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        return Err(format!("Build failed\n{}", failures.join("\n")).into());
     }
     if objects_only {
         for path in &report.objects {
@@ -441,7 +570,7 @@ fn build(
         .or_else(|| entry.file_stem().map(|s| s.to_string_lossy().into_owned()))
         .ok_or("Entry has no filename")?;
     let artifact = link::output_path(&output, &stem, kind, &paths.triplet);
-    if stem.is_empty() || stem == "." || stem == ".." || stem.contains(['/', '\\', ':']) {
+    if !valid_target_name(&stem) {
         return Err("Target name must be a filename, not a path".into());
     }
     let object_hashes = objects
@@ -520,7 +649,7 @@ fn build(
     progress.link(link_hit);
     progress.advance();
     progress.clear();
-    if cli.package_identity.is_none() {
+    if cli.package_identity.is_none() && !progress.multiple_targets {
         crate::output::info(format!(
             "{} {}",
             "Built".bright_green(),

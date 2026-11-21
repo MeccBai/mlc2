@@ -1,6 +1,24 @@
 use super::*;
 
 #[test]
+fn enums_keep_identity_and_expose_constant_underlying_values() {
+    use crate::ast::{expression::Expression, statement::Statement};
+    let ast = valid(
+        "enum Bool(i32){True(1),False(0)};func main(){const a=Bool::True;const b=a.value();const n=size<Bool>();}",
+    );
+    let Statement::VariableDecl(b) = &main_body(&ast)[1] else {
+        panic!()
+    };
+    assert!(matches!(&*b.init_val, Expression::ConstValueE(v,_) if v.value=="1"));
+    valid(
+        "enum Text(str){Hello(\"hello\")};enum Pair([i32:2]){Both([1,2])};func main(){var t=Text::Hello;var text=t.value();var p=Pair::Both;var pair=p.value();}",
+    );
+    invalid_semantics("enum A(i32){One(1)};enum B(i32){One(1)};func main(){var a:A=B::One;}");
+    invalid_semantics("func runtime()->i32{return 1;}enum A(i32){One(runtime())};func main(){}");
+    invalid_semantics("enum A(i32){One(1.5)};func main(){}");
+}
+
+#[test]
 fn bit_builtins_fold_bits_without_numeric_conversion() {
     use crate::ast::{expression::Expression, statement::Statement};
     let ast = valid(
