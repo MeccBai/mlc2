@@ -21,6 +21,9 @@ impl Statement {
                         }
                         Self::warn_unused(body, config);
                     }
+                    if let Some(body) = &block.default {
+                        Self::warn_unused(body, config);
+                    }
                 }
                 Self::VariableDecl(variable) if variable.read_count.get() == 0 => {
                     config.submit_warning(

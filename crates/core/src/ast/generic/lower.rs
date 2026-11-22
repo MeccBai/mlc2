@@ -47,6 +47,18 @@ impl GenericRequire {
         let mut users = vec![Vec::new(); prototypes.len()];
         for (i, prototype) in prototypes.iter().enumerate() {
             let mut dependencies = HashSet::new();
+            for parameter in &prototype.parameters {
+                if let Some((path, _)) = &parameter.constraint {
+                    let name = Self::reference_name(config, path, symbols);
+                    if let Some(&dependency) = names.get(Self::local_name(config, &name)) {
+                        dependencies.insert(dependency);
+                    }
+                }
+            }
+            for &dependency in &dependencies {
+                remaining[i] += 1;
+                users[dependency].push(i);
+            }
             for (requirement, _) in &prototype.requirements {
                 let TempConstraints::Type {
                     path,

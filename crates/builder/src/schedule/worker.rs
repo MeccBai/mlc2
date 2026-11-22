@@ -55,6 +55,7 @@ pub(super) fn run(
         &options.target,
         &options.compiler_id,
         optimize,
+        optimize.then_some(crate::llvm::OPTIMIZATION_PIPELINE),
         compiler_options,
         options.module_fingerprints.get(&target.module_name),
         &file_hash,

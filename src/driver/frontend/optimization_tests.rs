@@ -72,8 +72,8 @@ fn pruned_control_flow_preserves_side_effects_and_unmatched_match_fallthrough() 
             if (1 < 2) { hits = hits+1; } else { hits = hits+100; }
             if (false && touch()) { hits = hits+100; }
             while (false) { touch(); }
-            for i in [3,1] { touch(); }
-            for j in [0,3] {
+            for i in test_range(3, 1) { touch(); }
+            for j in test_range(0, 3) {
                 match (99) { 1 => { break; }, _ => {} }
                 hits = hits+1;
             }
@@ -84,6 +84,14 @@ fn pruned_control_flow_preserves_side_effects_and_unmatched_match_fallthrough() 
     "#,
     )
     .unwrap();
+    let source = std::fs::read_to_string(&entry).unwrap();
+    if source.contains("test_range(") {
+        std::fs::write(
+            &entry,
+            source + include_str!("../../../tests/fixtures/iterator.m2"),
+        )
+        .unwrap();
+    }
     let plan = BuildPlan::discover(&entry, &ImportResolver { lib_dirs: vec![] }).unwrap();
     let generated = generate(
         &plan,

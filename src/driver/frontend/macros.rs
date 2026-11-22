@@ -92,24 +92,7 @@ pub(super) fn expand_indexed(
             }
         }
         let mut visible = HashSet::from([target.id.0]);
-        let mut pending: Vec<_> = target.requires.iter().map(|id| id.0).collect();
-        while let Some(id) = pending.pop() {
-            if !visible.insert(id) {
-                continue;
-            }
-            for (item, _) in &modules[&id] {
-                if let TempGlobalStmt::Import(import) = item {
-                    if import.exported() {
-                        let name = import.path().join("::");
-                        for dependency in &plan.targets[id].requires {
-                            if plan.targets[dependency.0].module_name == name {
-                                pending.push(dependency.0);
-                            }
-                        }
-                    }
-                }
-            }
-        }
+        visible.extend(plan.visible_imports(target.id).into_iter().map(|id| id.0));
         ex.visible.insert(target.id.0, visible);
     }
     for id in &plan.order {
@@ -152,8 +135,10 @@ pub(super) fn expand_indexed(
 }
 impl Expander<'_> {
     fn is_str_type(&self, ty: Option<&Spanned<TempType>>, owner: usize) -> bool {
-        let Some((TempType::Path(path), _)) = ty else {
-            return false;
+        let path = match ty {
+            Some((TempType::Path(path), _)) => path,
+            Some((TempType::ConstStr, _)) => return true,
+            _ => return false,
         };
         let mut name = path.segments.join("::");
         for _ in 0..64 {
@@ -215,10 +200,9 @@ impl Expander<'_> {
                     self.scope(scope, owner, &constants, depth)?;
                 }
                 TempStmt::For {
-                    start, end, scope, ..
+                    iterator, scope, ..
                 } => {
-                    self.expression(start, owner, &constants, depth)?;
-                    self.expression(end, owner, &constants, depth)?;
+                    self.expression(iterator, owner, &constants, depth)?;
                     self.scope(scope, owner, &constants, depth)?;
                 }
                 TempStmt::Anonymous(scope) => self.scope(scope, owner, &constants, depth)?,
@@ -248,6 +232,42 @@ impl Expander<'_> {
         Ok(())
     }
     fn expression(
+        &mut self,
+        node: &mut Spanned<TempExpr>,
+        owner: usize,
+        constants: &HashMap<String, Spanned<TempExpr>>,
+        depth: usize,
+    ) -> Result<(), String> {
+        let call = match &node.0 {
+            TempExpr::MacroCall { path, .. } => Some((path.segments.join("::"), node.1)),
+            _ => None,
+        };
+        self.expand_expression(node, owner, constants, depth)
+            .map_err(|error| {
+                let Some((name, span)) = call else {
+                    return error;
+                };
+                let target = &self.plan.targets[owner];
+                let position = match &target.input {
+                    TargetInput::Source { lines, .. } => lines.span_start(span),
+                    _ => None,
+                };
+                let file = target.file.display();
+                if let Some(position) = position {
+                    format!(
+                        "{error}\n  at {name}! ({file}:{}:{})",
+                        position.line, position.column
+                    )
+                } else {
+                    format!(
+                        "{error}\n  at {name}! ({file}, bytes {}..{})",
+                        span.start, span.end
+                    )
+                }
+            })
+    }
+
+    fn expand_expression(
         &mut self,
         node: &mut Spanned<TempExpr>,
         owner: usize,
@@ -456,6 +476,7 @@ impl Expander<'_> {
                         name: generic.clone(),
                         name_span: span,
                         constraint: Some((requirement.clone(), span)),
+                        constraint_args: vec![],
                     });
                     parameters.push(TempParam {
                         name: ident,
@@ -625,10 +646,9 @@ fn substitute_scope(scope: &mut TempScope, names: &HashMap<String, String>) {
                 substitute_scope(scope, names)
             }
             TempStmt::For {
-                start, end, scope, ..
+                iterator, scope, ..
             } => {
-                substitute_expr(start, names);
-                substitute_expr(end, names);
+                substitute_expr(iterator, names);
                 substitute_scope(scope, names)
             }
             TempStmt::Match { value, branches } => {

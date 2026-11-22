@@ -153,16 +153,15 @@ impl Statement {
                     return Self::Poison;
                 }
                 let target_type = left_expr.type_inference(config, symbols);
-                let right_expr = right_expr.coerce_string_view(target_type, config, symbols, span);
                 let source_type = right_expr.type_inference(config, symbols);
-                let function_pointer = [target_type, source_type].iter().any(|ty| {
+                let checked_type = [target_type, source_type].iter().any(|ty| {
                     !ty.is_empty()
                         && matches!(
                             symbols.get_type(*ty).unqualified(),
-                            types::CompileType::Function(_)
+                            types::CompileType::Function(_) | types::CompileType::Str
                         )
                 });
-                if function_pointer && !right_expr.type_check(&target_type, config, symbols) {
+                if checked_type && !right_expr.type_check(&target_type, config, symbols) {
                     config.submit_error(
                         CompileError::IllegalUse(IllegalUseError::TypeMismatched {
                             expected: target_type.format(symbols),
@@ -228,14 +227,14 @@ impl Statement {
             }
             TempStmt::For {
                 binding,
-                start,
-                end,
+                mode,
+                iterator,
                 scope,
             } => Self::create_for(
                 config,
                 binding,
-                start,
-                end,
+                mode,
+                iterator,
                 scope,
                 symbols,
                 context.as_deref(),

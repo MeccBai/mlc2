@@ -90,7 +90,29 @@ pub fn expression_parser<'tokens, I>()
 where
     I: ValueInput<'tokens, Token = TokenPack, Span = Span>,
 {
-    recursive(|expr| {
+    expression_with_initializers(true)
+}
+
+pub(super) fn iterator_expression_parser<'tokens, I>()
+-> impl Parser<'tokens, I, Spanned<Expr>, extra::Err<ParseError<'tokens>>> + Clone
+where
+    I: ValueInput<'tokens, Token = TokenPack, Span = Span>,
+{
+    expression_with_initializers(false)
+}
+
+fn expression_with_initializers<'tokens, I>(
+    allow_initializers: bool,
+) -> impl Parser<'tokens, I, Spanned<Expr>, extra::Err<ParseError<'tokens>>> + Clone
+where
+    I: ValueInput<'tokens, Token = TokenPack, Span = Span>,
+{
+    recursive(move |expr| {
+        let nested = if allow_initializers {
+            expr.clone().boxed()
+        } else {
+            expression_with_initializers(true).boxed()
+        };
         let literal = select! {
             TokenPack::Data { kind, text } => (kind, text),
         }
@@ -111,7 +133,7 @@ where
             .map(Expr::Path)
             .map_with(|expr, extra| (expr, extra.span()));
 
-        let list = expr
+        let list = nested
             .clone()
             .separated_by(operator(Token::Comma))
             .allow_trailing()
@@ -121,7 +143,7 @@ where
             .clone()
             .delimited_by(keyword(Token::LBrace), keyword(Token::RBrace));
 
-        let parenthesized = expr
+        let parenthesized = nested
             .clone()
             .delimited_by(keyword(Token::LParen), keyword(Token::RParen))
             .map_with(|expr, extra| (Expr::Group(Box::new(expr)), extra.span()));
@@ -178,16 +200,21 @@ where
             })
             .map_with(|expr, extra| (expr, extra.span()));
 
-        let atom = choice((
-            literal,
-            macro_call,
-            generic_call,
-            typed_init,
-            path_expr,
-            parenthesized,
-            bare_init,
-            array,
-        ))
+        let atom = if allow_initializers {
+            choice((
+                literal,
+                macro_call,
+                generic_call,
+                typed_init,
+                path_expr,
+                parenthesized,
+                bare_init,
+                array,
+            ))
+            .boxed()
+        } else {
+            choice((literal, macro_call, generic_call, path_expr, parenthesized)).boxed()
+        }
         .labelled("expression");
 
         let call = list
@@ -202,7 +229,7 @@ where
         .then(spanned_ident())
         .map(|(access, name)| Postfix::Member(access, name));
 
-        let index = expr
+        let index = nested
             .clone()
             .delimited_by(keyword(Token::LeftBracket), keyword(Token::RightBracket))
             .map(Postfix::Index);

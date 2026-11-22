@@ -63,7 +63,7 @@ valid_case!(
 
 valid_case!(
     loop_controls_find_loop_through_nested_scopes,
-    "func main() { for i in [0,2] { if (true) { anonymous { continue; } } match (i) { 0 => { break; }, _ => { continue; } } } while (true) { if (false) { break; } } }"
+    "func main() { for i in test_range(0, 2) { if (true) { anonymous { continue; } } match (i) { 0 => { break; }, _ => { continue; } } } while (true) { if (false) { break; } } }"
 );
 semantic_case!(
     continue_outside_loop_is_illegal,
@@ -76,7 +76,7 @@ semantic_case!(
 );
 semantic_case!(
     exiting_loop_restores_outer_scope,
-    "func main() { for i in [0,2] { continue; } break; }"
+    "func main() { for i in test_range(0, 2) { continue; } break; }"
 );
 
 valid_case!(
@@ -85,7 +85,7 @@ valid_case!(
 );
 valid_case!(
     return_resolves_function_through_nested_scopes,
-    "func value(a:i32) -> i32 { anonymous { if (true) { return a; } } for i in [0,2] { return i; } return 0; } func main() { var result = value(1); }"
+    "func value(a:i32) -> i32 { anonymous { if (true) { return a; } } for i in test_range(0, 2) { return i; } return 0; } func main() { var result = value(1); }"
 );
 semantic_case!(
     nonvoid_return_requires_value,

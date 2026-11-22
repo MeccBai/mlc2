@@ -102,7 +102,7 @@ impl Progress {
                 state.hits += 1;
             }
             NodeResult::Built(_) => state.checks += 1,
-            NodeResult::Declaration(_) => state.declarations += 1,
+            NodeResult::Declaration(_) | NodeResult::Builtin => state.declarations += 1,
             NodeResult::Failed { .. } | NodeResult::Blocked { .. } => (),
         }
         if !self.multiple_targets {

@@ -11,7 +11,7 @@ pub use crate::lexer::Span;
 
 pub use expr::{TempCallee, TempExpr, TempLiteralKind};
 pub use func::{TempFunc, TempFuncSymbol, TempInterface, TempInterfaceSymbol, TempParam};
-pub use stmt::{TempMatchPattern, TempScope, TempStmt};
+pub use stmt::{TempForBinding, TempMatchPattern, TempScope, TempStmt};
 pub use types::{TempPath, TempType};
 
 pub type Spanned<T> = (T, Span);
@@ -31,12 +31,27 @@ pub struct TempGenericParam {
     pub name: String,
     pub name_span: Span,
     pub constraint: Option<Spanned<TempPath>>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub constraint_args: Vec<Spanned<TempType>>,
 }
 
 impl TempGenericParam {
     pub fn dump(&self) -> String {
         match &self.constraint {
-            Some((path, _)) => format!("{}: {}", self.name, path.segments.join("::")),
+            Some((path, _)) => {
+                let name = path.segments.join("::");
+                if self.constraint_args.is_empty() {
+                    format!("{}: {name}", self.name)
+                } else {
+                    let args = self
+                        .constraint_args
+                        .iter()
+                        .map(|(ty, _)| ty.dump())
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    format!("{}: {name}<{args}>", self.name)
+                }
+            }
             None => self.name.clone(),
         }
     }
@@ -179,6 +194,8 @@ pub struct TempGeneric {
     pub visibility: TempVisibility,
     pub name: String,
     pub name_span: Span,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub parameters: Vec<TempGenericParam>,
     pub requirements: Vec<Spanned<TempConstraints>>,
     pub attributes: Vec<String>,
 }
@@ -194,8 +211,22 @@ impl TempGeneric {
 
     fn dump_impl(&self, with_span: bool) -> String {
         let mut output = format!(
-            "Generic: {}\n    Visibility: {:?}\n    Attributes: {:?}",
-            self.name, self.visibility, self.attributes
+            "Generic: {}{}\n    Visibility: {:?}\n    Attributes: {:?}",
+            self.name,
+            if self.parameters.is_empty() {
+                String::new()
+            } else {
+                format!(
+                    "<{}>",
+                    self.parameters
+                        .iter()
+                        .map(TempGenericParam::dump)
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )
+            },
+            self.visibility,
+            self.attributes
         );
         for (requirement, span) in &self.requirements {
             output.push_str("\n    ");

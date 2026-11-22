@@ -12,6 +12,13 @@ pub struct TempScope {
     pub statements: Vec<Spanned<TempStmt>>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum TempForBinding {
+    Clone,
+    Ref,
+    MutRef,
+}
+
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(tag = "kind", content = "data")]
 pub enum TempStmt {
@@ -23,7 +30,7 @@ pub enum TempStmt {
     VariantMatch {
         binding: Spanned<String>,
         value: Spanned<TempExpr>,
-        branches: Vec<(Spanned<super::TempType>, TempScope)>,
+        branches: Vec<(Option<Spanned<super::TempType>>, TempScope)>,
     },
     Variable(TempVar),
     CompoundAssignment {
@@ -52,10 +59,8 @@ pub enum TempStmt {
     },
     For {
         binding: Spanned<String>,
-        /// Inclusive lower bound of the `[start, end)` iteration range.
-        start: Spanned<TempExpr>,
-        /// Exclusive upper bound of the `[start, end)` iteration range.
-        end: Spanned<TempExpr>,
+        mode: TempForBinding,
+        iterator: Spanned<TempExpr>,
         scope: TempScope,
     },
     Anonymous(TempScope),

@@ -143,6 +143,17 @@ try {
         $packageRoot = [IO.Path]::GetFullPath((Join-Path $installationRoot ("packages/" + $key)))
         $sourceRoot = Join-Path $repositoryRoot ("packages/" + $key + '/source')
         if (!(Test-Path -LiteralPath $sourceRoot -PathType Container)) { continue }
+        if ($key -like 'std/*' -and !(Test-Path -LiteralPath (Join-Path $sourceRoot 'mem.toml'))) {
+            $legacyMem = Join-Path $packageRoot 'source/mem.toml'
+            if (Test-Path -LiteralPath $legacyMem -PathType Leaf) { Remove-Item -LiteralPath $legacyMem }
+            $declarations = Join-Path $packageRoot 'source/.compiled/declarations'
+            if (Test-Path -LiteralPath $declarations -PathType Container) {
+                foreach ($target in Get-ChildItem -LiteralPath $declarations -Directory) {
+                    $legacyMemSymbols = Join-Path $target.FullName 'std/mem.sym'
+                    if (Test-Path -LiteralPath $legacyMemSymbols -PathType Leaf) { Remove-Item -LiteralPath $legacyMemSymbols }
+                }
+            }
+        }
         foreach ($mode in @('debug', 'release')) {
             $obsoleteSource = [IO.Path]::GetFullPath((Join-Path $packageRoot "$mode/source"))
             if (!$obsoleteSource.StartsWith($packageRoot + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) { throw 'Unexpected obsolete source directory' }

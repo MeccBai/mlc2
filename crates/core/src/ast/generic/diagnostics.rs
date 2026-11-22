@@ -89,7 +89,7 @@ impl GenericIndex {
 }
 
 impl InterfaceRequire {
-    pub(super) fn failure(&self, param: TypeIndex, symbols: &dyn Resolution) -> Option<String> {
+    pub(crate) fn failure(&self, param: TypeIndex, symbols: &dyn Resolution) -> Option<String> {
         let param_name = symbols.get_type(param).unqualified().format(symbols);
         let name = SymbolName::callable(Some(&param_name), &self.name);
         let Some(index) = symbols.associated_interface(param, &name) else {

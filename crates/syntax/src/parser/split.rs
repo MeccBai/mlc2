@@ -102,13 +102,23 @@ where
     spanned_ident()
         .then(
             operator(Token::Colon)
-                .ignore_then(path().map_with(|path, extra| (path, extra.span())))
+                .ignore_then(type_parser().try_map(|(ty, span), _| match ty {
+                    TypeExpr::Path(path) => Ok(((path, span), vec![])),
+                    TypeExpr::Generic { base, args } => Ok(((base, span), args)),
+                    _ => Err(Rich::custom(span, "expected a named constraint")),
+                }))
                 .or_not(),
         )
-        .map(|((name, name_span), constraint)| GenericParam {
-            name,
-            name_span,
-            constraint,
+        .map(|((name, name_span), constraint)| {
+            let (constraint, constraint_args) = constraint
+                .map(|(path, args)| (Some(path), args))
+                .unwrap_or_default();
+            GenericParam {
+                name,
+                name_span,
+                constraint,
+                constraint_args,
+            }
         })
         .separated_by(operator(Token::Comma))
         .at_least(1)
@@ -179,6 +189,19 @@ where
                     "const reference must be read-only; use const $T",
                 )),
             });
+        let str_name = spanned_ident().try_map(|(name, _), span| {
+            if name == "str" {
+                Ok(())
+            } else {
+                Err(Rich::custom(span, "expected str"))
+            }
+        });
+        let mutable_str = keyword(Token::Mut)
+            .ignore_then(str_name.clone())
+            .to(TypeExpr::MutableStr);
+        let const_str = keyword(Token::Constant)
+            .ignore_then(str_name)
+            .to(TypeExpr::ConstStr);
         let inferred_resource = keyword(Token::Resource).to(TypeExpr::InferredResource);
         let function = keyword(Token::Function)
             .ignore_then(
@@ -207,6 +230,8 @@ where
         choice((
             function,
             const_reference,
+            mutable_str,
+            const_str,
             resource,
             inferred_resource,
             reference,

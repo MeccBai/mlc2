@@ -32,7 +32,7 @@ valid_case!(
 );
 valid_case!(
     bitwise_and_shift_operators,
-    "func main() { var a = std::bit::or(std::bit::shl(1, 2), std::bit::xor(std::bit::and(4, 3), 5)); var b = std::bit::not(a); var c = std::bit::shr(b, cast<u32>(1)); }"
+    "import std::bit; func main() { var a = std::bit::or(std::bit::shl(1, 2), std::bit::xor(std::bit::and(4, 3), 5)); var b = std::bit::not(a); var c = std::bit::shr(b, cast<u32>(1)); }"
 );
 valid_case!(
     comparison_and_logical_operators,
@@ -164,11 +164,11 @@ fn typed_initializer_preserves_resolved_target() {
 }
 
 #[test]
-fn native_str_literals_and_bindings_keep_compile_time_payloads() {
+fn native_str_bindings_distinguish_immutability_and_constantness() {
     let ast = valid(
         r#"func main(){var inferred="中\0文";val typed:str=inferred;const empty:str="";const length:u64=str::len("中\0文");}"#,
     );
-    for statement in &main_body(&ast)[..3] {
+    for (statement, constant) in main_body(&ast)[..3].iter().zip([false, false, true]) {
         let Statement::VariableDecl(variable) = statement else {
             panic!("variable expected")
         };
@@ -177,16 +177,20 @@ fn native_str_literals_and_bindings_keep_compile_time_payloads() {
             crate::ast::types::CompileType::Str
         ));
         assert_eq!(variable.var_type.is_immutable(&ast.symbols.types), true);
-        assert!(variable.constant);
-        assert!(matches!(
-            &*variable.init_val,
-            Expression::InitListE(InitialList::String { .. }, ..)
-        ));
+        assert_eq!(variable.constant, constant);
     }
     let Statement::VariableDecl(length) = &main_body(&ast)[3] else {
         panic!("variable expected")
     };
     assert!(matches!(&*length.init_val,Expression::ConstValueE(value, ..) if value.value=="7"));
+
+    valid(
+        r#"func greeting()->str{return "hello";}func main(){var text:mut str=greeting(); text="world";}"#,
+    );
+    valid(r#"unit Text {pub value:mut str;};func main(){var text=Text{"a"};text.value="b";}"#);
+    invalid_semantics(
+        r#"unit Text {pub value:str;};func main(){var text=Text{"a"};text.value="b";}"#,
+    );
 }
 
 #[test]

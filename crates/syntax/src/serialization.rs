@@ -84,7 +84,7 @@ mod tests {
 
     #[test]
     fn recursive_temp_roundtrip_keeps_spans_and_optional_nodes() {
-        let source = "import std::io; unit P<T> { pub a:T; }; func<T> f(x:T) -> T { if (true) { return x; } return x; } func main() { var a = [1,2]; var p = P<i32>{1}; var s = \"hello\"; for i in [0,2] { a[i] = i; } }";
+        let source = "import std::io; unit P<T> { pub a:T; }; func<T> f(x:T) -> T { if (true) { return x; } return x; } func main() { var a = [1,2]; var p = P<i32>{1}; var s = \"hello\"; for i in test_range(0, 2) { a[i] = i; } }";
         let tokens = crate::lexer::tokenize(source).unwrap();
         let (module, errors) = crate::parser::parse(&tokens.tokens, source.len());
         assert!(errors.is_empty(), "{errors:?}");

@@ -35,6 +35,108 @@ fn success(result: &Output) {
     );
 }
 #[test]
+fn iterator_loops_support_values_references_mutation_and_range_edges() {
+    let source = r#"
+import std;
+unit Cursor { pub slot:$mut u64; pub more:bool; };
+pub Cursor::func has_next(self) -> bool { return self->more; }
+pub Cursor::func to_next(mut self) { self->more = false; }
+pub Cursor::func get_ref(self) -> $mut u64 { return self->slot; }
+pub Cursor::func get_clone(self) -> u64 { return $(self->slot); }
+func main() -> i32 {
+    var total:u64 = 0;
+    var range:std::RangeIter = std::range(cast<u64>(0), cast<u64>(4));
+    for e in range {
+        if (e == 2) { continue; }
+        total = total + e;
+    }
+    for $e in std::range_step(cast<u64>(1), cast<u64>(6), cast<u64>(2)) { total = total + $e; }
+    var value:u64 = 4;
+    var cursor = Cursor{@mut value, true};
+    for $mut e in @mut cursor { $e = $e + cast<u64>(2); }
+    for e in std::range_step(cast<u64>(0), cast<u64>(1), cast<u64>(0)) { return 1; }
+    for e in std::range_step(u64::max() - cast<u64>(1), u64::max(), cast<u64>(2)) { total = total + cast<u64>(1); }
+    if (total != 14 || value != 6 || cursor.more) { return 2; }
+    return 0;
+}
+"#;
+    success(&compile(source, true).1);
+    let (_, invalid) = compile(
+        &source.replace("for $e in std::range_step", "for $mut e in std::range_step"),
+        false,
+    );
+    assert!(!invalid.status.success());
+    assert!(String::from_utf8_lossy(&invalid.stderr).contains("for requires IteratorMut<T>"));
+}
+
+#[test]
+fn parameterized_requirements_instantiate_iterator_and_nested_bounds() {
+    let source = r#"
+import std::collection;
+generic Integer { std::generic::is_integer; };
+generic Item<T: Integer> { func get(self) -> T; };
+generic Wrapped<I: Item<T>, T> { func inner(self) -> I; };
+unit Counter { pub current:i32; };
+pub Counter::func has_next(self) -> bool { return true; }
+pub Counter::func to_next(mut self) { self->current = self->current + 1; }
+pub Counter::func get_ref(self) -> $i32 { return @self->current; }
+pub Counter::func get_clone(self) -> i32 { return self->current; }
+pub Counter::func get(self) -> i32 { return self->current; }
+unit Outer { pub counter: Counter; };
+pub Outer::func inner(self) -> Counter { return self->counter; }
+func<T, I: std::collection::iter::Iterator<T>> read(value:I) -> T { return value.get_clone(); }
+func<O: Wrapped<Counter, i32>> valid(value:O) -> i32 { var counter = value.inner(); return counter.get(); }
+func main() -> i32 { return read<i32, Counter>(Counter{42}) + valid<Outer>(Outer{Counter{1}}) - 43; }
+"#;
+    success(&compile(source, true).1);
+
+    for (source, message) in [
+        (
+            source.replace("Iterator<T>", "IteratorMut<T>"),
+            "return type",
+        ),
+        (
+            source.replace("read<i32, Counter>", "read<i64, Counter>"),
+            "return type",
+        ),
+        (
+            source.replace("Wrapped<Counter, i32>", "Wrapped<Counter, f64>"),
+            "an integer type is required",
+        ),
+        (source.replace("Iterator<T>", "Iterator"), "generic"),
+        (
+            "generic A<T:B<T>>; generic B<T:A<T>>; func main() {}".into(),
+            "cyclic",
+        ),
+    ] {
+        let (_, result) = compile(&source, false);
+        assert!(!result.status.success(), "{source}");
+        let diagnostic = String::from_utf8_lossy(&result.stderr);
+        assert!(diagnostic.to_lowercase().contains(message), "{diagnostic}");
+    }
+}
+
+#[test]
+fn first_byte_returns_unsigned_utf8_bytes_without_importing_std() {
+    let (_, result) = compile(
+        r#"
+func first(text: str) -> u8 { return text.first_byte(); }
+func main() -> i32 {
+    const plus: u8 = "+".first_byte();
+    const limit: i32 = i32::max();
+    var backing: [i8: 1] = "x";
+    var empty = str::from_parts(@backing[0], 0);
+    if (plus != 43 || "中".first_byte() != 228 || limit != 2147483647) { return 1; }
+    if (first("+") != plus || first("中") != 228 || first(empty) != 0) { return 2; }
+    return 0;
+}
+"#,
+        true,
+    );
+    success(&result);
+}
+
+#[test]
 fn standard_library_hides_writer_and_validates_macros() {
     for (source, message) in [
         (
@@ -66,7 +168,7 @@ fn standard_library_hides_writer_and_validates_macros() {
             "format!",
         ),
         (
-            "import std;func main(){var pattern:std::ConstStringView=\"{}\";var x=std::format!(pattern,1);}",
+            "import std;func main(){var pattern:mut str=\"{}\";var x=std::format!(pattern,1);}",
             "compile-time string",
         ),
         (
@@ -95,10 +197,11 @@ using format=std::format;
 unit Point{pub x:i32;};
 pub Point::func format(self)->std::String{return format!("Point({})",self->x);}
 func main()->i32{
-    var view:std::base::ConstStringView="中\0文";
+    var view:mut str="中\0文";
     var s:std::String=std::String::from("hello");
     s.append(" world");
-    var result:std::String=format!("{} {} {} {}",Point{42},cast<f32>(1.5),cast<u64>(18446744073709551615),false);
+    view=s.view();
+    var result:std::String=format!("{} {} {} {} {}",Point{42},cast<f32>(1.5),cast<u64>(18446744073709551615),false,view);
     return 0;
 }"#,
         false,
@@ -133,11 +236,11 @@ pub Point::func format(self)->std::String{return format!("Point({})",self->x);}
 func main()->i32{
     var empty=std::String::new();
     if(!empty.is_empty()){return 1;}
-    var view:std::base::ConstStringView="中\0文";
-    if(view.length!=cast<u64>(7)){return 2;}
+    var view:str="中\0文";
+    if(str::len(view)!=cast<u64>(7)){return 2;}
     var text:std::String=std::String::from("hello");
     text.append(" world");
-    for i in [0,100]{text.append("!");}
+    for i in std::range(cast<u64>(0), cast<u64>(100)){text.append("!");}
     if(text.len()!=cast<u64>(111)){return 3;}
     var copy=text.clone();
     if(copy.len()!=text.len()){return 4;}
@@ -195,7 +298,7 @@ func main()->i32 {
 }
 
 #[test]
-fn native_str_rejects_runtime_construction_and_implicit_pointers() {
+fn native_str_rejects_immutable_assignment_and_implicit_pointers() {
     for source in [
         r#"func main(){var text:str=42;}"#,
         r#"func main(){var invalid="x"+"y";}"#,
@@ -205,8 +308,9 @@ fn native_str_rejects_runtime_construction_and_implicit_pointers() {
         r#"func main(){var bytes:[i8:2]=[65,0];var text:str=bytes;}"#,
         r#"func main(){var pointer:const $i8="hello";}"#,
         r#"func take(value:const $i8){}func main(){take("hello");}"#,
-        r#"func dynamic()->str{return "hello";}func main(){var text:str=dynamic();}"#,
-        r#"import std;func main(){var dynamic=std::String::from("hello");var text:str=dynamic.view();}"#,
+        r#"func dynamic()->str{return "hello";}func main(){const text:str=dynamic();}"#,
+        r#"func dynamic()->str{return "hello";}func main(){var text:const str=dynamic();}"#,
+        r#"func main(){var text:mut str="a";text=7;}"#,
         r#"import std;macro func custom!(pattern:str,args:std::macro::Args<std::fmt::Display>){std::println!("ok");}func dynamic()->str{return "x";}func main(){custom!(dynamic());}"#,
     ] {
         let (_, result) = compile(source, false);

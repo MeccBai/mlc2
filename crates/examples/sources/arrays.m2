@@ -12,7 +12,7 @@ func main() -> i32 {
     // The view stores a byte length; it does not scan for a NUL terminator.
     var text: [i8: 14] = "Hello World!\n";
     text[13] = 0;
-    val view = std::ConstStringView {@text[0], cast<u64>(13)};
+    val view = str::from_parts(@text[0], cast<u64>(13));
     std::print!("{}", view);
     println!("numbers[1]={}", numbers[1]);
     return 0;

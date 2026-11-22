@@ -336,14 +336,17 @@ fn println_uses_source_macro_parameter_names_and_signature() {
     let uri = uri(&path);
     let mut client = Client::new();
     let hover = hover_value(&mut client, &uri, text, "println!(");
-    assert!(hover.starts_with("macro func println!(str: str"), "{hover}");
+    assert!(
+        hover.starts_with("macro func println!(pattern: str"),
+        "{hover}"
+    );
     let hints=client.request("textDocument/inlayHint",json!({"textDocument":{"uri":uri},"range":{"start":{"line":0,"character":0},"end":{"line":0,"character":text.len()}}}));
     assert!(
         hints
             .as_array()
             .unwrap()
             .iter()
-            .any(|h| h["label"] == "str:"),
+            .any(|h| h["label"] == "pattern:"),
         "{hints}"
     );
     assert!(

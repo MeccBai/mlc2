@@ -74,7 +74,7 @@ func main() -> i32 {
     var a:res $mut i32 = make();
     var b:res = a;
     val sum = consume(b);
-    for i in [0,3] {
+    for i in test_range(0, 3) {
         var t:res $mut i32 = std::mem::alloc<i32>(1);
         t[0] = i;
         if (i == 0) { continue; }
@@ -89,7 +89,11 @@ func main() -> i32 {
     return sum-30;
 }
 "#;
-    fs::write(root.path().join("main.m2"), source).unwrap();
+    fs::write(
+        root.path().join("main.m2"),
+        format!("{source}{}", include_str!("fixtures/iterator.m2")),
+    )
+    .unwrap();
     let lib = support::library();
     let compile = Command::new(env!("CARGO_BIN_EXE_mlc"))
         .current_dir(root.path())

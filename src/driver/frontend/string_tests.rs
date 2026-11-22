@@ -19,6 +19,8 @@ fn memory_intrinsics_require_import_and_have_no_bare_alias() {
         "var p = alloc<i32>(1);",
         "dealloc<i32>(@1);",
         "var p = std::mem::alloc<i32>(1);",
+        "var p = std::mem::address<i32>(0);",
+        "var n = std::bit::or(1, 2);",
     ] {
         let (_, result) =
             generate_source(&format!("func main() -> i32 {{ {statement} return 0; }}"));
@@ -28,6 +30,60 @@ fn memory_intrinsics_require_import_and_have_no_bare_alias() {
         "import std::mem; using allocate = std::mem::alloc; func main() -> i32 { var p:res $mut i32 = allocate<i32>(1); std::mem::dealloc<i32>(p); return 0; }",
     );
     assert!(result.is_ok(), "{:?}", result.err());
+
+    let (_, result) = generate_source(
+        "import std::mem; func main() -> i32 { var p = std::mem::address<i32>(1073741824); return $p; }",
+    );
+    let generated = result.unwrap();
+    assert!(
+        generated
+            .modules
+            .iter()
+            .any(|(_, ir)| ir.contains("inttoptr"))
+    );
+}
+
+#[test]
+fn builtin_modules_follow_imports_and_can_be_shadowed() {
+    let root = tempfile::tempdir().unwrap();
+    let entry = root.path().join("main.m2");
+    let bridge = root.path().join("bridge.m2");
+    let resolver = mlc_builder::plan::ImportResolver { lib_dirs: vec![] };
+    let compile = || {
+        let plan = BuildPlan::discover(&entry, &resolver).unwrap();
+        generate(
+            &plan,
+            mlc_manifest::Target::default().triplet(),
+            TargetKind::Bin,
+        )
+    };
+    std::fs::write(
+        &entry,
+        "import bridge; func main() -> i32 { return cast<i32>(std::bit::or(1, 2)); }",
+    )
+    .unwrap();
+    std::fs::write(&bridge, "import std::bit;").unwrap();
+    assert!(compile().is_err());
+    std::fs::write(&bridge, "export import std::bit;").unwrap();
+    assert!(compile().is_ok());
+
+    let local_std = root.path().join("std");
+    std::fs::create_dir(&local_std).unwrap();
+    std::fs::write(
+        local_std.join("bit.m2"),
+        "export func or(a:i32, b:i32) -> i32 { return a + b; }",
+    )
+    .unwrap();
+    let ir = compile()
+        .unwrap()
+        .modules
+        .into_iter()
+        .map(|(_, ir)| ir)
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(ir.contains("call i32 @\"std::bit::or\""), "{ir}");
+    std::fs::write(local_std.join("bit.m2"), "").unwrap();
+    assert!(compile().is_err());
 }
 
 #[test]

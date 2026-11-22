@@ -7,9 +7,68 @@ impl Expander<'_> {
         &mut self,
         kind: Builtin,
         symbol: &FuncSymbol,
-        argument: &Expression,
+        arguments: &[Expression],
     ) -> Lowered {
-        if matches!(kind, Builtin::ConstCStr | Builtin::StrLen) {
+        let argument = &arguments[0];
+        if kind == Builtin::StrFirstByte {
+            return self.str_first_byte(argument);
+        }
+        if kind == Builtin::StrFromParts {
+            let mut pointer = self.expression(argument).value;
+            let mut length = self
+                .expression_expected(&arguments[1], Some(symbol.params[1].0))
+                .value;
+            let pointer_operand = self.load(&mut pointer);
+            let length_operand = self.load(&mut length);
+            let length_operand = self.convert_initializer(
+                &mut length,
+                length_operand,
+                &LlvmType::Int(64),
+                &arguments[1],
+            );
+            let mut code = pointer.code;
+            code.extend(length.code);
+            let ty = LlvmType::Struct(vec![LlvmType::Ptr, LlvmType::Int(64)]);
+            let aggregate = self.allocate();
+            let result = self.allocate();
+            code.push(Instruction::InsertValue {
+                target: aggregate,
+                aggregate: TypedValue {
+                    ty: ty.clone(),
+                    value: IrValue::ZeroInitializer,
+                },
+                value: TypedValue {
+                    ty: LlvmType::Ptr,
+                    value: pointer_operand,
+                },
+                index: 0,
+            });
+            code.push(Instruction::InsertValue {
+                target: result,
+                aggregate: TypedValue {
+                    ty: ty.clone(),
+                    value: IrValue::Reg(aggregate),
+                },
+                value: TypedValue {
+                    ty: LlvmType::Int(64),
+                    value: length_operand,
+                },
+                index: 1,
+            });
+            return Lowered {
+                signed: false,
+                value: LlvmValue {
+                    code,
+                    ty,
+                    reg: Some(result),
+                    in_reg: true,
+                },
+            };
+        }
+        if matches!(
+            kind,
+            Builtin::ConstCStr | Builtin::StrAsPtr | Builtin::StrLen
+        ) {
             let mut value = self.expression(argument).value;
             let operand = self.load(&mut value);
             let target = self.allocate();
@@ -97,7 +156,11 @@ impl Expander<'_> {
             | Builtin::BitNot
             | Builtin::BitShl
             | Builtin::BitShr => unreachable!(),
-            Builtin::ConstCStr | Builtin::StrLen => {
+            Builtin::ConstCStr
+            | Builtin::StrAsPtr
+            | Builtin::StrLen
+            | Builtin::StrFromParts
+            | Builtin::StrFirstByte => {
                 unreachable!("constant string handled before argument lowering")
             }
             Builtin::Cast => {
@@ -331,6 +394,77 @@ impl Expander<'_> {
 }
 
 impl Expander<'_> {
+    fn str_first_byte(&mut self, argument: &Expression) -> Lowered {
+        let mut value = self.expression(argument).value;
+        let operand = self.load(&mut value);
+        let aggregate = TypedValue {
+            ty: value.ty,
+            value: operand,
+        };
+        let length = self.allocate();
+        let has_byte = self.allocate();
+        let pointer = self.allocate();
+        let byte = self.allocate();
+        let result = self.allocate();
+        let nonempty = format!("first_byte.{result}.nonempty");
+        let empty = format!("first_byte.{result}.empty");
+        let end = format!("first_byte.{result}.end");
+        let ty = LlvmType::Int(8);
+        value.code.extend([
+            Instruction::ExtractValue {
+                target: length,
+                aggregate: aggregate.clone(),
+                index: 1,
+            },
+            Instruction::Compare {
+                target: has_byte,
+                condition: Condition::Ne,
+                ty: LlvmType::Int(64),
+                lhs: IrValue::Reg(length),
+                rhs: IrValue::Integer(0),
+            },
+            Instruction::ConditionalBranch {
+                condition: IrValue::Reg(has_byte),
+                then_label: nonempty.clone(),
+                else_label: empty.clone(),
+            },
+            Instruction::BasicBlock {
+                label: nonempty.clone(),
+            },
+            Instruction::ExtractValue {
+                target: pointer,
+                aggregate,
+                index: 0,
+            },
+            Instruction::Load {
+                target: byte,
+                ty: ty.clone(),
+                pointer: IrValue::Reg(pointer),
+                align: None,
+            },
+            Instruction::Branch { label: end.clone() },
+            Instruction::BasicBlock {
+                label: empty.clone(),
+            },
+            Instruction::Branch { label: end.clone() },
+            Instruction::BasicBlock { label: end },
+            Instruction::Phi {
+                target: result,
+                ty: ty.clone(),
+                incoming: vec![(IrValue::Reg(byte), nonempty), (IrValue::Integer(0), empty)],
+            },
+        ]);
+        Lowered {
+            value: LlvmValue {
+                code: value.code,
+                ty,
+                reg: Some(result),
+                in_reg: true,
+            },
+            signed: false,
+        }
+    }
+
     pub(super) fn todo(&mut self, argument: &Expression, expected: Option<TypeIndex>) -> Lowered {
         let Expression::InitListE(InitialList::String { value: message }, ..) = argument else {
             unreachable!()

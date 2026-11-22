@@ -1,5 +1,7 @@
+use super::paths::ImportSearch;
 use super::*;
 use crate::paths::PathResolver;
+use mlc_core::ast::builtins::BuiltinModule;
 use mlc_syntax::{ImportModule, parser::out::TempGlobalStmt};
 use std::{collections::HashMap, fs};
 
@@ -40,7 +42,7 @@ pub(super) fn discover(
         stack: vec![],
         order: vec![],
     };
-    let entry = scan.visit(entry)?;
+    let entry = scan.visit(entry, None)?;
     Ok(BuildPlan {
         triplet: paths.map(|paths| paths.triplet.clone()),
         entry,
@@ -50,7 +52,32 @@ pub(super) fn discover(
 }
 
 impl Scanner<'_> {
-    fn visit(&mut self, file: PathBuf) -> Result<TargetIndex, mlc_core::diagnostic::Report> {
+    fn visit_builtin(&mut self, module: BuiltinModule) -> TargetIndex {
+        if let Some(target) = self.targets.iter().find(
+            |target| matches!(target.input, TargetInput::Builtin(existing) if existing == module),
+        ) {
+            return target.id;
+        }
+        let id = TargetIndex(self.targets.len());
+        self.targets.push(Target {
+            artifact_stems: vec![],
+            id,
+            file: PathBuf::from("<builtin>").join(module.name().replace("::", "/")),
+            module_name: module.name().into(),
+            input: TargetInput::Builtin(module),
+            requires: vec![],
+            reexports: vec![],
+            supers: vec![],
+        });
+        self.order.push(id);
+        id
+    }
+
+    fn visit(
+        &mut self,
+        file: PathBuf,
+        builtin_shadow: Option<BuiltinModule>,
+    ) -> Result<TargetIndex, mlc_core::diagnostic::Report> {
         if let Some((id, state)) = self.known.get(&file) {
             if *state == State::Resolved {
                 return Ok(*id);
@@ -118,7 +145,11 @@ impl Scanner<'_> {
                 None,
             )
         };
-        let module_name = declared_name.unwrap_or_else(|| self.module_name(&file));
+        let module_name = declared_name.unwrap_or_else(|| {
+            builtin_shadow
+                .map(|module| module.name().into())
+                .unwrap_or_else(|| self.module_name(&file))
+        });
         if self
             .targets
             .iter()
@@ -139,6 +170,7 @@ impl Scanner<'_> {
             module_name,
             input,
             requires: vec![],
+            reexports: vec![],
             supers: vec![],
         });
         self.stack.push(file.clone());
@@ -147,22 +179,59 @@ impl Scanner<'_> {
                 .paths
                 .map(|paths| paths.cached_declaration_roots(&import.path().join("::")))
                 .unwrap_or_default();
-            let dependency = if let Some(package) = self
-                .paths
-                .map(|p| p.package_import(&file, &import))
-                .transpose()?
-                .flatten()
-            {
-                package
+            let builtin = BuiltinModule::for_import(import.path());
+            let local = if builtin.is_some() {
+                let roots = self
+                    .paths
+                    .map(|paths| paths.project_root.as_path())
+                    .into_iter()
+                    .chain(std::iter::once(self.project.as_path()))
+                    .chain(self.resolver.lib_dirs.iter().map(PathBuf::as_path));
+                match self.resolver.resolve_in_roots(&import, roots, &[], true)? {
+                    ImportSearch::Found(path) => Some(path),
+                    ImportSearch::Missing(_) => None,
+                }
             } else {
-                self.resolver.resolve_with_modes(
-                    &file,
-                    &import,
-                    self.paths.map(|paths| (paths.mode, paths.std_mode())),
-                    &cached_declarations,
-                )?
+                None
             };
-            let dependency = self.visit(dependency)?;
+            let dependency = match local {
+                Some(path) => Some(path),
+                None => self
+                    .paths
+                    .map(|paths| paths.package_import(&file, &import))
+                    .transpose()?
+                    .flatten(),
+            };
+            let dependency = match dependency {
+                Some(path) => ImportSearch::Found(path),
+                None => {
+                    let mut roots = Vec::new();
+                    if builtin.is_none() {
+                        roots.push(file.parent().ok_or("Importing file has no directory")?);
+                        roots.extend(self.resolver.lib_dirs.iter().map(PathBuf::as_path));
+                    } else if self.paths.is_some() {
+                        roots.extend(
+                            self.resolver
+                                .lib_dirs
+                                .iter()
+                                .filter_map(|root| root.parent()),
+                        );
+                    }
+                    self.resolver.resolve_in_roots(
+                        &import,
+                        roots,
+                        &cached_declarations,
+                        builtin.is_some(),
+                    )?
+                }
+            };
+            let dependency = match (dependency, builtin) {
+                (ImportSearch::Missing(_), Some(module)) => self.visit_builtin(module),
+                (search, _) => self.visit(search.require(&file, &import)?, builtin)?,
+            };
+            if import.exported() && !self.targets[id.0].reexports.contains(&dependency) {
+                self.targets[id.0].reexports.push(dependency);
+            }
             if !self.targets[id.0].requires.contains(&dependency) {
                 self.targets[id.0].requires.push(dependency);
                 self.targets[dependency.0].supers.push(id);
@@ -183,9 +252,14 @@ impl Scanner<'_> {
             let root = root.canonicalize().ok()?;
             file.strip_prefix(root).ok().map(Path::to_owned)
         });
+        let project_relative = self
+            .paths
+            .and_then(|paths| paths.project_root.canonicalize().ok())
+            .and_then(|root| file.strip_prefix(root).ok());
         let relative = library_relative
             .as_deref()
             .or_else(|| file.strip_prefix(&self.project).ok())
+            .or(project_relative)
             .unwrap_or(file);
         relative
             .with_extension("")

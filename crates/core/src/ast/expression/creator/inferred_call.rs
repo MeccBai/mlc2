@@ -94,7 +94,6 @@ impl Expression {
         if config.is_poisoned() {
             return Self::Poison(span);
         }
-        let args = Self::coerce_arguments(args, &symbol.params, config, symbols, span);
         let Some(bindings) =
             crate::TypeInfer::new(config, symbols).generic_arguments(&symbol, &args, span)
         else {

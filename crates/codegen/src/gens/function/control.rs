@@ -139,8 +139,8 @@ impl FunctionGenerator<'_> {
         if let Some(body) = default {
             falls |= self.scope(body, end.clone());
         } else {
-            self.branch(end.clone());
-            falls = true;
+            self.code.push(Instruction::Unreachable);
+            self.terminated = true;
         }
         self.bindings.remove(&temporary);
         if falls {

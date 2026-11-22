@@ -212,6 +212,9 @@ fn local_names(body: &[Statement], names: &mut HashSet<String>) {
                     names.insert(binding.name.clone());
                     local_names(body, names);
                 }
+                if let Some(body) = &s.default {
+                    local_names(body, names);
+                }
             }
             Statement::AnonymousBlock(s) => local_names(&s.statements, names),
             _ => (),
@@ -271,6 +274,9 @@ fn statements(
             Statement::VariantMatch(s) => {
                 expression(&s.value, symbols, local)?;
                 for (_, _, body) in &s.branches {
+                    statements(body, symbols, local, span)?;
+                }
+                if let Some(body) = &s.default {
                     statements(body, symbols, local, span)?;
                 }
             }

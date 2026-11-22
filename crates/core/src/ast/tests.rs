@@ -45,7 +45,7 @@ fn pipeline(source: &str) -> Outcome {
                 ErrorHandle::new(format!("integration{}", SOURCE_SUFFIX)),
                 WarningHandle::new(format!("integration{}", SOURCE_SUFFIX)),
             ),
-            module,
+            AnalyzedAst::with_iterator_fixture(module, source),
         ))
     }));
     match result {

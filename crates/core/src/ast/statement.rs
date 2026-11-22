@@ -5,6 +5,7 @@ mod compound;
 mod control;
 pub mod creator;
 mod exits;
+mod iterator;
 pub(crate) mod resources;
 mod usage;
 pub mod variable;
@@ -96,4 +97,5 @@ pub struct VariantMatch {
     pub value: Box<Expression>,
     pub owner: TypeIndex,
     pub branches: Vec<(usize, Rc<Variable>, Vec<Statement>)>,
+    pub default: Option<Vec<Statement>>,
 }

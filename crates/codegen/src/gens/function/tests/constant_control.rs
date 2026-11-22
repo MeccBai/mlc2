@@ -32,16 +32,16 @@ fn constant_if_promotes_only_selected_scope() {
 }
 
 #[test]
-fn false_while_and_zero_iteration_for_have_no_loop_ir() {
+fn false_while_is_removed_and_iterator_calls_are_kept() {
     let ir = emit(
-        "func side() -> i32 { return 8; } func main() { while (2 > 3) { side(); } for i in [5,2] { side(); } for j in [2,2] { side(); } }",
+        "func side() -> i32 { return 8; } func main() { while (2 > 3) { side(); } for i in test_range(5, 2) { side(); } for j in test_range(2, 2) { side(); } }",
         "empty-loops",
     );
     assert!(!ir.contains("while.condition"), "{ir}");
-    assert!(!ir.contains("for.condition"), "{ir}");
-    assert!(!ir.contains("call i32 @\"side\""), "{ir}");
+    assert!(ir.contains("for.condition"), "{ir}");
+    assert!(ir.contains("has_next"), "{ir}");
     let live = emit(
-        "func main() { for i in [0,2] { if (i == 1) { break; } } while (true) { break; } }",
+        "func main() { for i in test_range(0, 2) { if (i == 1) { break; } } while (true) { break; } }",
         "live-loops",
     );
     assert!(live.contains("for.condition"), "{live}");
@@ -51,7 +51,7 @@ fn false_while_and_zero_iteration_for_have_no_loop_ir() {
 #[test]
 fn mutable_local_initializers_are_not_propagated_and_side_effects_are_kept() {
     let ir = emit(
-        "func effect() -> bool { return true; } func start() -> i32 { return 2; } func main() { var flag = false; flag = true; if (flag) {} if (effect() || true) {} for i in [start(),0] {} }",
+        "func effect() -> bool { return true; } func start() -> i32 { return 2; } func main() { var flag = false; flag = true; if (flag) {} if (effect() || true) {} for i in test_range(start(), 0) {} }",
         "dynamic-control",
     );
     assert!(ir.contains("if.then"), "{ir}");
@@ -79,7 +79,7 @@ fn constant_match_selects_enum_and_default_without_runtime_comparisons() {
     );
     assert!(!fallback.contains("match.arm"), "{fallback}");
     let unmatched = emit(
-        "func main() -> i32 { for i in [0,1] { match (8) { 1 => { return 1; }, _ => {} } } return 0; }",
+        "func main() -> i32 { for i in test_range(0, 1) { match (8) { 1 => { return 1; }, _ => {} } } return 0; }",
         "match-unmatched",
     );
     assert!(!unmatched.contains("match.arm"), "{unmatched}");

@@ -8,6 +8,9 @@ pub enum Builtin {
     Dealloc,
     ConstCStr,
     StrLen,
+    StrFirstByte,
+    StrAsPtr,
+    StrFromParts,
     Size,
     BitAnd,
     BitXor,
@@ -86,6 +89,24 @@ pub const FUNCTIONS: &[BuiltinDefinition] = &[
         arguments: 1,
     },
     BuiltinDefinition {
+        name: "str::first_byte",
+        kind: Builtin::StrFirstByte,
+        type_arguments: 0,
+        arguments: 1,
+    },
+    BuiltinDefinition {
+        name: "str::as_ptr",
+        kind: Builtin::StrAsPtr,
+        type_arguments: 0,
+        arguments: 1,
+    },
+    BuiltinDefinition {
+        name: "str::from_parts",
+        kind: Builtin::StrFromParts,
+        type_arguments: 0,
+        arguments: 2,
+    },
+    BuiltinDefinition {
         name: "std::mem::alloc",
         kind: Builtin::Alloc,
         type_arguments: 1,
@@ -126,9 +147,118 @@ impl Builtin {
     }
 }
 
-/// Memory intrinsics are declarations in an imported standard-library module.
+/// Identify a declaration provided by a compiler-owned module.
 pub fn module_builtin(module: &str, name: &str) -> Option<Builtin> {
     lookup(&format!("{module}::{name}")).map(|definition| definition.kind)
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BuiltinModule {
+    Bit,
+    Mem,
+}
+
+impl BuiltinModule {
+    pub fn for_import(path: &[String]) -> Option<Self> {
+        let [namespace, module] = path else {
+            return None;
+        };
+        match (namespace.as_str(), module.as_str()) {
+            ("std", "bit") => Some(Self::Bit),
+            ("std", "mem") => Some(Self::Mem),
+            _ => None,
+        }
+    }
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Bit => "std::bit",
+            Self::Mem => "std::mem",
+        }
+    }
+
+    pub fn declarations(self) -> crate::parser::TempModule {
+        use crate::parser::out::{
+            Span, TempFunc, TempFuncSymbol, TempGenericParam, TempGlobalStmt, TempParam, TempPath,
+            TempType, TempVisibility,
+        };
+        let span: Span = (0..0).into();
+        let ty = |name: &str| {
+            (
+                TempType::Path(TempPath {
+                    segments: vec![name.into()],
+                }),
+                span,
+            )
+        };
+        let reference = || {
+            (
+                TempType::Reference {
+                    inner: Box::new(ty("T")),
+                    mutable: true,
+                },
+                span,
+            )
+        };
+        let resource = || {
+            (
+                TempType::Resource {
+                    inner: Box::new(reference()),
+                },
+                span,
+            )
+        };
+        FUNCTIONS
+            .iter()
+            .filter_map(|definition| {
+                let (module, name) = definition.name.rsplit_once("::")?;
+                if module != self.name() {
+                    return None;
+                }
+                let (parameters, return_type) = match definition.kind {
+                    Builtin::Alloc => (vec![("count", ty("u64"))], Some(resource())),
+                    Builtin::Dealloc => (vec![("pointer", resource())], None),
+                    Builtin::Address => (vec![("address", ty("u64"))], Some(reference())),
+                    // The call checker handles scalar types and width-dependent results.
+                    _ => (
+                        vec![("value", ty("u64")), ("rhs", ty("u64"))],
+                        Some(ty("u64")),
+                    ),
+                };
+                Some((
+                    TempGlobalStmt::Func(TempFunc {
+                        symbol: TempFuncSymbol {
+                            constant: self == Self::Bit,
+                            visibility: TempVisibility::Export,
+                            name: name.into(),
+                            name_span: span,
+                            generics: (0..definition.type_arguments)
+                                .map(|_| TempGenericParam {
+                                    name: "T".into(),
+                                    name_span: span,
+                                    constraint: None,
+                                    constraint_args: vec![],
+                                })
+                                .collect(),
+                            params: parameters
+                                .into_iter()
+                                .take(definition.arguments)
+                                .map(|(name, ty)| TempParam {
+                                    name: name.into(),
+                                    name_span: span,
+                                    ty: Some(ty),
+                                })
+                                .collect(),
+                            return_type,
+                            attributes: vec![],
+                        },
+                        body: None,
+                    }),
+                    span,
+                ))
+            })
+            .collect()
+    }
 }
 
 pub fn lookup(name: &str) -> Option<&'static BuiltinDefinition> {
@@ -157,12 +287,11 @@ pub(crate) fn numeric_constant(
     path: &[String],
 ) -> Option<(crate::ast::types::base_type::DataType, usize, bool, String)> {
     use crate::ast::types::base_type::DataType;
-    let [namespace, ty, operation] = path else {
-        return None;
+    let (ty, operation) = match path {
+        [ty, operation] => (ty, operation),
+        [namespace, ty, operation] if namespace == "std" => (ty, operation),
+        _ => return None,
     };
-    if namespace != "std" {
-        return None;
-    }
     if let Some(bits) = ty
         .strip_prefix('i')
         .or_else(|| ty.strip_prefix('u'))

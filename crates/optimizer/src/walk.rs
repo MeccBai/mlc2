@@ -146,6 +146,9 @@ pub(crate) fn statements(scope: &mut [Statement], visit: &mut impl FnMut(&mut St
                 for (_, _, branch) in &mut block.branches {
                     statements(branch, visit);
                 }
+                if let Some(branch) = &mut block.default {
+                    statements(branch, visit);
+                }
             }
             Statement::AnonymousBlock(block) => statements(&mut block.statements, visit),
             _ => {}

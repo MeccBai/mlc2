@@ -74,6 +74,11 @@ impl ResourceState {
                     branch.scope(body, result, config, symbols, span, false);
                     self.moved.extend(branch.moved);
                 }
+                if let Some(body) = &block.default {
+                    let mut branch = before;
+                    branch.scope(body, result, config, symbols, span, false);
+                    self.moved.extend(branch.moved);
+                }
             }
             Statement::VariableDecl(variable) => {
                 let ty = variable.var_type;
@@ -255,6 +260,14 @@ impl ResourceState {
                 }
                 self.expression(&block.condition, None, config, symbols, span);
                 self.scope(&block.stmts, result, config, symbols, span, true);
+                if let Some(execution) = &block.execution {
+                    self.statement(execution, result, config, symbols, span);
+                }
+                if let Some(Statement::VariableDecl(iterator)) = block.init.as_deref() {
+                    self.owners.remove(&iterator.name);
+                    self.borrows.remove(&iterator.name);
+                    self.moved.remove(&iterator.name);
+                }
             }
             Statement::AnonymousBlock(block) => {
                 self.scope(&block.statements, result, config, symbols, span, false)

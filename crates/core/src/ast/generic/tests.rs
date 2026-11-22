@@ -77,6 +77,7 @@ fn generic_conversion_uses_requirement_span() {
     let mut symbols = SymbolTable::new();
     let span: Span = (12..34).into();
     let prototype = TempGeneric {
+        parameters: vec![],
         visibility: Default::default(),
         name: "G".into(),
         name_span: span,

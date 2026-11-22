@@ -6,7 +6,7 @@ use super::{
     GenericRequirement, ParseError,
     func::interface_symbol_parser,
     out::{Span, Spanned},
-    split::{keyword, operator, path, spanned_ident, visibility},
+    split::{generic_params, keyword, operator, path, spanned_ident, visibility},
 };
 
 pub fn requirement_parser<'tokens, I>()
@@ -41,7 +41,10 @@ where
 pub fn generic_parser<'tokens, I>() -> impl Parser<
     'tokens,
     I,
-    (Spanned<String>, Vec<Spanned<GenericRequirement>>),
+    (
+        (Spanned<String>, Vec<super::GenericParam>),
+        Vec<Spanned<GenericRequirement>>,
+    ),
     extra::Err<ParseError<'tokens>>,
 > + Clone
 where
@@ -75,8 +78,12 @@ where
         .delimited_by(keyword(Token::LBrace), keyword(Token::RBrace))
         .then_ignore(keyword(Token::Semicolon).or_not());
     keyword(Token::Generic)
-        .ignore_then(spanned_ident())
-        .then(choice((composition, body)))
+        .ignore_then(spanned_ident().then(generic_params()))
+        .then(choice((
+            composition,
+            body,
+            keyword(Token::Semicolon).to(vec![]),
+        )))
         .labelled("generic declaration")
         .boxed()
 }

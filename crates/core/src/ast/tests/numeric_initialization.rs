@@ -22,7 +22,7 @@ fn enums_keep_identity_and_expose_constant_underlying_values() {
 fn bit_builtins_fold_bits_without_numeric_conversion() {
     use crate::ast::{expression::Expression, statement::Statement};
     let ast = valid(
-        "func main(){const a=std::bit::and(-1,15);const b=std::bit::xor(7,3);const c=std::bit::or(4,3);const d=std::bit::not(cast<u8>(0));const e=std::bit::shl(1,3);const f=std::bit::shr(-1,1);const g=std::bit::or(cast<f32>(1.0),cast<u32>(0));const h=std::bit::and(true,false);const i=std::bit::not(true);}",
+        "import std::bit; func main(){const a=std::bit::and(-1,15);const b=std::bit::xor(7,3);const c=std::bit::or(4,3);const d=std::bit::not(cast<u8>(0));const e=std::bit::shl(1,3);const f=std::bit::shr(-1,1);const g=std::bit::or(cast<f32>(1.0),cast<u32>(0));const h=std::bit::and(true,false);const i=std::bit::not(true);}",
     );
     for (statement, expected) in main_body(&ast).iter().zip([
         "15",
@@ -48,25 +48,25 @@ fn bit_builtins_fold_bits_without_numeric_conversion() {
 #[test]
 fn bit_builtins_require_equal_width_base_operands_and_exact_arity() {
     for source in [
-        "func main(){var n=std::bit::and(cast<u8>(1),cast<u16>(1));}",
-        "func main(){var n=std::bit::or(1.0,1);}",
-        "func main(){var n=std::bit::xor(\"a\",\"b\");}",
-        "func main(){var x=1;var n=std::bit::and(@x,@x);}",
-        "func main(){var n=std::bit::shl(1);}",
-        "func main(){var n=std::bit::not(1,2);}",
-        "func main(){var n=std::bit::and<i32>(1,2);}",
+        "import std::bit; func main(){var n=std::bit::and(cast<u8>(1),cast<u16>(1));}",
+        "import std::bit; func main(){var n=std::bit::or(1.0,1);}",
+        "import std::bit; func main(){var n=std::bit::xor(\"a\",\"b\");}",
+        "import std::bit; func main(){var x=1;var n=std::bit::and(@x,@x);}",
+        "import std::bit; func main(){var n=std::bit::shl(1);}",
+        "import std::bit; func main(){var n=std::bit::not(1,2);}",
+        "import std::bit; func main(){var n=std::bit::and<i32>(1,2);}",
     ] {
         invalid_semantics(source);
     }
     valid(
-        "func main(){var a:i32=1;var b:u32=2;var n:u32=std::bit::or(a,b);var f:f32=cast<f32>(1.0);var bits:u32=std::bit::xor(f,b);}",
+        "import std::bit; func main(){var a:i32=1;var b:u32=2;var n:u32=std::bit::or(a,b);var f:f32=cast<f32>(1.0);var bits:u32=std::bit::xor(f,b);}",
     );
 }
 
 #[test]
 fn bit_builtins_keep_nested_generic_calls_unambiguous() {
     valid(
-        "unit Box<T>{pub value:T;};func<T> identity(value:T)->T{return value;}func main(){var value=identity<Box<Box<i32>>>(Box<Box<i32>>{Box<i32>{1}});var n=std::bit::shl(1,2);}",
+        "import std::bit; unit Box<T>{pub value:T;};func<T> identity(value:T)->T{return value;}func main(){var value=identity<Box<Box<i32>>>(Box<Box<i32>>{Box<i32>{1}});var n=std::bit::shl(1,2);}",
     );
     invalid_syntax("func main(){var n=1 << 2;}");
     invalid_syntax("func main(){var n=4 >> 1;}");

@@ -14,7 +14,7 @@ impl Statement {
         config: &mut Config,
         binding: Spanned<String>,
         value: Spanned<TempExpr>,
-        branches: Vec<(Spanned<TempType>, TempScope)>,
+        branches: Vec<(Option<Spanned<TempType>>, TempScope)>,
         symbols: &mut dyn Resolution,
         context: Option<&StatementContext>,
     ) -> Self {
@@ -62,7 +62,26 @@ impl Statement {
         };
         let mut parsed = Vec::new();
         let mut seen = std::collections::HashSet::new();
+        let mut default = None;
         for (candidate, scope) in branches {
+            let mut child = context.cloned().unwrap_or_else(|| {
+                StatementContext::new(symbols::EnumBool::False(ast::FuncIndex::empty()))
+            });
+            child.push_scope(SupperScopeType::Match);
+            let Some(candidate) = candidate else {
+                if default.is_some() {
+                    config.submit_error(
+                        CompileError::IllegalUse(IllegalUseError::DuplicateDefaultBranch),
+                        span,
+                    );
+                    return Self::Poison;
+                }
+                default = Some(Self::parse_scope(config, scope, symbols, &mut child));
+                if config.is_poisoned() {
+                    return Self::Poison;
+                }
+                continue;
+            };
             let candidate_span = candidate.1;
             let Some(candidate) = resolve_type(
                 config,
@@ -106,10 +125,6 @@ impl Statement {
                 var_type,
                 init_val: Box::new(Expression::null()),
             });
-            let mut child = context.cloned().unwrap_or_else(|| {
-                StatementContext::new(symbols::EnumBool::False(ast::FuncIndex::empty()))
-            });
-            child.push_scope(SupperScopeType::Match);
             if !child.declare(config, variable.clone(), binding.1) {
                 return Self::Poison;
             }
@@ -119,7 +134,7 @@ impl Statement {
             }
             parsed.push((tag, variable, body));
         }
-        if seen.len() != variant.candidates.len() {
+        if default.is_none() && seen.len() != variant.candidates.len() {
             let missing = variant
                 .candidates
                 .iter()
@@ -140,6 +155,7 @@ impl Statement {
             value: Box::new(value),
             owner,
             branches: parsed,
+            default,
         })
     }
 }

@@ -25,6 +25,10 @@ impl TypeInfer<'_> {
         }
         let (temp, span) = temp;
         match temp {
+            TempType::MutableStr | TempType::ConstStr => {
+                let ty = symbols.local_type("str")?;
+                Some(ty.with_immutability(matches!(temp, TempType::ConstStr), symbols))
+            }
             TempType::Function {
                 params,
                 returns,
@@ -64,10 +68,17 @@ impl TypeInfer<'_> {
             }
             TempType::Path(path) => {
                 let path = SymbolName::path(&path.segments);
+                if path == "str" {
+                    let ty = symbols.local_type("str")?;
+                    return Some(ty.with_immutability(true, symbols));
+                }
                 if let Some(ty) = bindings.resolve_generic(&path, symbols) {
                     return Some(ty);
                 }
                 match symbols.named_type(config, &path) {
+                    Some(ty) if matches!(symbols.get_type(ty).unqualified(), CompileType::Str) => {
+                        Some(ty.with_immutability(true, symbols))
+                    }
                     Some(ty) => Some(ty),
                     None => {
                         config.submit_error(CompileError::Resolve(ResolveError::UnknownType), span);

@@ -71,12 +71,15 @@ impl fmt::Display for IllegalUseError {
         use IllegalUseError::*;
         f.write_str(match self {
             InvalidUnion { reason } => return f.write_str(reason),
-            InvalidStringOperation => "str is an immutable compile-time string; use str::len or const_c_str explicitly",
+            InvalidStringOperation => "this operation is unavailable for str; use str::len or str::as_ptr explicitly",
             InvalidFunctionPointerOperation => "Function pointers support calling, copying and borrowing, not arithmetic or value matching",
             FunctionPointerRequiresInitializer => "Every function pointer array element must be initialized; null function pointers are not supported",
             ReservedDeconstruct => "Unit deconstruct is generated automatically and cannot be defined by the user",
             ConstantEvaluation { reason } => return write!(f, "Compile-time evaluation: {reason}"),
             NonConstantMatchCase => "Match case values must be compile-time constants",
+            NonExhaustiveEnumMatch { missing } => {
+                return write!(f, "Enum match is not exhaustive; missing: {missing}");
+            }
             MissingDefaultBranch => "Match requires a default branch: _ => { ... }",
             ResourceRequiresOwner => "A temporary resource requires an explicit res owner",
             ResourceInferenceRequiresInitializer => "Bare res is only allowed in a variable declaration with a resource initializer",
@@ -132,7 +135,9 @@ impl fmt::Display for IllegalUseError {
             UnexpectedReturnValue => {
                 "Cannot return a value without a declared return type; declare a return type or use return;"
             }
-            ForBoundMustBeInteger => "for loop bounds must be integers",
+            InvalidIterator { requirement, reason } => {
+                return write!(f, "for requires {requirement}: {reason}");
+            }
             DuplicateDefaultBranch => "match can have only one default branch",
             ArgumentCountMismatch => "Argument count does not match the parameter list",
         })

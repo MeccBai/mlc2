@@ -5,8 +5,8 @@ use crate::lexer::{TokenPack, token::Token};
 
 use super::{
     MatchPattern, ParseError, Scope, Spanned, Statement,
-    expr::expression_parser,
-    out::{Span, TempVar},
+    expr::{expression_parser, iterator_expression_parser},
+    out::{Span, TempForBinding, TempVar},
     split::{ident, keyword, operator, spanned_ident, type_parser},
 };
 
@@ -115,7 +115,9 @@ where
                     .delimited_by(keyword(Token::LParen), keyword(Token::RParen)),
             )
             .then(
-                type_parser()
+                keyword(Token::Default)
+                    .to(None)
+                    .or(type_parser().map(Some))
                     .then_ignore(keyword(Token::FatArrow))
                     .then(scope.clone())
                     .separated_by(operator(Token::Comma))
@@ -141,20 +143,26 @@ where
                 scope,
             });
 
-        let for_bounds = expression
-            .clone()
-            .then_ignore(operator(Token::Comma))
-            .then(expression.clone())
-            .delimited_by(keyword(Token::LeftBracket), keyword(Token::RightBracket));
+        let for_binding = operator(Token::Dereference)
+            .ignore_then(keyword(Token::Mut).or_not())
+            .map(|mutable| {
+                if mutable.is_some() {
+                    TempForBinding::MutRef
+                } else {
+                    TempForBinding::Ref
+                }
+            })
+            .or_not()
+            .then(spanned_ident());
         let for_ = keyword(Token::For)
-            .ignore_then(spanned_ident())
+            .ignore_then(for_binding)
             .then_ignore(keyword(Token::In))
-            .then(for_bounds)
+            .then(iterator_expression_parser())
             .then(scope.clone())
-            .map(|((binding, (start, end)), scope)| Statement::For {
+            .map(|(((mode, binding), iterator), scope)| Statement::For {
                 binding,
-                start,
-                end,
+                mode: mode.unwrap_or(TempForBinding::Clone),
+                iterator,
                 scope,
             });
 

@@ -1,9 +1,9 @@
 # MLC 语言语法与示例
 
 本文描述当前编译器已经支持的源码语法，不把设计草案当作已实现功能。
-源码后缀当前为 `.m2`，属于可调整的编译器常量。
+源码文件使用 `.m2` 后缀。
 标为 `rust` 的代码块是可独立检查的完整模块；标为 `text` 的代码块是语法片段、跨文件片段或故意错误的示例。
-构建与 CLI 参数见 [CLI 文档](cli.md)，构建缓存与产物见 [构建管线](build_pipeline.md)。
+构建与 CLI 参数见 [CLI 文档](cli.md)。
 
 ## 1. 最小程序
 
@@ -22,9 +22,7 @@ func main() -> i32 {
 普通输出使用 std::println!，不需要构造 C 字符串。常用 C API 声明模块见 [c_std](c_std.md)。
 可以用 `mlc build main.m2` 构建、`mlc run main.m2` 构建并运行，或 `mlc ll main.m2` 只生成 LLVM IR。
 
-AST 优化由独立的 `mlc_optimizer` pass 管线控制：常量折叠、死代码消除、未使用局部变量存储消除、零引用函数消除。
-默认关闭可选优化；`--release` 和 `--rel-with-info` 全开，`--debug` 关闭。`--optimize` / `--no-optimize` 可显式覆盖优化设置，同时控制 LLVM 机器码优化。
-开关同时控制可选 AST 优化和 LLVM 后端优化；不影响 `const` 求值、数值范围检查、字面量类型规范化或调试信息开关。
+构建模式及优化开关见 [CLI 文档](cli.md)。
 
 ## 2. 词法与标点
 
@@ -168,6 +166,8 @@ cast<T>(value) 表示主动转换，不按目标数值范围拒绝输入；它�
 赋值是语句，不是可嵌入其他表达式的赋值表达式；不提供 ++、--、+= 或三元 ?:。
 
 ```rust
+import std::bit;
+
 func main() -> i32 {
     var a = 5;
     var b = 3;
@@ -182,6 +182,8 @@ func main() -> i32 {
 ```
 
 ### 按位内建函数
+
+先用 `import std::bit;` 导入位运算模块，也可以从转导出它的模块取得这些函数。
 
 `std::bit::and(a,b)`、`xor(a,b)`、`or(a,b)`、`shl(a,b)`、`shr(a,b)` 接收两个参数；
 `std::bit::not(a)` 接收一个参数。所有参数必须为 BaseType，二元操作的位宽必须一致，
@@ -356,6 +358,18 @@ func main() -> i32 {
 
 ## 13. 泛型与约束
 
+约束可以声明类型参数。使用带参数的约束时显式提供类型实参，例如 `I: std::collection::iter::Iterator<T>`。在 `import std::collection;` 后可以使用 `Iterator<T>` 和 `IteratorMut<T>` 的完整名称。
+
+```mlc
+import std::collection;
+
+func<T, I: std::collection::iter::Iterator<T>> current(iter: I) -> T {
+    return iter.get_clone();
+}
+```
+
+类型实参可以引用同一参数列表中的其他参数，也可以带自己的约束。例如 `generic Reader<T: Number> { func get_clone(self) -> T; };` 会先验证 `T` 满足 `Number`，再用同一个具体类型检查接口签名。
+
 普通函数写 func<T,...> name，Unit / Union 支持 Name<T,...> 或 <T,...> Name 两种位置，
 但不能同时在前后各声明一份泛型参数。约束为 T:Requirement，没有约束则为 T。
 
@@ -402,12 +416,11 @@ func<T:SignedInteger> twice(value:T)->T { return value+value; }
 func main()->i32 { return twice(21); }
 ```
 
-合并在 AST lower 时完成，直接展开为原有的要求列表，并去除重复要求，
-不会保留新的组合类型。支持前向引用、已导入的导出约束及 `using` 别名；
+合并后的约束要求同时满足各项条件，重复条件视为一条。支持前向引用、已导入的导出约束及 `using` 别名；
 循环引用和不存在的约束会报错。组合声明必须以分号结束。
 这里只允许 `&&`，不支持 `||`、`&`、算术或比较运算。
 `is_integer` 与 `is_float`、无法同时满足的位宽范围、同名但互斥的接口签名，
-都会在声明 lower 时直接报错，无需等到实例化。
+都会在声明处直接报错，无需等到实例化。
 
 ```rust
 generic Readable {
@@ -473,10 +486,10 @@ func main() -> i32 {
 构造必须恰好给出一个值，精确匹配候选类型，不隐式转换来选择 tag。
 候选类型不允许重复；泛型实例化后重新检查重复。
 match (name = reference) 的右侧必须是 Union 的单层、非拥有型 Ref；分支 Ref 继承右侧引用的可变性。
-必须穷举所有候选，不允许 _、重复类型、非候选类型或按值绑定。
+可以穷举所有候选类型，也可以用 `_` 处理其余候选。`_` 分支没有载荷绑定。禁止重复类型、非候选类型和按值绑定。
 可以直接传已有 Ref，例如 match (y = reference) 或接口中的 match (y = self)；也可用 @object / @mut object 借用已有对象。
 分支绑定仅在本分支可用，不获得资源所有权；不能移出资源、逃逸引用或在借用期间替换整个 Union。
-Union 支持 Interface，但不支持 C ABI。LLVM 布局为 i32 tag + 最大候选大小的对齐内联 payload。
+Union 支持 Interface，但不支持 C ABI。
 任一候选含资源时，Union 成为 move-only，析构只处理活跃 tag。
 更详细的布局规则见 [Union 文档](variant-design.md)。
 
@@ -515,12 +528,14 @@ else if 自动等价于 else { if (...) {...} }。
 作用域内变量不向外泄露；独立作用域使用 anonymous {...}，不能裸写 {...} 当语句。
 
 ```rust
+import std;
+
 func main() -> i32 {
     var total = 0;
-    for i in [0,5] {
+    for i in std::range(cast<u64>(0), cast<u64>(5)) {
         if (i == 1) { continue; }
         else if (i == 4) { break; }
-        else { total = total + i; }
+        else { total = total + cast<i32>(i); }
     }
     while (total < 10) { total = total + 1; }
     anonymous {
@@ -531,7 +546,9 @@ func main() -> i32 {
 }
 ```
 
-for name in [start,end] 是整数计数循环，左闭右开，每次加 1，非通用迭代器。
+`for e in iter` 每次调用 `get_clone()` 取得值。`for $e in iter` 通过 `get_ref()` 取得只读引用，`for $mut e in iter` 要求迭代器满足 `IteratorMut<T>`，并通过 `get_ref()` 取得可写引用。
+
+导入 `std` 后，可以用 `std::range(start, end)` 或 `std::range_step(start, end, step)` 创建 `RangeIter`。参数都是 `u64`，区间左闭右开。步长为零时区间为空。迭代器表达式只求值一次。循环绑定只在循环体内可见，`continue` 会前进到下一项。
 边界需要相符整数类型；不支持步长参数、逆向循环、C 三段式 for。
 break / continue 必须位于循环内；match 不会因此成为独立可 break 的循环。
 return 只能位于函数或 Interface 内。
@@ -550,10 +567,9 @@ func classify(value:i32) -> i32 {
 func main() -> i32 { return classify(3); }
 ```
 
-普通 match 的 case 必须为同类型编译期常量，必须有一个 _ 默认分支；
-_ 不能重复，分支用逗号分隔。与 Union 的按类型穷举 match 是不同规则。
+普通 `match` 的 case 必须为同类型编译期常量。枚举的所有值均已覆盖时可以省略 `_`，其他普通 `match` 仍需要一个 `_` 分支。分支用逗号分隔。
 分支是独立作用域，不发生 C switch 的 fallthrough。
-可求值的常量 if / match 仅生成选中分支；恒假 while 和确定零次的 for 可消除。
+可求值的常量 if / match 仅生成选中分支；恒假的 `while` 可消除。
 不能安全展开的常量或未知条件保留运行期控制流，目前不做循环展开。
 
 ## 18. Res、move 与自动析构
@@ -670,7 +686,7 @@ export import module; 转导出依赖的可搜索符号，例如第三个文件�
 仍以原模块的限定名称访问符号。源码循环依赖由构建端拒绝。
 不允许通过 import 取得其他模块的全局变量。
 
-using 建立符号 / 类型别名，解析后不保留独立运行期 AST 节点。
+using 为类型或符号指定别名。也可以用枚举类型的别名访问枚举项。
 别名查询优先级低于实际符号；不能借别名绕过可见性或把 Enum 值变成无前缀名称。
 
 ```rust
@@ -701,16 +717,14 @@ c_abi 选择 C ABI，不自动导出；export 决定外部符号可见性。
 C ABI 函数使用原名，不使用内部模块修饰名。
 C ABI Unit 不允许泛型或 Interface；Union 不允许 C ABI。
 C ABI 函数不允许泛型，参数中不能出现非 C ABI Unit（包含经 Ref / 数组包装的情况）。
-平台 ABI 布局与寄存器映射由 lowering 决定，不把内部 ABI 规则当作所有平台的 C ABI 标准。
 
 外部 C API 通过 `.sym` 声明元数据显式导入。`mlc symbols declarations.h`
 支持受限头文件：完整具名 struct、函数原型、明确宽度整数、浮点和指针等；
 不执行预处理，不接受 `#include`、`typedef`、函数体或任意系统头文件。
-详细限制见 [ffi_parser](../crates/ffi_parser/README.md)。也可维护声明 TOML，
+详细限制见 [C 声明使用](c_std.md)。也可维护声明 TOML，
 通过 `mlc symbols declarations.toml` 转换。两种输入都生成 `Object = "None"` 的 `.sym`；
 普通 `import` 不直接读取 `.h` 或声明 TOML。源码中不允许无 body 的 C ABI 函数声明，
-但允许带 body 的 C ABI 定义。具体格式见 [构建流水线](build_pipeline.md)。
-符号元数据、对象和泛型体缓存不是语言中的反射或序列化语法。
+但允许带 body 的 C ABI 定义。
 
 ## 22. 尚未提供的语法与边界
 

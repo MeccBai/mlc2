@@ -551,6 +551,7 @@ fn build(
             mlc_manifest::BUILD_NUMBER,
             &ir,
             optimized,
+            optimized.then_some(mlc_builder::llvm::OPTIMIZATION_PIPELINE),
         ))?;
         let hit = cache::matches(&object, &key);
         if !hit {

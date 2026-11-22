@@ -134,23 +134,56 @@ impl Expression {
                 span,
             );
         }
-        let target = if kind == Builtin::ConstCStr {
-            symbols.get_base(DataType::Integer, 8, true)
-        } else if kind == Builtin::StrLen {
-            symbols.get_base(DataType::Integer, 64, false)
-        } else {
-            target
-        };
-        let mut args: Vec<_> = args
+        let args = args
             .into_iter()
             .map(|arg| Expression::new(config, arg, symbols, context).const_fold(config, symbols))
             .collect();
+        Self::new_builtin_with_values(config, definition, target, args, span, symbols)
+    }
+
+    pub(super) fn new_builtin_with_values(
+        config: &mut Config,
+        definition: &crate::ast::builtins::BuiltinDefinition,
+        target: TypeIndex,
+        mut args: Vec<Self>,
+        span: Span,
+        symbols: &mut dyn Resolution,
+    ) -> Self {
+        let kind = definition.kind;
+        let target = if matches!(kind, Builtin::ConstCStr | Builtin::StrAsPtr) {
+            symbols.get_base(DataType::Integer, 8, true)
+        } else if kind == Builtin::StrFirstByte {
+            symbols.get_base(DataType::Integer, 8, false)
+        } else if kind == Builtin::StrLen {
+            symbols.get_base(DataType::Integer, 64, false)
+        } else if kind == Builtin::StrFromParts {
+            symbols.local_type("str").expect("native str type")
+        } else {
+            target
+        };
         if config.is_poisoned() {
             return Self::Poison(span);
         }
         let mut source = args[0].type_inference(config, symbols);
         if source.is_empty() {
             return Self::invalid_builtin(config, definition.name, span);
+        }
+        let mut extra_param = None;
+        if kind == Builtin::StrFromParts {
+            let byte = symbols.get_base(DataType::Integer, 8, true);
+            let pointer = byte.make_ref(symbols, false);
+            let length = symbols.get_base(DataType::Integer, 64, false);
+            if !args[0].type_check(&pointer, config, symbols)
+                || !args[1].type_check(&length, config, symbols)
+            {
+                return Self::invalid_builtin(config, definition.name, span);
+            }
+            args[1].check_constant_range(length, config, symbols, span);
+            if config.is_poisoned() {
+                return Self::Poison(span);
+            }
+            args[1] = args[1].clone().normalize_initializer(length, symbols);
+            extra_param = Some((length, "length".into()));
         }
         if kind == Builtin::Address {
             let address_type = symbols.get_base(DataType::Integer, config.ptr_size * 8, false);
@@ -181,12 +214,14 @@ impl Expression {
             | Builtin::BitNot
             | Builtin::BitShl
             | Builtin::BitShr => unreachable!(),
-            Builtin::ConstCStr => {
+            Builtin::ConstCStr | Builtin::StrAsPtr => {
                 matches!(symbols.get_type(source).unqualified(), CompileType::Str)
             }
-            Builtin::StrLen => matches!(symbols.get_type(source).unqualified(), CompileType::Str),
+            Builtin::StrLen | Builtin::StrFirstByte => {
+                matches!(symbols.get_type(source).unqualified(), CompileType::Str)
+            }
             Builtin::Alloc => source.is_integer(symbols),
-            Builtin::Address => true,
+            Builtin::Address | Builtin::StrFromParts => true,
             Builtin::Cast => matches!(
                 (
                     symbols.get_type(source).unqualified(),
@@ -231,7 +266,8 @@ impl Expression {
             | Builtin::BitShl
             | Builtin::BitShr => unreachable!(),
             Builtin::StrLen => Some(symbols.get_base(DataType::Integer, 64, false)),
-            Builtin::ConstCStr => Some(
+            Builtin::StrFromParts | Builtin::StrFirstByte => Some(target),
+            Builtin::ConstCStr | Builtin::StrAsPtr => Some(
                 symbols
                     .get_base(DataType::Integer, 8, true)
                     .make_ref(symbols, false),
@@ -261,7 +297,9 @@ impl Expression {
                 constant: false,
                 span: span,
                 name,
-                params: vec![(source, "input".into())],
+                params: std::iter::once((source, "input".into()))
+                    .chain(extra_param)
+                    .collect(),
                 ret_type: result,
                 generics: Vec::new(),
                 generic_map: HashMap::new(),

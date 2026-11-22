@@ -35,6 +35,7 @@ enum RawItem {
     },
     Generic {
         name: Spanned<String>,
+        parameters: Vec<TempGenericParam>,
         requirements: Vec<Spanned<TempConstraints>>,
     },
     Enum {
@@ -129,8 +130,11 @@ where
         .then_ignore(keyword(Token::Semicolon))
         .map(|(name, ty)| RawItem::Using { name, ty });
 
-    let generic =
-        generic_parser().map(|(name, requirements)| RawItem::Generic { name, requirements });
+    let generic = generic_parser().map(|((name, parameters), requirements)| RawItem::Generic {
+        name,
+        parameters,
+        requirements,
+    });
 
     let function = function_parser().map(RawItem::Function);
     let interface = interface_parser().map(RawItem::Interface);
@@ -288,12 +292,14 @@ where
                 }),
                 RawItem::Generic {
                     name: (name, name_span),
+                    parameters,
                     requirements,
                 } => TempGlobalStmt::Generic(TempGeneric {
                     visibility,
                     name,
                     name_span,
                     requirements,
+                    parameters,
                     attributes,
                 }),
                 RawItem::Enum {

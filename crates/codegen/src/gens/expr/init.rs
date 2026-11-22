@@ -99,7 +99,7 @@ impl Expander<'_> {
         }
     }
 
-    fn convert_initializer(
+    pub(super) fn convert_initializer(
         &mut self,
         value: &mut LlvmValue,
         operand: IrValue,

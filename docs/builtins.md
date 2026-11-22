@@ -1,8 +1,8 @@
 # Built-in functions
 
 `cast`, `str::len`, `const_c_str` and `std::function` are compiler-owned names.
-Memory operations require `import std::mem;`; the old bare `alloc`/`dealloc`
-interfaces are not provided. Imported memory declarations lower to compiler intrinsics.
+Memory operations require `import std::mem;` or an import that re-exports it; the old bare `alloc`/`dealloc`
+interfaces are not provided.
 
 ```rust
 import std::mem;
@@ -15,8 +15,10 @@ func main() -> i32 {
 }
 ```
 
+- `std::mem::address<T>(address)` creates a mutable reference at an integer address.
+  Use `u32` on 32-bit targets and `u64` on 64-bit targets.
 - `std::mem::alloc<T>(count)` allocates storage for `count` elements of `T`, returning
-  an owning `res $mut T`. It lowers to `malloc(sizeof(T) * count)`; memory is uninitialized.
+  an owning `res $mut T`. The allocated memory is uninitialized.
   Constant negative counts are errors. Runtime negative counts, size multiplication
   overflow, and null allocation results terminate the program through `abort`.
   A zero-size allocation still follows the allocator's result and the null check.
@@ -27,17 +29,16 @@ func main() -> i32 {
 - `cast<T>(input)` converts numeric values or explicitly reinterprets reference
   types. Numeric conversions do not check value ranges. Integer narrowing keeps
   the low bits; widening respects source signedness. Float-to-integer conversion
-  truncates toward zero; values outside the representable range have LLVM poison
-  semantics, not a defined wrapping result. Integer constant casts are folded.
+  truncates toward zero; the truncated result must fit the destination type.
 - `str::len(text)` accepts native `str` and returns its UTF-8 byte length as `u64`.
   Literal lengths are folded during compilation. Embedded NUL bytes count toward
   the length; the trailing C terminator does not.
-- `const_c_str(text)` explicitly accepts native `str` (including a `str` parameter),
-  appends one NUL byte after its UTF-8 bytes, and returns an immutable `$i8`.
-  Storage is a deduplicated LLVM global constant, not stack or heap memory.
-  Use it only when a C API needs a NUL-terminated pointer; never deallocate it.
-  For ordinary output, use `std::println!("{}", text)` directly instead of
-  converting to a C string. Embedded NULs are retained in the C storage.
+- `text.first_byte()` returns the first raw UTF-8 byte as `u8`, or zero for an empty string.
+- `str::as_ptr(text)` returns a read-only pointer to the UTF-8 bytes.
+- `str::from_parts(ptr, len)` creates a view over an existing UTF-8 byte range.
+- `const_c_str(text)` returns a read-only pointer for C APIs that expect
+  NUL-terminated input. String literals already include a trailing NUL.
+  See [Native str](str.md) for pointer lifetime and raw view requirements.
 
 Ordinary initialization, assignment, and return conversions continue to reject
 out-of-range integer constants. A later implicit narrowing remains checked:
@@ -56,12 +57,33 @@ Allocation failure is not a recoverable null result and does not unwind or run c
 
 ## Numeric constant intrinsics
 
-`std::i8/i16/i32/i64::min()/max()` and `std::u8/u16/u32/u64::min()/max()` return the exact limits of that type. `std::f32/f64::min()/max()` return the most negative and largest finite values; `min_positive()` returns the smallest positive normal value, and `epsilon()` returns the spacing above 1.
+Integer types expose `min()` and `max()` for their exact limits. `f32` and `f64` expose `min()` and `max()` for their most negative and largest finite values, `min_positive()` for the smallest positive normal value, and `epsilon()` for the spacing above 1. The same intrinsics are also available with the `std::` prefix.
 
 ```text
-const upper:u32 = std::u32::max();
-const lower:i32 = std::i32::min();
-const tolerance:f64 = std::f64::epsilon();
+const upper:u32 = u32::max();
+const lower:i32 = i32::min();
+const tolerance:f64 = f64::epsilon();
 ```
 
-These compiler-owned, zero-argument functions produce typed constant expressions immediately, including in default/debug builds. They do not require importing a library module, emit no function call, accept no generic arguments and do not enable implicit narrowing or signedness conversion. Call them directly; they are not runtime function-pointer targets.
+These compiler-owned, zero-argument functions return typed compile-time constants, including in default/debug builds. They do not require importing a library module, accept no generic arguments and do not enable implicit narrowing or signedness conversion. Call them directly; they are not runtime function-pointer targets.
+
+## todo()
+
+内建 todo() 接受零个参数，可填入有预期类型的表达式位置：
+
+~~~m2
+unit Item { pub value: i32; };
+
+func load() -> Item {
+    return todo();
+}
+
+func main() -> i32 {
+    var result: f64 = todo();
+    return 0;
+}
+~~~
+
+它不产生真实的替代值。正常编译后，一旦执行到该位置，就打印当前源文件、行、列
+和 not implemented (todo)，然后调用退出接口以 -1 结束进程。无需 import std。
+退出码在不同操作系统上可能表现为不同的非零整数。编辑器分析只检查它，不执行它。

@@ -3,7 +3,7 @@ use crate::ast::{
     TypeIndex,
     builtins::Builtin,
     expression::{CompAtom, Composite, Expression, UnaryExpr, operators::Operator},
-    statement::{ForStatement, MatchPattern, MatchStatement, Statement, Variable},
+    statement::{MatchPattern, MatchStatement, Statement},
     symbols::{EnumBool, PackageSymbolTable},
     types::{CompileType, base_type::DataType},
 };
@@ -35,7 +35,6 @@ impl Scalar {
 
 pub(super) enum MatchSelection<'a> {
     Dynamic,
-    Skip,
     Scope(&'a [Statement]),
 }
 
@@ -60,32 +59,14 @@ pub(super) fn select_match<'a>(
             }
         }
     }
-    default.map_or(MatchSelection::Skip, MatchSelection::Scope)
+    default.map_or(MatchSelection::Dynamic, MatchSelection::Scope)
 }
 
 pub(super) fn value(expression: &Expression, package: &PackageSymbolTable) -> Option<Scalar> {
-    evaluate(expression, package, None)
+    evaluate(expression, package)
 }
 
-pub(super) fn empty_for(statement: &ForStatement, package: &PackageSymbolTable) -> bool {
-    let binding = match statement.init.as_deref() {
-        Some(Statement::VariableDecl(variable)) => {
-            let Some(initial) = value(&variable.init_val, package) else {
-                return false;
-            };
-            Some((&**variable, initial))
-        }
-        None => None,
-        _ => return false,
-    };
-    evaluate(&statement.condition, package, binding).and_then(Scalar::boolean) == Some(false)
-}
-
-fn evaluate(
-    expression: &Expression,
-    package: &PackageSymbolTable,
-    binding: Option<(&Variable, Scalar)>,
-) -> Option<Scalar> {
+fn evaluate(expression: &Expression, package: &PackageSymbolTable) -> Option<Scalar> {
     if matches!(expression, Expression::ConstValueE(constant, ..) if constant.ty.is_empty()) {
         return None;
     }
@@ -122,22 +103,12 @@ fn evaluate(
                 _ => None,
             }
         }
-        Expression::VarValueE(variable, ..) => {
-            if let Some((target, initial)) = binding {
-                if variable.name == target.name
-                    && variable.var_type == target.var_type
-                    && variable.declaration_span == target.declaration_span
-                {
-                    return Some(initial);
-                }
-            }
-            (variable.constant)
-                .then(|| evaluate(&variable.init_val, package, binding))
-                .flatten()
-        }
-        Expression::CompositeE(composite, ..) => composite_value(composite, package, binding),
+        Expression::VarValueE(variable, ..) => (variable.constant)
+            .then(|| evaluate(&variable.init_val, package))
+            .flatten(),
+        Expression::CompositeE(composite, ..) => composite_value(composite, package),
         Expression::UnaryExprE(UnaryExpr::Operator { op, value }, ..) => {
-            let value = atom(value, package, binding)?;
+            let value = atom(value, package)?;
             match (op, value) {
                 (Operator::LogicalNot, Scalar::Bool(value)) => Some(Scalar::Bool(!value)),
                 (Operator::Negate, Scalar::Integer(value, ty)) => {
@@ -155,7 +126,7 @@ fn evaluate(
             if symbol.builtin() != Some(Builtin::Cast) {
                 return None;
             }
-            let input = evaluate(call.args.first()?, package, binding)?;
+            let input = evaluate(call.args.first()?, package)?;
             let ty = symbol.ret_type?;
             let CompileType::Base(base) = package.get_type(ty).unqualified() else {
                 return None;
@@ -176,24 +147,15 @@ fn evaluate(
     }
 }
 
-fn atom(
-    atom: &CompAtom,
-    package: &PackageSymbolTable,
-    binding: Option<(&Variable, Scalar)>,
-) -> Option<Scalar> {
-    evaluate(&atom.clone().to_expression(), package, binding)
+fn atom(atom: &CompAtom, package: &PackageSymbolTable) -> Option<Scalar> {
+    evaluate(&atom.clone().to_expression(), package)
 }
 
-fn composite_value(
-    composite: &Composite,
-    package: &PackageSymbolTable,
-    binding: Option<(&Variable, Scalar)>,
-) -> Option<Scalar> {
+fn composite_value(composite: &Composite, package: &PackageSymbolTable) -> Option<Scalar> {
     fn part(
         members: &[CompAtom],
         operators: &[Operator],
         package: &PackageSymbolTable,
-        binding: Option<(&Variable, Scalar)>,
     ) -> Option<Scalar> {
         if members.len() != operators.len() + 1 {
             return None;
@@ -203,24 +165,19 @@ fn composite_value(
             .enumerate()
             .min_by_key(|(index, op)| (op.precedence(), std::cmp::Reverse(*index)))
         else {
-            return atom(members.first()?, package, binding);
+            return atom(members.first()?, package);
         };
-        let left = part(&members[..split + 1], &operators[..split], package, binding)?;
+        let left = part(&members[..split + 1], &operators[..split], package)?;
         // Only skip operands whose runtime evaluation would also be skipped.
         match (op, left) {
             (Operator::LogicalAnd, Scalar::Bool(false)) => return Some(Scalar::Bool(false)),
             (Operator::LogicalOr, Scalar::Bool(true)) => return Some(Scalar::Bool(true)),
             _ => {}
         }
-        let right = part(
-            &members[split + 1..],
-            &operators[split + 1..],
-            package,
-            binding,
-        )?;
+        let right = part(&members[split + 1..], &operators[split + 1..], package)?;
         binary(left, op, right, package)
     }
-    part(&composite.members, &composite.operators, package, binding)
+    part(&composite.members, &composite.operators, package)
 }
 
 fn integer(value: i128, ty: TypeIndex, package: &PackageSymbolTable) -> Option<Scalar> {

@@ -7,7 +7,7 @@ use crate::ast::{
 impl TypeInfer<'_> {
     pub(crate) fn atom_assignable(&mut self, expression: &CompAtom) -> bool {
         let ty = self.atom_type(expression);
-        if !ty.is_empty() && matches!(self.symbols.get_type(ty).unqualified(), CompileType::Str) {
+        if self.is_read_only_str(ty) {
             return false;
         }
         let config = &mut *self.config;
@@ -20,7 +20,7 @@ impl TypeInfer<'_> {
     }
     pub fn assignable(&mut self, expression: &Expression) -> bool {
         let ty = self.type_of(expression);
-        if !ty.is_empty() && matches!(self.symbols.get_type(ty).unqualified(), CompileType::Str) {
+        if self.is_read_only_str(ty) {
             return false;
         }
         let config = &mut *self.config;
@@ -31,6 +31,12 @@ impl TypeInfer<'_> {
             _ => false,
         }
     }
+    fn is_read_only_str(&self, ty: crate::ast::TypeIndex) -> bool {
+        !ty.is_empty()
+            && ty.is_immutable(self.symbols)
+            && matches!(self.symbols.get_type(ty).unqualified(), CompileType::Str)
+    }
+
     pub(crate) fn unary_assignable(&mut self, expression: &UnaryExpr) -> bool {
         let config = &mut *self.config;
         let symbols = &mut *self.symbols;

@@ -67,7 +67,7 @@ fn else_if_without_final_else_is_allowed_but_else_requires_block_or_if() {
 
 #[test]
 fn local_and_global_variables_share_temp_var_and_for_binding_keeps_span() {
-    let source = "global var globalValue:i32 = 1; func main() { var localValue:i32 = 2; for index in [0, 2] {} }";
+    let source = "global var globalValue:i32 = 1; func main() { var localValue:i32 = 2; for index in test_range(0, 2) {} }";
     let module = parse_ok(source);
     let TempGlobalStmt::Variable(global) = &module[0].0 else {
         panic!("expected global variable");
@@ -95,7 +95,7 @@ fn local_and_global_variables_share_temp_var_and_for_binding_keeps_span() {
 fn parses_references_arrays_and_half_open_for() {
     let module = parse_ok(
         "func main() { var a:i32 = 0; var c:$i32 = @a; $c = 10; \
-         var values = [1, 2, 3]; for i in [0, 10] { continue; } }",
+         var values = [1, 2, 3]; for i in test_range(0, 10) { continue; } }",
     );
     let TempGlobalStmt::Func(function) = &module[0].0 else {
         panic!("expected a function");

@@ -11,7 +11,7 @@ impl TempPath {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(tag = "kind", content = "data")]
 pub enum TempType {
     Function {
@@ -20,6 +20,8 @@ pub enum TempType {
         variadic: bool,
     },
     InferredResource,
+    MutableStr,
+    ConstStr,
     Resource {
         inner: Box<Spanned<TempType>>,
     },
@@ -41,6 +43,8 @@ pub enum TempType {
 impl TempType {
     pub fn dump(&self) -> String {
         match self {
+            Self::MutableStr => "mut str".into(),
+            Self::ConstStr => "const str".into(),
             Self::Function {
                 params,
                 returns,

@@ -111,6 +111,10 @@ pub(super) fn prepare(
             .collect::<Result<Vec<_>, _>>()?;
         let key = artifacts::semantic_hash(&(
             "package-v1",
+            package
+                .profile
+                .optimized()
+                .then_some(mlc_builder::llvm::OPTIMIZATION_PIPELINE),
             &package.requirement,
             &paths.triplet,
             package.profile.directory(),

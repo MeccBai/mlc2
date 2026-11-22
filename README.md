@@ -130,37 +130,9 @@ $env:MLC = (Get-Location).Path
 ./target/release/mlc.exe run crates/examples/sources/hello_world.m2
 ```
 
-## 编译流程与 workspace
-
-```text
-.m2 → Lexer / Chumsky → Temp AST → 类型与语义分析 → AST 优化
-                                                 ↓
-                         原生对象 / 链接 ← LLVM ← 文本 IR
-```
-
-| Crate | 职责 |
-| --- | --- |
-| `mlc_syntax` | 词法、Chumsky 语法解析、Temp AST、span 和源码行表 |
-| `mlc_core` | 符号 / 类型、推断、语义检查、泛型实例化及资源语义 |
-| `mlc_optimizer` | 分析后的 AST 优化 pass |
-| `mlc_codegen` | AST 到 LLVM IR、ABI 适配与析构代码生成 |
-| `mlc_builder` | 依赖调度、缓存 / `.sym` / `.mg`、LLVM 对象生成 |
-| `mlc_formatter` | 复用语法层、保留注释的固定样式格式化 |
-| `ffi_parser` | 受限固定宽度 C 声明解析 |
-| `mlc_examples` | 内嵌语言示例 |
-| `mlc` | CLI、跨模块编排和最终链接 |
-
 ## 文档
 
-- [完整语法与示例](docs/language.md)
-- [CLI 与构建模式](docs/cli.md)
-- [简易 LSP 与 todo()](docs/lsp.md)
-- [示例指南](docs/examples.md)
-- [标准 C API 声明模块](docs/c_std.md)
-- [构建管线与缓存](docs/build_pipeline.md)
-- [安装布局与分发](docs/distribution.md)
-- [格式化规则](docs/formatting.md)
-- [调试信息](docs/debug-info.md)
-- [Workspace 设计](docs/workspace.md)
+- [语言使用](docs/README.md#语言使用)
+- [编译器实现](docs/README.md#实现)
 
 功能和语法仍会调整。报告问题时，请附最小 `.m2` / `.h` 示例、执行命令、目标 triplet 和完整诊断输出。

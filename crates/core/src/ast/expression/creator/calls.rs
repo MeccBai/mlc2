@@ -116,9 +116,6 @@ impl Expression {
             params.push(Expression::new(config, arg, symbols, context));
         }
         let offset = usize::from(symbol.receiver_type.is_some());
-        let fixed = params.split_off(offset);
-        let fixed = Self::coerce_arguments(fixed, &symbol.params, config, symbols, span);
-        params.extend(fixed);
         if generic {
             let Some(index) =
                 Self::infer_interface(config, interface, &params[offset..], span, symbols, context)
@@ -191,11 +188,7 @@ impl Expression {
             return Self::new_indirect_call(config, callee, args, span, symbols, context);
         }
         if let TempExpr::Path(path) = &callee.0 {
-            if path.segments.len() == 1
-                || path.segments == ["std", "mem", "address"]
-                || path.segments.join("::") == "str::len"
-                || path.segments.starts_with(&["std".into(), "bit".into()])
-            {
+            if path.segments.len() == 1 || path.segments.first().is_some_and(|part| part == "str") {
                 if let Some(definition) = crate::ast::builtins::lookup(&path.segments.join("::")) {
                     if definition.type_arguments != 0 {
                         config.submit_error(
@@ -217,9 +210,32 @@ impl Expression {
             }
         }
         if let TempExpr::Path(path) = &callee.0 {
-            if let Some(crate::ast::symbols::PathSymbol::Interface { generic: true, .. }) =
-                symbols.resolve_path(config, path, context)
-            {
+            use crate::ast::symbols::PathSymbol;
+            let resolved = symbols.resolve_path(config, path, context);
+            if let Some(PathSymbol::Function { index, generic }) = resolved {
+                if let Some(kind) = symbols.get_function(index, generic).builtin() {
+                    if generic {
+                        config.submit_error(
+                            CompileError::IllegalUse(IllegalUseError::GenericCountMismatch),
+                            span,
+                        );
+                        return Self::Poison(span);
+                    }
+                    return Self::new_builtin_call(
+                        config,
+                        kind,
+                        TypeIndex::empty(),
+                        args,
+                        span,
+                        symbols,
+                        context,
+                    );
+                }
+                if generic {
+                    return Self::new_inferred_call(config, index, args, span, symbols, context);
+                }
+            }
+            if let Some(PathSymbol::Interface { generic: true, .. }) = resolved {
                 // Reuse lookup's visibility checks before instantiating the template.
                 let Some(EnumBool::True(index)) =
                     Self::search_generic_function(config, callee, symbols, context)
@@ -229,13 +245,6 @@ impl Expression {
                 return Self::new_inferred_interface_call(
                     config, index, args, span, symbols, context,
                 );
-            }
-            if let Some(crate::ast::symbols::PathSymbol::Function {
-                index,
-                generic: true,
-            }) = symbols.resolve_path(config, path, context)
-            {
-                return Self::new_inferred_call(config, index, args, span, symbols, context);
             }
         }
         let function = match Self::search_function(config, callee, symbols, context) {
@@ -249,11 +258,6 @@ impl Expression {
             .into_iter()
             .map(|arg| Expression::new(config, arg, symbols, context))
             .collect::<Vec<_>>();
-        let parameters = match function {
-            EnumBool::False(index) => symbols.get_function_regular(index).params.clone(),
-            EnumBool::True(index) => symbols.get_interface_regular(index).params.clone(),
-        };
-        let args = Self::coerce_arguments(args, &parameters, config, symbols, span);
         if let EnumBool::False(index) = function {
             if !Self::check_function_args(config, index, &args, symbols, span) {
                 return Self::Poison(span);

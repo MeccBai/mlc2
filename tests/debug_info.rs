@@ -5,7 +5,7 @@ use std::{
     path::Path,
     process::{Command, Output},
 };
-const SOURCE: &str = "import std;\nfunc<T> id(x:T)->T{return x;}\nfunc value()->i32{return 3;}\nfunc add(a:i32,b:i32)->i32{return a+b;}\nfunc main()->i32{\nvar a=id(1);\nvar b=id(1.5);\nvar c=a |> add(value());\nstd::println!(\"{}\",c);\nreturn c-4+flow();\n}\nfunc flow()->i32{\nvar x=0;\nwhile(x<2){x=x+1;}\nfor i in [0,2]{x=x+i;}\nif(x==3){return 0;}\nreturn 1;\n}\n";
+const SOURCE: &str = "import std;\nfunc<T> id(x:T)->T{return x;}\nfunc value()->i32{return 3;}\nfunc add(a:i32,b:i32)->i32{return a+b;}\nfunc main()->i32{\nvar a=id(1);\nvar b=id(1.5);\nvar c=a |> add(value());\nstd::println!(\"{}\",c);\nreturn c-4+flow();\n}\nfunc flow()->i32{\nvar x=0;\nwhile(x<2){x=x+1;}\nfor i in std::range(cast<u64>(0),cast<u64>(2)){x=x+cast<i32>(i);}\nif(x==3){return 0;}\nreturn 1;\n}\n";
 fn invoke(root: &Path, args: &[&str]) -> Output {
     let output = Command::new(env!("CARGO_BIN_EXE_mlc"))
         .current_dir(root)

@@ -2,6 +2,7 @@
 mod cli;
 mod dispatch;
 mod output;
+
 fn main() {
     let cli = output::parse();
     let command = output::command(&cli);

@@ -2,7 +2,6 @@
 
 CLI 由同目录的 `mlc`、`mlc-build`、`mlc-fmt` 组成，用户仍统一调用 `mlc`。
 `fmt` 分发给 mlc-fmt，其余业务命令交给 mlc-build；`--help` 和 `--version` 不启动工作进程。
-LLVM-C.dll 仅由 mlc-build 加载，格式化不依赖 LLVM。源码开发使用 `cargo build --bins`。
 
 `mlc clean` 删除当前项目的整个构建输出目录（包括所有 profile）。默认是 `build/`，
 存在 Project.toml 时使用 `Project.OutputDir`；`mlc clean -o out` 可显式指定。
@@ -15,7 +14,7 @@ LLVM-C.dll 仅由 mlc-build 加载，格式化不依赖 LLVM。源码开发使�
 
 Build 的缓存命中率为 Cached / (Cached + Built)，包含泛型实例对象的缓存检查，
 不把预编译声明算成命中；链接复用次数和声明加载数单独列出。没有完成对象缓存
-检查时显示 N/A。该指标不是前端分析缓存率，当前前端仍会执行分析和 IR 生成。
+检查时显示 N/A。
 Fmt 不存在缓存命中率，显示实际写回与无需修改的文件数。
 
 ## 颜色与 JSON 输出
@@ -95,7 +94,7 @@ mlc example hello-world   # 仅打印源码，不编译或运行
 mlc example generics
 mlc ll main.m2             # 仅生成 LLVM IR，默认 build/ll/<mode>/<triplet>
 mlc ll main.m2 -o ir       # 指定 .ll 输出目录
-mlc symbols packages/c_std/0.2.0/source/io.h --module c_std::io --triplet universal  # 输出同名 io.sym
+mlc symbols packages/c_std/0.2.1/source/io.h --module c_std::io --triplet universal  # 输出同名 io.sym
 mlc symbols c_api.toml -o declarations/c_api.sym
 mlc symbols native.h       # 固定宽度 C 声明 → native.sym
 mlc symbols native.h --module c_std::native --triplet x86_64-pc-windows-msvc
@@ -115,117 +114,24 @@ mlc symbols native.h --module c_std::native --triplet x86_64-pc-windows-msvc
 头文件只接受完整具名 struct、函数原型和明确宽度类型（int32_t、uint8_t 等），
 拒绝 int/long/char/size_t、预处理、typedef、属性、函数体和 struct 按值参数/返回。
 不允许 #include，固定宽度名字由解析器直接识别。完整限制见
-[ffi_parser](../crates/ffi_parser/README.md)。源码不再允许无 body 的 C ABI 声明，
+[C 声明使用](c_std.md)。源码不再允许无 body 的 C ABI 声明，
 必须 import 符号表；带 body 的 C ABI 定义仍可导出给 C 调用。
 TOML 沿用原有字段和 `$none` 表示法。
 该命令不读取项目或全局配置，不编译或链接；`-o` 在此命令中表示输出文件。
-普通 import 只读取源码和二进制 `.sym`，不直接读取声明 TOML 或头文件。
-`.sym` 和泛型 `.mg` 使用带格式版本头的 MessagePack，结构变更时必须更新格式版本。
-现有旧 TOML 构建缓存需重新生成；Project.toml 和用户配置仍使用 TOML。
+普通 import 可以加载源码、`.sym` 声明或内建模块。声明 TOML 和头文件需要先转换。
+旧版本生成的构建缓存需要重新生成。
 
 Type 仅为 bin/static/shared。project target 的 Triplet、LibDirs、LibCacheDir
 覆盖项目与全局配置；CLI 的 --triplet、--lib-dir、-o 优先于配置。
-可用 --config 指定全局配置文件；-j/--jobs 控制 LLVM object 任务数量。
+可用 --config 指定全局配置文件。用 -j 或 --jobs 设置构建并发数。
 
-## 当前链接工具
+## 链接选项
 
-编译使用 MLC 前端与 llvm-sys，链接直接调用 LLD，不再调用 clang 驱动。
-`src/driver/link/targets.rs` 为每个支持的 triplet 绑定 linker 和有序参数表。
-Windows 默认使用 `x86_64-pc-windows-msvc` 和安装目录 tools 下的 `lld-link.exe`。
-显式选择 GNU 目标时仍使用 `ld.lld.exe` 和匹配的 MinGW 运行库；其他 triplet
-在补齐参数表及运行库前会明确报错。
-`--linker` 覆盖链接器路径，`--link-arg` 直接传递原生链接参数（不使用 `-Wl,`）。
-`--runtime-dir` 覆盖当前目标的运行库目录（直接指向含 `.lib` 或 CRT 对象的目录，
-不再追加 triplet）；链接与运行库内容缓存校验均使用此目录。
-仓库开发测试可指定 `--linker tools/lld-link.exe --runtime-dir runtimes/x86_64-pc-windows-msvc`。
-静态库使用 tools/llvm-ar，支持 `--archiver`。工具通过进程参数数组调用，不经过 shell。
+Windows 默认使用 MSVC 目标，也可用 `--triplet x86_64-pc-windows-gnu` 选择 GNU 目标。目标优先级为 CLI、target、项目、平台默认值。
 
-安装布局：
+用 `--linker` 或 `--archiver` 指定工具路径。`--link-arg` 直接传递链接参数。`--runtime-dir` 指向当前目标所需运行库的目录。安装要求见 [安装与分发](distribution.md)。
 
-```text
-mlc.exe
-mlc-build.exe
-mlc-fmt.exe
-LLVM-C.dll
-tools/
-  ld.lld.exe
-  lld-link.exe
-  llvm-ar.exe
-packages/packages.toml                # 安装包注册表
-packages/                    # 版本化的源码、静态库、动态库
-runtimes/
-  x86_64-pc-windows-msvc/
-    msvcrt.lib, vcruntime.lib, ucrt.lib, kernel32.lib
-    legacy_stdio_definitions.lib, oldnames.lib
-  x86_64-pc-windows-gnu/
-    crt2.o, dllcrt2.o, crtbegin.o, crtend.o
-    libmingw32.a, libmingwex.a, libmoldname.a, libmsvcrt.a
-    libclang_rt.builtins-x86_64.a
-    libkernel32.a, libadvapi32.a, libshell32.a, libuser32.a
-```
-
-LLVM-C.dll 放在 mlc.exe 旁边；链接库优先使用安装目录 runtimes。
-MSVC 缺库时还会查询 LIB、Build Tools 和 Windows SDK；完整随包库不要求系统 SDK。
-当前参数表不添加 libunwind 或 C++ 运行库，暂不支持异常展开。
-MSVC EXE 使用 /subsystem:console，DLL 使用 /dll；GNU EXE 使用 crt2.o，
-DLL 使用 dllcrt2.o 和 --shared。两种配置均保留 CRT 初始化。
-链接缓存包含目标 runtimes 目录内文件内容，更新运行库会触发重新链接。
-
-默认 triplet 跟随编译器自身的平台与架构，Windows 使用 `<arch>-pc-windows-msvc`。
-优先级为 CLI `--triplet` > 项目选中 target 的 Triplet > 项目 Triplet > 系统默认。
-目标选择不代表已配置该目标的原生链接参数表。
-
-bin 入口要求 main 无参数，返回 i32 或 void。
-shared 和 static 均支持全局运行期初始化。
-
-每个编译模块生成唯一的 C ABI `void global_init(void)` 入口，实际符号名记录在
-该模块 `.sym` 元数据的 `Config.GlobalInit`。符号名由完整模块名编码生成，稳定且不依赖
-临时文件编号。入口持有私有 bool：已完成则直接返回，否则先调用依赖入口，
-再按声明顺序初始化自己的全局变量，最后设置完成标记。
-
-bin 自动调用根入口；shared 在加载时通过 LLVM global constructors 调用根入口，
-并导出它。static 不注册自动构造器，外部使用者须在使用库前显式调用根入口；
-MLC 导入预编译模块时会根据 `GlobalInit` 自动接入这条依赖链。普通 C ABI 调用，
-不要求调用者理解 MLC 内部 ABI。入口引用依赖和自身初始化函数，使链接器能从
-静态归档中提取所需对象。
-
-初始化按启动阶段同步串行约定执行，不使用 atomic，也不保证并发调用安全。
-BuildPlan 已拒绝循环依赖，所以只需完成标记，不需要“初始化中”状态。
-链接/归档先写临时文件，成功才替换最终产物，避免旧 archive 残留成员。
-
-## 编排和缓存边界
-
-运行 `./scripts/deploy.ps1 -Profile debug` 或 `-Profile release` 构建并部署到 `$env:MLC`；`-SkipBuild` 使用已有产物。安装布局见 [安装分发](distribution.md)。标准库与普通库统一放入版本化的 packages 目录。
-
-Package 分析及 IR 生成在主线程完成，不把 Rc 送进构建线程；taskflowrs
-调度各源码的 LLVM object 生成和缓存发布。声明文件仅 export，不生成空函数体。
-所有新泛型实例集中生成到一个补充 object，避免多文件重复定义。
-native 函数的 linkage name 按模块限定，c_abi 函数保留原名。
-
-每个源码节点按自身源码、IR 和直接依赖的符号/泛型指纹检查 object 缓存。
-普通函数体修改通常只重编自身；公开声明或泛型闭包变化可保守地链式传播。
-前端仍重新分析和生成 IR；泛型实例对象和最终链接分别检查缓存。
-这里的链接复用不是增量链接器内部补丁，详细边界见 [构建流水线](build_pipeline.md)。
-
-普通 Hello World 推荐 `import std;` 后调用 `std::println!("Hello World!");`。
-C 字符串互操作测试另外使用显式固定长度数组：
-
-```text
-var text:[i8:14] = "Hello World!\n";
-text[13] = 0;
-```
-
-字符串按 UTF-8 字节写入，容量不得小于字节数；多余空间清零。
-字符串本身不会额外添加 NUL，作为 C 字符串使用时仍应预留终止位置。
-
-```powershell
-cargo test --test cli
-cargo test --test cli -- --ignored # 配齐同目录 LLD 与 MSVC CRT/SDK 后
-cargo test --test hello_world
-```
-
-CLI 执行测试保留完整构建、运行与缓存断言，目前显式标为 ignored，等待
-MSVC 链接环境配置完成；Windows 运行测试也统一生成 MSVC 对象并直接调用 lld-link。
+可执行目标需要一个无参数、返回 `i32` 或无返回值的 `main`。
 
 ## Debug and release builds
 
@@ -248,7 +154,7 @@ Use `--default` (neither optimization nor debug information), `--debug` (debug i
 
 构建目录按模式隔离：对象为 `build/objects/<mode>/<triplet>/`，IR 为 `build/ll/<mode>/<triplet>/`，最终产物为 `build/<mode>/main.exe`（PDB 同目录）。`-o` 替换整个 build 根目录。
 
-标准库只使用 debug/release 两档。默认映射：default/debug → debug，release/rel-with-info → release。可在 Project.toml 的 `[Project]` 或 target 中写 `std_type = "debug"` 或 `std_type = "release"`，target 优先，没有对应 CLI 选项。标准库缓存为 packages/std/<version>/source/.compiled/objects/<std_type>/<triplet>/，C 声明使用各包的 .compiled/declarations/<triplet>/。
+标准库构建模式默认随项目模式选择。可在项目或 target 设置 Std = "debug"、"release" 或 "None"，target 优先。"None" 关闭自动引入标准库。
 
 通用固定宽度 C 声明可使用 `mlc symbols portable.h --triplet universal --module c_std::portable`，由 `mlc setup` 写入包内声明缓存。这不会放宽头文件语法限制；ABI 不同的接口仍必须绑定具体 triplet。新增常用 C API 的模块和限制见 [c_std](c_std.md)。
 ## Initialize a project and prepare libraries
@@ -270,22 +176,9 @@ mlc run hello
 
 Missing imports report the actual source and symbol paths searched. Missing entries, declaration inputs, Project.toml, explicit config files and native tools/libraries include their expected paths. The optional default user configuration may still be absent.
 
-## CTFE 缓存
+## 编译期求值预算
 
-编译期求值缓存独立放在 `build/ctfe/<host-triplet>/<call-hash>/`，
-与 `build/objects/` 和 `build/<profile>/` 并列。`-o custom` 时改用 `custom/ctfe/`。
-同一目标的 default、debug、release、rel-with-info 共用缓存，`--optimize` 和
-`--no-optimize` 也不改变 CTFE 的优化策略。
-
-CTFE 固定开启全部 AST 优化和 LLVM O3，关闭调试信息。目录只按实际执行 CTFE 的宿主分类；目标信息仍保留在缓存校验记录中，避免
-交叉编译时混用不同的数据布局。源码、参数、编译器或布局变化仍会使对应缓存失效。
-
-
-### CTFE 执行预算
-
-单次 CTFE 求值默认最多执行 3 秒，递归和内部 const 调用共享这次预算；编译、优化与
-链接动态库的时间不计入执行预算。超时会终止并回收求值子进程，报错定位到调用位置，
-不发布结果缓存。已命中的缓存无需执行，不消耗执行预算。
+单次 CTFE 求值默认最多执行 3 秒，递归和内部 const 调用共享这次预算；编译和链接所需时间不计入执行预算。超时会终止并回收求值子进程，报错定位到调用位置。
 
 项目构建可在 Project.toml 顶层配置秒数：
 

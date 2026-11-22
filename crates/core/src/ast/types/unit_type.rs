@@ -262,6 +262,8 @@ impl UnitType {
             return Some(Self::pending_application(template, arguments, symbols));
         }
 
+        let binding = crate::ast::function::InstantiationActives::default();
+        let temp_actives = actives.unwrap_or(&binding);
         for generic in &self.generics {
             let generic = self
                 .generic_map
@@ -274,7 +276,7 @@ impl UnitType {
                 );
                 return None;
             };
-            if !generic.check_and_submit(argument, symbols, config, span) {
+            if !generic.check_bound(argument, params, config, symbols, temp_actives, span) {
                 return None;
             }
         }
@@ -291,9 +293,6 @@ impl UnitType {
         temp_instance.name = instance_name.clone();
 
         let holder_index = symbols.local_mut().types.insert(ident, Unit(temp_instance));
-
-        let binding = crate::ast::function::InstantiationActives::default();
-        let temp_actives = actives.unwrap_or(&binding);
 
         temp_actives.borrow_mut().insert(
             active_key.clone(),

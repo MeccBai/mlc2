@@ -155,7 +155,10 @@ impl<'a> Hints<'a> {
             }
             TempType::Reference { inner, .. } | TempType::Resource { inner } => self.ty(inner),
             TempType::Array { element, .. } => self.ty(element),
-            TempType::Path(_) | TempType::InferredResource => (),
+            TempType::Path(_)
+            | TempType::InferredResource
+            | TempType::MutableStr
+            | TempType::ConstStr => (),
         }
     }
 
@@ -247,10 +250,9 @@ impl<'a> Hints<'a> {
                     self.scope(scope);
                 }
                 TempStmt::For {
-                    start, end, scope, ..
+                    iterator, scope, ..
                 } => {
-                    self.expr(start);
-                    self.expr(end);
+                    self.expr(iterator);
                     self.scope(scope);
                 }
                 TempStmt::Match { value, branches } => {
@@ -267,7 +269,9 @@ impl<'a> Hints<'a> {
                 } => {
                     self.expr(value);
                     for (ty, scope) in branches {
-                        self.ty(ty);
+                        if let Some(ty) = ty {
+                            self.ty(ty);
+                        }
                         self.scope(scope);
                     }
                 }

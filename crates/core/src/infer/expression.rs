@@ -123,7 +123,11 @@ impl TypeInfer<'_> {
                         .map_or(TypeIndex::empty(), |member| member.member_type),
                     _ => TypeIndex::empty(),
                 };
-                member.with_immutability(value, symbols)
+                if value {
+                    member.with_immutability(true, symbols)
+                } else {
+                    member
+                }
             }
             Access::Index { base, .. } => {
                 let base_type = base.type_inference(config, symbols);
@@ -133,11 +137,19 @@ impl TypeInfer<'_> {
                     CompileType::Ref(reference) => {
                         let value = !reference.mut_base;
                         let element = base_type.deref(symbols).unwrap_or(TypeIndex::empty());
-                        return element.with_immutability(value, symbols);
+                        return if value {
+                            element.with_immutability(true, symbols)
+                        } else {
+                            element
+                        };
                     }
                     _ => TypeIndex::empty(),
                 };
-                element.with_immutability(value, symbols)
+                if value {
+                    element.with_immutability(true, symbols)
+                } else {
+                    element
+                }
             }
         }
     }

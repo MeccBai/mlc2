@@ -9,6 +9,7 @@ pub const HOST_TRIPLET: &str = mlc_manifest::Target::host().triplet();
 
 #[derive(Debug, Clone)]
 pub struct PathResolver {
+    pub project_root: PathBuf,
     pub package_root: PathBuf,
     pub requirements: Vec<crate::packages::Requirement>,
     pub packages: Vec<crate::packages::Resolved>,
@@ -115,6 +116,7 @@ impl PathResolver {
             .or_else(|| project.as_ref().and_then(|project| project.project.mode))
             .unwrap_or_default();
         let mut paths = Self {
+            project_root: project_root.to_owned(),
             package_root: crate::packages::installation(executable),
             requirements: selected.map(|t| t.requires.clone()).unwrap_or_default(),
             packages: vec![],
@@ -409,7 +411,17 @@ impl PathResolver {
                 ));
             }
             let relative = segments.iter().collect::<PathBuf>();
-            let candidate = if package.library.is_some() {
+            let builtin = mlc_core::ast::builtins::BuiltinModule::for_import(segments).is_some();
+            let target_root = package.root.join("targets").join(&self.triplet);
+            let target_source = target_root
+                .join(segments[1..].iter().collect::<PathBuf>())
+                .with_extension("m2");
+            let target_declaration = ["h", "toml"]
+                .into_iter()
+                .any(|ext| target_source.with_extension(ext).is_file());
+            let candidate = if builtin && package.library.is_none() && target_source.is_file() {
+                target_source
+            } else if package.library.is_some() {
                 package.symbols.join(relative).with_extension("sym")
             } else {
                 let root = package
@@ -424,7 +436,9 @@ impl PathResolver {
                         .with_extension("m2")
                 }
             };
-            let candidate = if candidate.is_file() {
+            let candidate = if candidate.is_file()
+                && !(builtin && target_declaration && package.library.is_none())
+            {
                 candidate
             } else if package.library.is_none() {
                 let root = package
@@ -469,6 +483,9 @@ impl PathResolver {
                 candidate
             };
             if !candidate.is_file() {
+                if builtin {
+                    return Ok(None);
+                }
                 return Err(format!(
                     "Package module not found\nExpected path: {}",
                     candidate.display()

@@ -25,6 +25,7 @@ fn unconstrained_generic_is_kept_and_can_be_instantiated() {
             name: "T".into(),
             name_span: span,
             constraint: None,
+            constraint_args: vec![],
         }],
         members: Vec::new(),
         attributes: Vec::new(),

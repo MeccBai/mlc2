@@ -40,6 +40,7 @@ fn hello_world_array_printf_compiles_links_runs_and_matches_stdout() {
         let target = &plan.targets[id.0];
         let module = match &target.input {
             TargetInput::Source { module, .. } => module.clone(),
+            TargetInput::Builtin(module) => module.declarations(),
             TargetInput::Declaration(_) => artifacts::load(&target.file)
                 .unwrap()
                 .manifest
@@ -47,7 +48,7 @@ fn hello_world_array_printf_compiles_links_runs_and_matches_stdout() {
                 .declarations(),
         };
         let file = target.file.to_string_lossy().into_owned();
-        let config = Config::new(
+        let mut config = Config::new(
             FileId::new(id.0),
             vec![],
             target.module_name.clone(),
@@ -55,9 +56,14 @@ fn hello_world_array_printf_compiles_links_runs_and_matches_stdout() {
             ErrorHandle::new(file.clone()),
             WarningHandle::new(file),
         );
+        if let TargetInput::Builtin(module) = target.input {
+            config.builtin_module = Some(module);
+        }
         package.set_imports(
             FileId::new(id.0),
-            target.requires.iter().map(|id| FileId::new(id.0)),
+            plan.visible_imports(*id)
+                .into_iter()
+                .map(|id| FileId::new(id.0)),
         );
         let mut ast = AbstractSyntaxTree::new(config, module);
         ast.export(&mut package);

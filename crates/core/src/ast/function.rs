@@ -90,7 +90,10 @@ impl FuncSymbol {
                 name_span,
             );
         }
-        if let Some(kind) = builtins::module_builtin(&config.symbol_prefix(), &prototype.name) {
+        if let Some(kind) = config
+            .builtin_module
+            .and_then(|module| builtins::module_builtin(module.name(), &prototype.name))
+        {
             attributes.insert(FuncAttibute::Builtin(kind));
         }
         validate::callable(
@@ -207,7 +210,9 @@ impl InterfaceSymbol {
                 .any(|attribute| matches!(attribute, FuncAttibute::Interrupt(_)))
         {
             config.submit_error(
-                CompileError::IllegalUse(crate::diagnostic::error::IllegalUseError::InterruptExport),
+                CompileError::IllegalUse(
+                    crate::diagnostic::error::IllegalUseError::InterruptExport,
+                ),
                 name_span,
             );
         }
@@ -226,7 +231,8 @@ impl InterfaceSymbol {
         let name = if owner.is_empty() {
             name
         } else {
-            SymbolName::callable(Some(&owner.format(symbols)), &prototype.name)
+            let owner = symbols.get_type(owner).unqualified().format(symbols);
+            SymbolName::callable(Some(&owner), &prototype.name)
         };
 
         if !owner.is_empty()

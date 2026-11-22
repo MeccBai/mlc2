@@ -95,5 +95,5 @@ fn comments_and_nested_generic_closers_stay_stable() {
         "func f(first:i32,// param\nsecond:i32){var x:Box<Box<ReallyLongTypeName> > =g();var p=One{1, // element\n2};}",
     );
     stable("func main(){var a=[[aaaaaaaaaa,bbbbbbbbbb,cccccccccc],[1,2]];}");
-    stable("func main(){for i in [0,3]{if(i<1){}else if(i<2){}else{}}}");
+    stable("func main(){for i in test_range(0, 3){if(i<1){}else if(i<2){}else{}}}");
 }

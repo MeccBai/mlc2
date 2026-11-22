@@ -1,35 +1,6 @@
-# Union / Variant
+# Union / Variant 实现
 
-状态：首版已实现。Union 是封闭候选集合，不提供 any、继承或无标签 C union。
-
-## 声明与构造
-
-```rust
-unit<T> Success { pub value:T; }
-unit<E> Failed { pub error:E; }
-union<T,E> Result[Success<T>,Failed<E>];
-
-var x = Result<i32,i32>{Success<i32>{42}};
-```
-
-泛型参数也可写在名称后，与现有 Unit 保持一致。不能同时使用两种位置。
-构造必须提供一个值，其类型精确匹配某一候选；不通过隐式数值转换选择 tag。
-候选类型不能重复，泛型实例化后再次检查。泛型实参目前显式提供。
-
-## 借用式 match
-
-```rust
-match (y = @mut x) {
-    Success<i32> => { y->value = 100; },
-    Failed<i32> => { y->error = 1; }
-}
-```
-
-只读入口为 `y = @x`，也允许 `y = reference`，右侧为已有的 Union Ref。
-每个分支的 y 是对应候选的普通 Ref，而不是 Res，可变性继承右侧引用。
-必须穷举全部候选，不允许 `_`、重复候选或按值绑定。
-右侧必须是单层非拥有的 Union Ref，不能直接按值匹配 Union 或转移 Res 所有权。
-分支绑定仅在本分支有效，不允许移出资源、逃逸引用或替换其所借用的整个 Union。
+使用方法见 [Union 语法](language.md#15-union--variant)。
 
 ## 复用与 lowering
 

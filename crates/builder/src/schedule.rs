@@ -54,6 +54,7 @@ pub enum NodeResult {
     Built(Artifact),
     Cached(Artifact),
     Declaration(Artifact),
+    Builtin,
     Failed {
         file: PathBuf,
         error: String,
@@ -64,6 +65,10 @@ pub enum NodeResult {
     },
 }
 impl NodeResult {
+    fn succeeded(&self) -> bool {
+        !matches!(self, Self::Failed { .. } | Self::Blocked { .. })
+    }
+
     pub fn artifact(&self) -> Option<&Artifact> {
         match self {
             Self::Built(a) | Self::Cached(a) | Self::Declaration(a) => Some(a),
@@ -82,7 +87,7 @@ pub struct BuildReport {
 }
 impl BuildReport {
     pub fn succeeded(&self) -> bool {
-        self.results.iter().all(|r| r.artifact().is_some())
+        self.results.iter().all(NodeResult::succeeded)
     }
 }
 
@@ -134,21 +139,19 @@ pub fn build_with_progress(
                 .iter()
                 .filter_map(|&index| slots[index.0].get().and_then(NodeResult::artifact).cloned())
                 .collect();
-            let result = if dependencies.len() != target.requires.len() {
+            let blocked: Vec<_> = target
+                .requires
+                .iter()
+                .copied()
+                .filter(|index| !slots[index.0].get().is_some_and(NodeResult::succeeded))
+                .collect();
+            let result = if !blocked.is_empty() {
                 NodeResult::Blocked {
                     file: target.file.clone(),
-                    dependencies: target
-                        .requires
-                        .iter()
-                        .copied()
-                        .filter(|index| {
-                            slots[index.0]
-                                .get()
-                                .and_then(NodeResult::artifact)
-                                .is_none()
-                        })
-                        .collect(),
+                    dependencies: blocked,
                 }
+            } else if matches!(target.input, crate::plan::TargetInput::Builtin(_)) {
+                NodeResult::Builtin
             } else {
                 match worker::run(target, &dependencies, &options_ref, |request| {
                     compile_ref(request)

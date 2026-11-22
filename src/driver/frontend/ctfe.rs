@@ -235,9 +235,15 @@ impl Executor {
                 WarningHandle::new(file),
             );
             config.set_target_layout(host_layout);
+            if let mlc_builder::plan::TargetInput::Builtin(module) = target.input {
+                config.builtin_module = Some(module);
+            }
             package.set_imports(
                 FileId::new(id.0),
-                target.requires.iter().map(|id| FileId::new(id.0)),
+                self.plan
+                    .visible_imports(*id)
+                    .into_iter()
+                    .map(|id| FileId::new(id.0)),
             );
             let mut ast = AbstractSyntaxTree::new(config, module);
             ast.export(&mut package);
@@ -341,51 +347,110 @@ impl Executor {
         platform.link(root, &object, &library, host)?;
         let schema = directory.path().join("layout.json");
         let result = directory.path().join("result.json");
-        std::fs::write(&schema, serde_json::to_vec(expected).unwrap())
-            .map_err(|e| e.to_string())?;
+        std::fs::write(
+            &schema,
+            serde_json::to_vec(expected).map_err(|e| e.to_string())?,
+        )
+        .map_err(|e| e.to_string())?;
         let worker = root.join(format!("mlc-build{}", std::env::consts::EXE_SUFFIX));
-        let mut child = Command::new(&worker)
-            .arg("__mlc_ctfe_worker")
-            .arg(&library)
-            .arg(&schema)
-            .arg(&result)
-            .stdin(std::process::Stdio::null())
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::piped())
-            .spawn()
-            .map_err(|e| format!("Cannot launch {}: {e}", worker.display()))?;
         let started = std::time::Instant::now();
-        loop {
-            if child.try_wait().map_err(|e| e.to_string())?.is_some() {
-                break;
-            }
+        let value = read_worker_result(&result, || {
             if started.elapsed() >= self.max_time {
-                let _ = child.kill();
-                let _ = child.wait();
                 return Err(format!(
                     "CTFE execution exceeded MaxTime ({:.3}s)",
                     self.max_time.as_secs_f64()
                 ));
             }
-            std::thread::sleep(
-                std::time::Duration::from_millis(5)
-                    .min(self.max_time.saturating_sub(started.elapsed())),
-            );
-        }
-        let output = child.wait_with_output().map_err(|e| e.to_string())?;
-        if !output.status.success() {
-            return Err(format!(
-                "Constant worker failed ({}): {}",
-                output.status,
-                String::from_utf8_lossy(&output.stderr)
-            ));
-        }
-        let value = serde_json::from_slice(&std::fs::read(&result).map_err(|e| e.to_string())?)
-            .map_err(|e| e.to_string())?;
+            let mut child = Command::new(&worker)
+                .arg("__mlc_ctfe_worker")
+                .arg(&library)
+                .arg(&schema)
+                .arg(&result)
+                .stdin(std::process::Stdio::null())
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::piped())
+                .spawn()
+                .map_err(|e| format!("Cannot launch {}: {e}", worker.display()))?;
+            loop {
+                if child.try_wait().map_err(|e| e.to_string())?.is_some() {
+                    break;
+                }
+                if started.elapsed() >= self.max_time {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    return Err(format!(
+                        "CTFE execution exceeded MaxTime ({:.3}s)",
+                        self.max_time.as_secs_f64()
+                    ));
+                }
+                std::thread::sleep(
+                    std::time::Duration::from_millis(5)
+                        .min(self.max_time.saturating_sub(started.elapsed())),
+                );
+            }
+            let output = child.wait_with_output().map_err(|e| e.to_string())?;
+            if !output.status.success() {
+                return Err(format!(
+                    "Constant worker failed ({}): {}",
+                    output.status,
+                    String::from_utf8_lossy(&output.stderr)
+                ));
+            }
+            Ok(())
+        })?;
         entry.publish(directory.path(), platform.object())?;
         Ok(value)
     }
 }
+fn read_worker_result(
+    result: &std::path::Path,
+    mut run: impl FnMut() -> Result<(), String>,
+) -> Result<serde_json::Value, String> {
+    let read = || {
+        std::fs::read(result)
+            .map_err(|error| error.to_string())
+            .and_then(|bytes| serde_json::from_slice(&bytes).map_err(|error| error.to_string()))
+    };
+    run()?;
+    if let Ok(value) = read() {
+        return Ok(value);
+    }
+    match std::fs::remove_file(result) {
+        Ok(()) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => {
+            return Err(format!(
+                "Cannot clear invalid CTFE result ({}): {error}",
+                result.display()
+            ));
+        }
+    }
+    run()?;
+    read().map_err(|error| {
+        format!(
+            "Invalid CTFE result after retry ({}): {error}",
+            result.display()
+        )
+    })
+}
+
+#[cfg(test)]
+#[test]
+fn retries_a_malformed_worker_result() {
+    let directory = tempfile::tempdir().unwrap();
+    let result = directory.path().join("result.json");
+    let mut runs = 0;
+    let value = read_worker_result(&result, || {
+        assert!(!result.exists());
+        runs += 1;
+        let bytes = if runs == 1 { "{" } else { "42" };
+        std::fs::write(&result, bytes).map_err(|error| error.to_string())
+    })
+    .unwrap();
+    assert_eq!(value, serde_json::json!(42));
+    assert_eq!(runs, 2);
+}
+
 impl mlc_core::constant_eval::Executor for Executor {
     fn evaluate(
         &self,
@@ -524,6 +589,8 @@ fn source(
                 }
                 Some(ast::builtins::Builtin::ConstCStr) => "const_c_str".into(),
                 Some(ast::builtins::Builtin::StrLen) => "str::len".into(),
+                Some(ast::builtins::Builtin::StrFirstByte) => "str::first_byte".into(),
+                Some(ast::builtins::Builtin::StrAsPtr) => "str::as_ptr".into(),
                 _ => function.name.clone(),
             };
             format!(

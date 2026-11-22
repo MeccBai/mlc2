@@ -68,10 +68,8 @@ impl AstPass for DeadCodeElimination {
                 {
                     Some(vec![])
                 }
-                Statement::ForBlock(block) if constant::empty_for(block, symbols) => Some(vec![]),
                 Statement::MatchBlock(block) => match constant::select_match(block, symbols) {
                     constant::MatchSelection::Scope(body) => Some(body.to_vec()),
-                    constant::MatchSelection::Skip => Some(vec![]),
                     constant::MatchSelection::Dynamic => None,
                 },
                 _ => None,

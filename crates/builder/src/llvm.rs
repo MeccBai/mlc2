@@ -7,6 +7,8 @@ mod target;
 
 pub use config::BackendConfig;
 pub use error::{BackendError, DiagnosticLine, DiagnosticSeverity, LinkDiagnostic};
+/// Cache identity for the IR and machine-code optimization pipeline.
+pub const OPTIMIZATION_PIPELINE: &str = "llvm-default-o3-v1";
 use llvm_sys::target_machine::*;
 use mlc_manifest as manifest;
 use std::{
@@ -19,6 +21,7 @@ pub struct IrCompiler {
     config: BackendConfig,
     triplet: CString,
     machine: LLVMTargetMachineRef,
+    optimize_ir: bool,
 }
 
 impl IrCompiler {
@@ -35,7 +38,7 @@ impl IrCompiler {
             triplet,
             BackendConfig::current()?,
             if optimize {
-                LLVMCodeGenOptLevel::LLVMCodeGenLevelDefault
+                LLVMCodeGenOptLevel::LLVMCodeGenLevelAggressive
             } else {
                 LLVMCodeGenOptLevel::LLVMCodeGenLevelNone
             },
@@ -64,7 +67,7 @@ impl IrCompiler {
             triplet,
             BackendConfig::current()?,
             if optimize {
-                LLVMCodeGenOptLevel::LLVMCodeGenLevelDefault
+                LLVMCodeGenOptLevel::LLVMCodeGenLevelAggressive
             } else {
                 LLVMCodeGenOptLevel::LLVMCodeGenLevelNone
             },
@@ -106,6 +109,7 @@ impl IrCompiler {
                 config,
                 triplet,
                 machine,
+                optimize_ir: matches!(level, LLVMCodeGenOptLevel::LLVMCodeGenLevelAggressive),
             })
         }
     }
@@ -142,7 +146,7 @@ impl IrCompiler {
     }
 
     pub fn emit(&self, ir: String, output: &Path) -> Result<(), BackendError> {
-        emit::object(self.machine, &self.triplet, &ir, output, false)?;
+        emit::object(self.machine, &self.triplet, &ir, output, self.optimize_ir)?;
         if ir.contains("!llvm.dbg.cu")
             && self
                 .triplet

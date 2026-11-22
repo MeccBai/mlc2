@@ -131,6 +131,7 @@ pub fn generate_with_module_configs(
         let target = &plan.targets[id.0];
         let module = match &target.input {
             TargetInput::Source { module, .. } => module.clone(),
+            TargetInput::Builtin(module) => module.declarations(),
             TargetInput::Declaration(manifest) => {
                 if !manifest.config.target.is_empty() && manifest.config.target != triplet {
                     return Err(format!(
@@ -184,6 +185,9 @@ pub fn generate_with_module_configs(
             WarningHandle::new(file),
         );
         config.set_target_layout(target_layout);
+        if let TargetInput::Builtin(module) = target.input {
+            config.builtin_module = Some(module);
+        }
         config.set_statement_locations(codegen.debug_info);
         if let TargetInput::Source { lines, .. } = &target.input {
             config.set_source_lines(lines.clone());
@@ -194,7 +198,9 @@ pub fn generate_with_module_configs(
         }
         package.set_imports(
             FileId::new(id.0),
-            target.requires.iter().map(|id| FileId::new(id.0)),
+            plan.visible_imports(*id)
+                .into_iter()
+                .map(|id| FileId::new(id.0)),
         );
         let mut ast = AbstractSyntaxTree::new(config, module);
         ast.export(&mut package);
@@ -235,6 +241,7 @@ pub fn generate_with_module_configs(
                     mlc_core::ast::symbol_name::SymbolName::module_initializer(&target.module_name),
                 ),
                 TargetInput::Declaration(manifest) => manifest.config.global_init.clone(),
+                TargetInput::Builtin(_) => None,
             };
             name.map(|name| (target.id, name))
         })

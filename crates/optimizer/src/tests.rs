@@ -18,7 +18,20 @@ fn analyze(source: &str) -> (AbstractSyntaxTree, PackageSymbolTable) {
         ErrorHandle::new("test.m2".into()),
         WarningHandle::new("test.m2".into()),
     );
-    let mut ast = AbstractSyntaxTree::new(config, module.unwrap());
+    let mut module = module.unwrap();
+    if source.contains("test_range(") {
+        let fixture = include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../tests/fixtures/iterator.m2"
+        ));
+        let tokens = mlc_syntax::lexer::tokenize(fixture).unwrap();
+        module.extend(
+            mlc_syntax::parser::parse(&tokens.tokens, fixture.len())
+                .0
+                .unwrap(),
+        );
+    }
+    let mut ast = AbstractSyntaxTree::new(config, module);
     let mut package = PackageSymbolTable::new();
     ast.analysis(&mut package);
     (ast, package)
@@ -67,7 +80,7 @@ fn disabling_all_passes_preserves_ast_statement_shapes() {
 
 #[test]
 fn control_flow_pass_is_independent_and_keeps_anonymous_scope() {
-    let source = "func main(){if(1<2){var a=1;}else{var b=2;}while(false){}for i in [4,2]{}match(2){1=>{},_=>{}}}";
+    let source = "func main(){if(1<2){var a=1;}else{var b=2;}while(false){}match(2){1=>{},_=>{}}}";
     let mut config = OptimizeConfig::disabled();
     let (mut ast, _) = optimize(source, config);
     assert!(matches!(

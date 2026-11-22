@@ -20,6 +20,7 @@ pub enum InstanceIndex {
     Type(TypeIndex),
     Function(FuncIndex),
     Interface(InterfaceIndex),
+    Requirement,
 }
 
 /// A shared recursion registry. No borrow is held while parsing a nested body.
@@ -30,7 +31,8 @@ fn arguments(
     names: &[String],
     indices: &HashMap<String, GenericIndex>,
     params: &HashMap<GenericIndex, TypeIndex>,
-    symbols: &dyn Resolution,
+    symbols: &mut dyn Resolution,
+    actives: &InstantiationActives,
     span: Span,
 ) -> Option<Vec<String>> {
     if config.is_poisoned() {
@@ -52,7 +54,7 @@ fn arguments(
             );
             return None;
         };
-        if !index.check_and_submit(ty, symbols, config, span) {
+        if !index.check_bound(ty, params, config, symbols, actives, span) {
             return None;
         }
         arguments.push(ty.format(symbols));
@@ -131,6 +133,7 @@ impl FuncIndex {
             &template.generic_map,
             params,
             symbols,
+            actives,
             span,
         ) else {
             return FuncIndex::empty();
@@ -217,6 +220,7 @@ impl InterfaceIndex {
             &template.generic_map,
             params,
             symbols,
+            actives,
             span,
         ) else {
             return InterfaceIndex::empty();

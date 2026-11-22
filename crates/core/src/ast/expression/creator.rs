@@ -7,7 +7,6 @@ mod generic_call;
 mod inferred_call;
 mod lookup;
 mod string;
-mod string_view;
 
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -221,7 +220,7 @@ impl Expression {
                 }
                 if !unary_type.is_empty()
                     && matches!(symbols.get_type(unary_type).unqualified(), CompileType::Str)
-                    && !matches!(op, Operator::AddressOf)
+                    && !matches!(op, Operator::AddressOf | Operator::MutOf)
                 {
                     config.submit_error(
                         CompileError::IllegalUse(IllegalUseError::InvalidStringOperation),
@@ -488,24 +487,6 @@ impl Expression {
                     }
                 }
 
-                let values = if let Some(owner) = ty {
-                    if let CompileType::Unit(unit) = symbols.get_type(owner).unqualified() {
-                        if unit.variant.is_none() {
-                            let parameters: Vec<_> = unit
-                                .members
-                                .iter()
-                                .map(|member| (member.member_type, member.name.clone()))
-                                .collect();
-                            Self::coerce_arguments(values, &parameters, config, symbols, span)
-                        } else {
-                            values
-                        }
-                    } else {
-                        values
-                    }
-                } else {
-                    values
-                };
                 // Typed unit constructors must validate fields before normalization.
                 if let Some(owner) = ty {
                     if let CompileType::Unit(unit) = symbols.get_type(owner).unqualified() {

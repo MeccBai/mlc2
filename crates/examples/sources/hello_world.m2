@@ -6,7 +6,7 @@ import std;
 using println = std::println;
 
 func main() -> i32 {
-    val greeting: str = "Hello World!"; // str is an immutable compile-time string.
+    var greeting: str = "Hello World!"; // str bindings are read-only by default.
     println!("{}", greeting);
     return 0;
 }

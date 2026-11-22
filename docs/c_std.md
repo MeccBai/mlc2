@@ -43,12 +43,10 @@ Functions involving C long, fpos_t, time_t or tm layout are kept out of universa
 
 Function-pointer APIs (qsort/bsearch/atexit/signal), va_list APIs, long double, wide-character and macro-only interfaces are omitted because the restricted parser cannot faithfully describe them. UCRT does not export callable fabsf/frexpf/hypotf/ldexpf symbols, so those four names are omitted; the corresponding double APIs are available. C macro constants and globals are not synthesized.
 
-## Validation and installation
+## Preparing declarations
 
 ```powershell
 mlc setup --triplet x86_64-pc-windows-msvc
-mlc symbols lib/x86_64-pc-windows-msvc/c_std/time.h --module c_std::time --triplet x86_64-pc-windows-msvc -o objects/x86_64-pc-windows-msvc/c_std/time.sym
-cargo test --test c_std --test ffi_symbols_cli
 ```
 
-Tests verify universal and target metadata, resolve every declared Windows function against UCRT, and run representative functions through both MSVC and GNU linking. Universal declarations also compile for supported Linux/macOS targets; runtime availability there still depends on the platform C library and linker setup (for example libm).
+The platform C library must provide the functions you call. Some targets require additional linker options for math functions.

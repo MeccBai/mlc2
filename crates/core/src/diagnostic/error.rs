@@ -45,6 +45,9 @@ pub enum IllegalUseError {
     },
     NonConstantMatchCase,
     MissingDefaultBranch,
+    NonExhaustiveEnumMatch {
+        missing: String,
+    },
     ResourceRequiresOwner,
     ResourceInferenceRequiresInitializer,
     ResourceUseAfterMove {
@@ -126,7 +129,10 @@ pub enum IllegalUseError {
     ReturnOutsideFunction,
     ReturnValueRequired,
     UnexpectedReturnValue,
-    ForBoundMustBeInteger,
+    InvalidIterator {
+        requirement: &'static str,
+        reason: String,
+    },
     DuplicateDefaultBranch,
     ArgumentCountMismatch,
     TypeMismatched {

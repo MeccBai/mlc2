@@ -4,7 +4,7 @@ use std::fs;
 #[test]
 fn binary_temp_roundtrip_preserves_recursive_nodes_and_rejects_corruption() {
     let module = parse(
-        "unit P<T> { pub a:T; }; func<T> f(x:T) -> T { if (true) { return x; } return x; } func main() { var a = [1,2]; var p = P<i32>{1}; var s = \"hello\"; for i in [0,2] { a[i] = i; } match(1) { 1 => { return; } } }",
+        "unit P<T> { pub a:T; }; func<T> f(x:T) -> T { if (true) { return x; } return x; } func main() { var a = [1,2]; var p = P<i32>{1}; var s = \"hello\"; for i in test_range(0, 2) { a[i] = i; } match(1) { 1 => { return; } } }",
     );
     let bytes = to_binary(&module).unwrap();
     assert_eq!(&bytes[8..12], &mlc_manifest::BUILD_NUMBER.to_le_bytes());

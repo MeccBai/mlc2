@@ -35,63 +35,66 @@ pub(crate) fn generics(
     let mut names = Vec::new();
     let mut indices = HashMap::new();
     let mut types = HashMap::new();
-    for parameter in parameters {
-        if config.is_poisoned() {
-            break;
-        }
+    for parameter in &parameters {
         if indices.contains_key(&parameter.name) {
             config.submit_error(
                 CompileError::IllegalUse(IllegalUseError::DuplicateVariable {
-                    name: parameter.name,
+                    name: parameter.name.clone(),
                 }),
                 parameter.name_span,
             );
             break;
         }
         let identity = SymbolName::generic_param(kind, owner, &parameter.name);
-        let mut require = if let Some((path, span)) = parameter.constraint {
-            let name = SymbolName::path(&path.segments);
-            let Some(index) = symbols
-                .local()
-                .generics
-                .requires
-                .get_by_name(&config.symbol_name(&name))
-                .or_else(|| symbols.local().generics.requires.get_by_name(&name))
-                .or_else(|| {
-                    name.strip_prefix(&format!("{}::", config.symbol_prefix()))
-                        .and_then(|local| {
-                            symbols
-                                .local()
-                                .generics
-                                .requires
-                                .get_by_name(&local.to_owned())
-                        })
-                })
-                .or_else(|| match symbols.named_export(config, &name) {
-                    Some(symbols::ExportSymbol::GenericRequire(index)) => Some(index),
-                    _ => None,
-                })
-            else {
-                config.submit_error(CompileError::Resolve(ResolveError::UnknownConstraint), span);
-                break;
-            };
-            symbols.get_generic(index).clone()
-        } else {
-            GenericRequire::empty(identity.clone())
-        };
-        require.name = identity.clone();
         let index = symbols
             .local_mut()
             .generics
             .requires
-            .insert(identity.clone(), require);
+            .insert(identity.clone(), GenericRequire::empty(identity));
         let ty = symbols
             .local_mut()
             .types
             .insert(SymbolName::generic_type(index), CompileType::Generic(index));
         types.insert(parameter.name.clone(), ty);
         indices.insert(parameter.name.clone(), index);
-        names.push(parameter.name);
+        names.push(parameter.name.clone());
+    }
+    for parameter in parameters {
+        if config.is_poisoned() {
+            break;
+        }
+        let Some((path, span)) = parameter.constraint else {
+            continue;
+        };
+        let Some(template) = GenericRequire::find(config, &path, symbols) else {
+            config.submit_error(CompileError::Resolve(ResolveError::UnknownConstraint), span);
+            break;
+        };
+        let arguments = parameter
+            .constraint_args
+            .into_iter()
+            .map(|ty| resolve_type_with_bindings(config, ty, symbols, &types))
+            .collect::<Option<Vec<_>>>();
+        let Some(arguments) = arguments else { break };
+        let requirement = symbols.get_generic(template);
+        if requirement.parameters.len() != arguments.len() {
+            config.submit_error(
+                CompileError::IllegalUse(IllegalUseError::GenericCountMismatch),
+                span,
+            );
+            break;
+        }
+        let index = indices[&parameter.name];
+        let mut require = if arguments.is_empty() {
+            requirement.clone()
+        } else {
+            let mut require = GenericRequire::empty(parameter.name);
+            require.application = Some((template, arguments));
+            require
+        };
+        require.name = symbols.get_generic(index).name.clone();
+        require.exported = false;
+        symbols.local_mut().generics.requires.set(&index, require);
     }
     (names, indices, types)
 }

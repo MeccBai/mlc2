@@ -428,7 +428,7 @@ fn rejects_explicit_reference_syntax_for_method_receiver() {
 #[test]
 fn macro_functions_and_iteration_have_independent_nodes() {
     let module = parse_ok(
-        "export macro func format!(str:ConstStringView,args:std::macro::Args<std::fmt::Display>)->String{var writer=FormatWriter::new(str);macro for arg in args{writer.format(arg);}return writer.finalize();}func main(){var s=format!(\"{}\",42);}",
+        "export macro func format!(pattern:str,args:std::macro::Args<std::fmt::Display>)->String{var writer=FormatWriter::new(pattern);macro for arg in args{writer.format(arg);}return writer.finalize();}func main(){var s=format!(\"{}\",42);}",
     );
     let TempGlobalStmt::MacroFunc(function) = &module[0].0 else {
         panic!("macro expected")
@@ -451,7 +451,7 @@ fn macro_functions_and_iteration_have_independent_nodes() {
 #[test]
 fn macros_allow_no_return_value() {
     let module = parse_ok(
-        "macro func print!(str:ConstStringView,args:std::macro::Args<std::fmt::Display>){macro for arg in args{consume(arg);}}func main(){print!(\"{}\",42);}",
+        "macro func print!(pattern:str,args:std::macro::Args<std::fmt::Display>){macro for arg in args{consume(arg);}}func main(){print!(\"{}\",42);}",
     );
     let TempGlobalStmt::MacroFunc(function) = &module[0].0 else {
         panic!("macro expected")

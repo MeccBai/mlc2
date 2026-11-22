@@ -41,11 +41,14 @@ fn match_type_error_precedes_branch_body_errors() {
 }
 
 #[test]
-fn invalid_for_bound_preserves_span() {
+fn invalid_iterator_preserves_span() {
     assert_error(
-        "func main() { for i in [0, true] { var a = missing; } }",
+        "func main() { for i in true { var a = missing; } }",
         "true",
-        CompileError::IllegalUse(IllegalUseError::ForBoundMustBeInteger),
+        CompileError::IllegalUse(IllegalUseError::InvalidIterator {
+            requirement: "Iterator<T> or IteratorMut<T>",
+            reason: "missing get_clone() -> T".into(),
+        }),
     );
 }
 
@@ -86,7 +89,7 @@ fn truncating_valid_source_never_panics_in_the_pipeline() {
         "// 中文\nfunc main() { var a:i32 = 1 + (2 * 3); }",
         "unit Box<T> { value:$T; }; func main() { var a = 1; var b = Box<i32>{@a}; }",
         "func<T> value(a:T) -> T { return a; } func main() { value<i32>(1); }",
-        "func main() { if (true) { for i in [0,2] { match (i) { 1 => {}, _ => {} } } } }",
+        "func main() { if (true) { for i in test_range(0, 2) { match (i) { 1 => {}, _ => {} } } } }",
         "func main() { var a = [1,2]; var p = @mut a; var value = a[0]; }",
     ] {
         for end in source

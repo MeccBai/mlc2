@@ -177,13 +177,21 @@ where
                     .collect();
                 if let crate::ast::symbols::EnumBool::False(index) = call.func {
                     let symbol = symbols.get_function_regular(index);
-                    if symbol.builtin() == Some(crate::ast::builtins::Builtin::StrLen) {
-                        if let Some(Expression::InitListE(InitialList::String { value }, ..)) =
-                            call.args.first()
-                        {
+                    use crate::ast::builtins::Builtin;
+                    if let Some(Expression::InitListE(InitialList::String { value }, ..)) =
+                        call.args.first()
+                    {
+                        let number = match symbol.builtin() {
+                            Some(Builtin::StrLen) => Some(value.len()),
+                            Some(Builtin::StrFirstByte) => {
+                                Some(usize::from(value.as_bytes().first().copied().unwrap_or(0)))
+                            }
+                            _ => None,
+                        };
+                        if let Some(number) = number {
                             return Expression::ConstValueE(
                                 ConstValue {
-                                    value: value.len().to_string(),
+                                    value: number.to_string(),
                                     ty: symbol.ret_type.unwrap(),
                                 },
                                 span,

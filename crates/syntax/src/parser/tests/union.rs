@@ -24,13 +24,11 @@ fn union_declarations_and_borrowed_type_matches() {
 }
 
 #[test]
-fn union_rejects_wildcard_and_mixed_generic_positions() {
-    for source in [
-        "union<T> V<E>[T,E];",
-        "union V[i32];func f(){match(y=@x){_=>{}}}",
-    ] {
+fn union_accepts_wildcard_and_rejects_mixed_generic_positions() {
+    for source in ["union<T> V<E>[T,E];"] {
         let tokens = tokenize(source).unwrap();
         assert!(!parse(&tokens.tokens, source.len()).1.is_empty());
     }
+    parse_ok("union V[i32];func f(){match(y=@x){_=>{}}}");
     parse_ok("union V<T>[T,i32];");
 }

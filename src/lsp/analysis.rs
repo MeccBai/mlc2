@@ -103,6 +103,9 @@ pub fn analyze(entry: &Path) -> Result<Snapshot, Report> {
     for id in &plan.order {
         let target = &plan.targets[id.0];
         let (module, text, path) = match &target.input {
+            TargetInput::Builtin(module) => {
+                (module.declarations(), String::new(), target.file.clone())
+            }
             TargetInput::Source { module, text, .. } => {
                 (module.clone(), text.clone(), target.file.clone())
             }
@@ -294,12 +297,17 @@ pub fn analyze(entry: &Path) -> Result<Snapshot, Report> {
             WarningHandle::new(file.path.to_string_lossy().into()),
         );
         config.set_target_layout(layout);
+        if let TargetInput::Builtin(module) = target.input {
+            config.builtin_module = Some(module);
+        }
         config.set_source_lines(file.lexed.lines.clone());
         config.semantic = Some(index.clone());
         indexes.insert(id.0, index);
         package.set_imports(
             FileId::new(id.0),
-            target.requires.iter().map(|id| FileId::new(id.0)),
+            plan.visible_imports(*id)
+                .into_iter()
+                .map(|id| FileId::new(id.0)),
         );
         let mut ast = AbstractSyntaxTree::new(config, parsed_modules.remove(&id.0).unwrap());
         ast.export(&mut package);
@@ -732,8 +740,11 @@ impl Snapshot {
 fn source_signature(symbol: &TempFuncSymbol, text: &str) -> String {
     let type_text = |ty: &Option<Spanned<TempType>>| {
         ty.as_ref()
-            .map(|(_, span)| {
-                mlc_core::ast::semantic::short_name(text.get(span.start..span.end).unwrap_or("?"))
+            .map(|(ty, span)| {
+                text.get(span.start..span.end)
+                    .filter(|source| !source.is_empty())
+                    .map(mlc_core::ast::semantic::short_name)
+                    .unwrap_or_else(|| ty.dump())
             })
             .unwrap_or_else(|| "?".into())
     };

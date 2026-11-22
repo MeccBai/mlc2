@@ -53,6 +53,40 @@ fn verify_and_run(root: &std::path::Path, generated: Generated) {
 }
 
 #[test]
+fn enum_and_union_match_require_only_exhaustive_coverage() {
+    let (root, result) = generate_source(
+        r#"
+        enum Status(i32) { Ready(10), Busy(20) };
+        union Payload[i32, bool];
+        func status(value: Status) -> i32 {
+            match (value) {
+                Status::Ready => { return 1; },
+                Status::Busy => { return 2; },
+            }
+        }
+        func payload(value: $Payload) -> i32 {
+            match (number = value) {
+                i32 => { return $number; },
+                _ => { return 42; },
+            }
+        }
+        func main() -> i32 {
+            var value = Payload{true};
+            return status(Status::Busy) + payload(@value) - 44;
+        }
+        "#,
+        None,
+    );
+    verify_and_run(root.path(), result.unwrap());
+
+    let (_, result) = generate_source(
+        "enum Status { Ready, Busy } func f(value:Status){match(value){Status::Ready=>{}}}",
+        None,
+    );
+    assert!(result.err().unwrap().contains("missing: Busy"));
+}
+
+#[test]
 fn inferred_generic_swap_and_nested_calls_compile_and_run() {
     let (root, result) = generate_source(
         r#"

@@ -87,8 +87,12 @@ impl FunctionGenerator<'_> {
             self.variables.restore(mark);
         }
         self.block(invalid);
-        self.code.push(Instruction::Unreachable);
-        self.terminated = true;
+        if let Some(body) = &statement.default {
+            falls |= self.scope(body, end.clone());
+        } else {
+            self.code.push(Instruction::Unreachable);
+            self.terminated = true;
+        }
         if falls {
             self.block(end);
         }

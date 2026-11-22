@@ -12,7 +12,7 @@ func main() -> i32 {
         const_c_str("C printf: %d\n"),
         c_std::runtime::abs(- 42)
     );
-    var bytes: [i8: 2] = [65, 0];
+    var bytes: [i8: 2] = [cast<i8>("A".first_byte()), 0];
     std::println!("byte={}", bytes[0]);
     return 0;
 }

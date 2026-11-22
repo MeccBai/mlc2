@@ -4,7 +4,9 @@ use std::{collections::BTreeSet, fs};
 
 fn declarations(target: &str) -> Vec<artifacts::Manifest> {
     let directory = support::library()
-        .join("packages/c_std/0.2.0/source/.compiled/declarations")
+        .join("packages/c_std")
+        .join(env!("CARGO_PKG_VERSION"))
+        .join("source/.compiled/declarations")
         .join(target)
         .join("c_std");
     let mut result = Vec::new();

@@ -13,7 +13,7 @@ impl Expander<'_> {
                 if kind == crate::ast::builtins::Builtin::Todo {
                     return self.todo(&call.args[0], symbol.ret_type);
                 }
-                return self.builtin(kind, symbol, &call.args[0]);
+                return self.builtin(kind, symbol, &call.args);
             }
         }
         let (func, returns) = match call.func {

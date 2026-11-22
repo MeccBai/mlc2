@@ -17,6 +17,7 @@ pub enum TargetInput {
         lines: mlc_syntax::lexer::LineTable,
     },
     Declaration(Manifest),
+    Builtin(mlc_core::ast::builtins::BuiltinModule),
 }
 
 #[derive(Debug, Clone)]
@@ -27,6 +28,7 @@ pub struct Target {
     pub module_name: String,
     pub input: TargetInput,
     pub requires: Vec<TargetIndex>,
+    pub reexports: Vec<TargetIndex>,
     pub supers: Vec<TargetIndex>,
 }
 
@@ -40,6 +42,17 @@ pub struct BuildPlan {
 }
 
 impl BuildPlan {
+    pub fn visible_imports(&self, id: TargetIndex) -> std::collections::HashSet<TargetIndex> {
+        let mut visible = std::collections::HashSet::new();
+        let mut pending = self.targets[id.0].requires.clone();
+        while let Some(dependency) = pending.pop() {
+            if visible.insert(dependency) {
+                pending.extend(&self.targets[dependency.0].reexports);
+            }
+        }
+        visible
+    }
+
     pub fn discover(
         entry: &Path,
         resolver: &ImportResolver,

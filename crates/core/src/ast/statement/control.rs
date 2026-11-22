@@ -1,22 +1,33 @@
 use crate::ast::symbols::Resolution;
-use std::rc::Rc;
 
-use super::{
-    Assignment, ForStatement, IfStatement, MatchPattern, MatchStatement, Statement, Variable,
-    WhileStatement,
-};
+use super::{IfStatement, MatchPattern, MatchStatement, Statement, WhileStatement};
 use crate::ast::{
     TypeIndex,
     arena::FuncIndex,
     config::Config,
-    expression::{CompAtom, Composite, ConstValue, Expression, operators::Operator},
+    expression::{Expression, InitialList},
     symbols::{EnumBool, StatementContext, SymbolTable},
-    types::ValueType,
+    types::{CompileType, ValueType},
 };
 use crate::diagnostic::error::{CompileError, IllegalUseError};
 use crate::parser::out::{Span, Spanned, TempExpr, TempMatchPattern, TempScope};
 
-fn child_context(
+fn matches_enum_value(pattern: &Expression, value: &Expression) -> bool {
+    let pattern = match pattern {
+        Expression::InitListE(InitialList::List { values, .. }, _) if values.len() == 1 => {
+            &values[0]
+        }
+        _ => pattern,
+    };
+    match (pattern, value) {
+        (Expression::ConstValueE(pattern, _), Expression::ConstValueE(value, _)) => {
+            pattern.value == value.value
+        }
+        _ => pattern == value,
+    }
+}
+
+pub(super) fn child_context(
     context: Option<&StatementContext>,
     kind: crate::ast::symbols::SupperScopeType,
 ) -> StatementContext {
@@ -223,100 +234,28 @@ impl Statement {
             parsed.push((pattern, body));
         }
         if !default_seen {
-            config.submit_error(
-                CompileError::IllegalUse(IllegalUseError::MissingDefaultBranch),
-                span,
-            );
-            return Self::Poison;
+            let error = match symbols.get_type(ty).unqualified() {
+                CompileType::Enum(enumeration) => {
+                    let missing = enumeration.variants.iter().zip(&enumeration.values)
+                        .filter(|(_, value)| !parsed.iter().any(|(pattern, _)| {
+                            matches!(pattern, MatchPattern::Value(pattern) if matches_enum_value(pattern, value))
+                        }))
+                        .map(|(name, _)| name.as_str())
+                        .collect::<Vec<_>>();
+                    (!missing.is_empty()).then(|| IllegalUseError::NonExhaustiveEnumMatch {
+                        missing: missing.join(", "),
+                    })
+                }
+                _ => Some(IllegalUseError::MissingDefaultBranch),
+            };
+            if let Some(error) = error {
+                config.submit_error(CompileError::IllegalUse(error), span);
+                return Self::Poison;
+            }
         }
         Self::MatchBlock(MatchStatement {
             value: Box::new(value),
             branches: parsed,
-        })
-    }
-
-    pub(super) fn create_for(
-        config: &mut Config,
-        binding: Spanned<String>,
-        start: Spanned<TempExpr>,
-        end: Spanned<TempExpr>,
-        scope: TempScope,
-        symbols: &mut dyn Resolution,
-        context: Option<&StatementContext>,
-    ) -> Self {
-        let start_span = start.1;
-        let end_span = end.1;
-        let start = Expression::new(config, start, symbols, context);
-        if config.is_poisoned() {
-            return Self::Poison;
-        }
-        let end = Expression::new(config, end, symbols, context);
-        if config.is_poisoned() {
-            return Self::Poison;
-        }
-        let start_ty = start.type_inference(config, symbols);
-        let end_ty = end.type_inference(config, symbols);
-        for (ty, span) in [(start_ty, start_span), (end_ty, end_span)] {
-            if ty.is_empty() || !ty.is_integer(symbols) {
-                config.submit_error(
-                    CompileError::IllegalUse(IllegalUseError::ForBoundMustBeInteger),
-                    span,
-                );
-                return Self::Poison;
-            }
-        }
-        if !same_type(config, start_ty, end_ty, symbols, end_span) {
-            return Self::Poison;
-        }
-        let var_type = start_ty.with_immutability(false, symbols);
-        let variable = Rc::new(Variable {
-            constant: false,
-            read_count: Default::default(),
-            declaration_span: binding.1,
-            name: binding.0,
-            var_type,
-            init_val: Box::new(start),
-        });
-        let mut child = child_context(context, crate::ast::symbols::SupperScopeType::For);
-        if !child.declare(config, variable.clone(), binding.1) {
-            return Self::Poison;
-        }
-        let condition = Expression::CompositeE(
-            Composite {
-                members: vec![
-                    CompAtom::VarValueA(variable.clone(), (0..0).into()),
-                    CompAtom::from_expr(end),
-                ],
-                operators: vec![Operator::Less],
-            },
-            (0..0).into(),
-        );
-        let increment = Expression::CompositeE(
-            Composite {
-                members: vec![
-                    CompAtom::VarValueA(variable.clone(), (0..0).into()),
-                    CompAtom::ConstValueA(
-                        ConstValue {
-                            value: "1".into(),
-                            ty: var_type,
-                        },
-                        (0..0).into(),
-                    ),
-                ],
-                operators: vec![Operator::Add],
-            },
-            (0..0).into(),
-        );
-        let execution = Statement::Assignment(Assignment {
-            variable: Box::new(Expression::VarValueE(variable.clone(), (0..0).into())),
-            value: Box::new(increment),
-        });
-        let stmts = Self::parse_scope(config, scope, symbols, &mut child);
-        Self::ForBlock(ForStatement {
-            init: Some(Box::new(Statement::VariableDecl(variable))),
-            condition: Box::new(condition),
-            execution: Some(Box::new(execution)),
-            stmts,
         })
     }
 }

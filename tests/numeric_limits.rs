@@ -99,7 +99,7 @@ fn numeric_limits_reject_arguments_type_arguments_and_implicit_narrowing() {
 #[test]
 fn bit_builtins_emit_scalar_operations_and_float_bitcasts_without_calls() {
     let (root, ir) = ll(
-        "export func mask(a:f32,b:i32)->u32{return std::bit::and(a,b);}export func toggle(a:f64,b:u64)->u64{return std::bit::xor(a,b);}export func invert(a:f32)->u32{return std::bit::not(a);}export func combine(a:i32,b:u32)->u32{return std::bit::or(a,b);}export func left(a:i32,b:i32)->u32{return std::bit::shl(a,b);}export func right(a:i32,b:i32)->u32{return std::bit::shr(a,b);}func main()->i32{return 0;}",
+        "import std::bit; export func mask(a:f32,b:i32)->u32{return std::bit::and(a,b);}export func toggle(a:f64,b:u64)->u64{return std::bit::xor(a,b);}export func invert(a:f32)->u32{return std::bit::not(a);}export func combine(a:i32,b:u32)->u32{return std::bit::or(a,b);}export func left(a:i32,b:i32)->u32{return std::bit::shl(a,b);}export func right(a:i32,b:i32)->u32{return std::bit::shr(a,b);}func main()->i32{return 0;}",
         true,
     );
     for operation in [

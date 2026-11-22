@@ -8,8 +8,8 @@ using println = std::println;
 func main() -> i32 {
     var sum = 0;
     // Numeric loop: 0 inclusive, 5 exclusive.
-    for i in [0, 5] {
-        sum = sum + i;
+    for i in std::range(cast<u64>(0), cast<u64>(5)) {
+        sum = sum + cast<i32>(i);
     }
     if (sum == 10) {
         println!("sum={}", sum);

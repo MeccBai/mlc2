@@ -130,38 +130,9 @@ $env:MLC = (Get-Location).Path
 ./target/release/mlc.exe run crates/examples/sources/hello_world.m2
 ```
 
-## Pipeline and workspace
-
-```text
-.m2 → Lexer / Chumsky → Temp AST → Type and semantic analysis → AST passes
-                                                                  ↓
-                              Native objects / linking ← LLVM ← Text IR
-```
-
-| Crate | Responsibility |
-| --- | --- |
-| `mlc_syntax` | Lexer, Chumsky parser, Temp AST, spans, and source line tables |
-| `mlc_core` | Symbols, types, inference, semantic checks, generic instantiation, resource semantics |
-| `mlc_optimizer` | Optimization passes over analyzed ASTs |
-| `mlc_codegen` | LLVM IR generation, ABI adaptation, destruction code |
-| `mlc_builder` | Dependency scheduling, caches, `.sym` / `.mg` artifacts, LLVM object emission |
-| `mlc_formatter` | Comment-preserving, fixed-style formatting using the syntax layer |
-| `ffi_parser` | Restricted, explicit-width C declaration parsing |
-| `mlc_examples` | Embedded language examples |
-| `mlc` | CLI, cross-module orchestration, final linking |
-
 ## Documentation
 
-Most detailed documentation is currently in Chinese.
-
-- [Language syntax and examples](docs/language.md)
-- [CLI and build modes](docs/cli.md)
-- [Example guide](docs/examples.md)
-- [C API declaration modules](docs/c_std.md)
-- [Build pipeline and caching](docs/build_pipeline.md)
-- [Installation layout and distribution](docs/distribution.md)
-- [Formatting rules](docs/formatting.md)
-- [Debug information](docs/debug-info.md)
-- [Workspace design](docs/workspace.md)
+- [Language usage](docs/README.md#语言使用)
+- [Compiler implementation](docs/README.md#实现)
 
 Features and syntax may change. When reporting an issue, include a minimal `.m2` / `.h` reproducer, the command, target triplet, and full diagnostic output.

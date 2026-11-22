@@ -1,7 +1,10 @@
 export import std::base;
 export import std::fmt;
+export import std::collection;
+export using RangeIter = std::collection::iter::RangeIter;
+export using range = std::collection::iter::range;
+export using range_step = std::collection::iter::range_step;
 export using String = std::base::String;
-export using ConstStringView = std::base::ConstStringView;
 export using format = std::fmt::format;
 export using print = std::fmt::print;
 export using println = std::fmt::println;

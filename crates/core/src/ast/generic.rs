@@ -8,7 +8,7 @@ use crate::ast::arena::{
 use crate::ast::generic;
 use crate::ast::symbol_name::SymbolName;
 use crate::ast::types::CompileType::{Base, Enum};
-use crate::ast::types::{CompileType, UnitType, resolve_type};
+use crate::ast::types::{CompileType, UnitType, resolve_type_with_bindings};
 use crate::ast::{
     TypeIndex,
     config::Config,
@@ -20,6 +20,7 @@ use crate::parser::out::{Span, TempConstraints, TempGeneric, TempInterfaceSymbol
 use std::collections::HashMap;
 use std::sync::LazyLock;
 mod diagnostics;
+mod instantiate;
 mod lower;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -38,13 +39,16 @@ impl InterfaceRequire {
         prototype: TempInterfaceSymbol,
         symbols: &mut dyn Resolution,
         span: Span,
+        bindings: &HashMap<String, TypeIndex>,
     ) -> Option<Self> {
         let name = SymbolName::callable(None, &prototype.name);
 
         let temp_ret_temp = prototype.return_type;
 
         let ret_type = match temp_ret_temp {
-            Some(temp_ret) => Some(resolve_type(config, temp_ret, symbols, None)?),
+            Some(temp_ret) => Some(resolve_type_with_bindings(
+                config, temp_ret, symbols, bindings,
+            )?),
             None => None,
         };
 
@@ -59,7 +63,8 @@ impl InterfaceRequire {
                         return None;
                     }
                 };
-                resolve_type(config, temp_ty, symbols, None).map(|ty| (ty, param.name))
+                resolve_type_with_bindings(config, temp_ty, symbols, bindings)
+                    .map(|ty| (ty, param.name))
             })
             .collect::<Option<Vec<_>>>()?;
 
@@ -205,6 +210,8 @@ impl Constraints {
 pub struct GenericRequire {
     pub name: String,
     pub requires: Vec<Constraints>,
+    pub(crate) parameters: Vec<GenericIndex>,
+    pub(crate) application: Option<(GenericIndex, Vec<TypeIndex>)>,
     pub attributes: Vec<String>,
     pub exported: bool,
 }
@@ -214,6 +221,8 @@ impl GenericRequire {
         Self {
             name,
             requires: Vec::new(),
+            parameters: vec![],
+            application: None,
             attributes: Vec::new(),
             exported: false,
         }
@@ -225,6 +234,14 @@ impl GenericRequire {
         symbols: &mut dyn Resolution,
     ) -> (Self, Span) {
         let name_span = prototype.name_span;
+        let (names, indices, types) = crate::ast::function::bindings::generics(
+            config,
+            "require",
+            &prototype.name,
+            prototype.parameters,
+            symbols,
+        );
+        let parameters = names.iter().map(|name| indices[name]).collect();
         let mut requires = Vec::new();
         for (temp, span) in prototype.requirements {
             if config.is_poisoned() {
@@ -247,7 +264,16 @@ impl GenericRequire {
                         );
                         None
                     } else if let Some(index) = Self::find(config, &path, symbols) {
-                        Some(symbols.get_generic(index).requires.clone())
+                        let require = symbols.get_generic(index);
+                        if require.parameters.is_empty() {
+                            Some(require.requires.clone())
+                        } else {
+                            config.submit_error(
+                                CompileError::IllegalUse(IllegalUseError::GenericCountMismatch),
+                                span,
+                            );
+                            None
+                        }
                     } else {
                         config.submit_error(
                             CompileError::Resolve(ResolveError::UnknownConstraint),
@@ -257,7 +283,7 @@ impl GenericRequire {
                     }
                 }
                 TempConstraints::Interface(function) => {
-                    InterfaceRequire::new(config, function, symbols, span)
+                    InterfaceRequire::new(config, function, symbols, span, &types)
                         .map(|rule| vec![Constraints::Interface(rule)])
                 }
             };
@@ -276,6 +302,8 @@ impl GenericRequire {
             Self {
                 name: prototype.name,
                 requires,
+                parameters,
+                application: None,
                 attributes: prototype.attributes,
                 exported: prototype.visibility.normal_export(config, &name_span),
             },
@@ -341,11 +369,9 @@ impl GenericIndex {
             }
         };
 
-        if self.check_and_submit(param, symbols, config, span) {
-            Some(param)
-        } else {
-            None
-        }
+        (symbols.get_generic(self).application.is_some()
+            || self.check_and_submit(param, symbols, config, span))
+        .then_some(param)
     }
 }
 

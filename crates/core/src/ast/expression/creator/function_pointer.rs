@@ -28,8 +28,44 @@ impl Expression {
             return Self::Poison(span);
         }
         let mut ty = owner.type_inference(config, symbols);
-        if *indirect && !ty.is_empty() && ty.is_ref(symbols) {
+        let indirect_ref = *indirect && !ty.is_empty() && ty.is_ref(symbols);
+        if indirect_ref {
             ty = ty.deref(symbols).unwrap();
+        }
+        if name == "first_byte"
+            && (!*indirect || indirect_ref)
+            && !ty.is_empty()
+            && matches!(symbols.get_type(ty).unqualified(), CompileType::Str)
+        {
+            if !args.is_empty() {
+                config.submit_error(
+                    CompileError::IllegalUse(IllegalUseError::ArgumentCountMismatch),
+                    span,
+                );
+                return Self::Poison(span);
+            }
+            let owner = if *indirect {
+                Self::UnaryExprE(
+                    UnaryExpr::Operator {
+                        op: crate::ast::expression::operators::Operator::Dereference,
+                        value: Box::new(CompAtom::from_expr(owner)),
+                    },
+                    span,
+                )
+            } else {
+                owner
+            };
+            let definition = crate::ast::builtins::lookup("str::first_byte").unwrap();
+            let owner = owner.const_fold(config, symbols);
+            return Self::new_builtin_with_values(
+                config,
+                definition,
+                TypeIndex::empty(),
+                vec![owner],
+                span,
+                symbols,
+            )
+            .const_fold(config, symbols);
         }
         let has_field = !ty.is_empty()
             && matches!(symbols.get_type(ty).unqualified(), CompileType::Unit(unit) if unit.get_member(name).is_some());
@@ -170,7 +206,6 @@ impl Expression {
             .map(|arg| Self::new(config, arg, symbols, context))
             .collect::<Vec<_>>();
         let parameters = symbols.get_function_regular(signature).params.clone();
-        let args = Self::coerce_arguments(args, &parameters, config, symbols, span);
         if !Self::check_function_args(config, signature, &args, symbols, span) {
             return Self::Poison(span);
         }

@@ -24,7 +24,20 @@ fn parse(source: &str) -> (AbstractSyntaxTree, PackageSymbolTable) {
         ErrorHandle::new(format!("generation{}", SOURCE_SUFFIX)),
         WarningHandle::new(format!("generation{}", SOURCE_SUFFIX)),
     );
-    let mut ast = AbstractSyntaxTree::new(config, module.unwrap());
+    let mut module = module.unwrap();
+    if source.contains("test_range(") {
+        let fixture = include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../tests/fixtures/iterator.m2"
+        ));
+        let tokens = mlc_syntax::lexer::tokenize(fixture).unwrap();
+        module.extend(
+            mlc_syntax::parser::parse(&tokens.tokens, fixture.len())
+                .0
+                .unwrap(),
+        );
+    }
+    let mut ast = AbstractSyntaxTree::new(config, module);
     let mut package = PackageSymbolTable::new();
     ast.analysis(&mut package);
     assert!(!ast.config.is_poisoned(), "{:?}", ast.config.error_handle());
@@ -97,7 +110,7 @@ fn branches_preserve_distinct_exit_snapshots() {
 #[test]
 fn loops_match_and_nested_exits() {
     emit(
-        "func main() { var n = 0; for i in [0,4] { var local = i; if (i == 1) { continue; } match (i) { 2 => { break; }, _ => { n = n+1; } } } while (n < 5) { n = n+1; if (n == 4) { continue; } break; } return; }",
+        "func main() { var n = 0; for i in test_range(0, 4) { var local = i; if (i == 1) { continue; } match (i) { 2 => { break; }, _ => { n = n+1; } } } while (n < 5) { n = n+1; if (n == 4) { continue; } break; } return; }",
         "loops",
     );
 }
@@ -111,9 +124,9 @@ fn calls_and_member_assignments() {
 }
 
 #[test]
-fn break_cleans_loop_binding_but_continue_keeps_it() {
+fn continue_cleans_the_element_and_break_also_cleans_the_iterator() {
     let (ast, package) = parse(
-        "func main() { var outer = 0; for i in [0,2] { var local = i; if (i == 0) { continue; } else { break; } } }",
+        "func main() { var outer = 0; for i in test_range(0, 2) { var local = i; if (i == 0) { continue; } else { break; } } }",
     );
     let generated = FunctionGenerator::generate(&ast.body[0], &package);
     for kind in [ExitKind::Break, ExitKind::Continue] {
@@ -130,7 +143,11 @@ fn break_cleans_loop_binding_but_continue_keeps_it() {
             .collect();
         assert!(names.contains(&"local"));
         assert!(!names.contains(&"outer"));
-        assert_eq!(names.contains(&"i"), kind == ExitKind::Break);
+        assert!(names.contains(&"i"));
+        assert_eq!(
+            names.iter().any(|name| name.starts_with("$for.i.")),
+            kind == ExitKind::Break
+        );
     }
     let entry_end = generated.ir.find("br label").unwrap();
     assert!(!generated.ir[entry_end..].contains("alloca"));

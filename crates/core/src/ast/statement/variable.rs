@@ -138,13 +138,10 @@ impl Variable {
         if init_val.is_poisoned() {
             return Self::poison();
         }
-        // Semantic constant evaluation remains mandatory for diagnostics and const.
-        let init_val = if let Some(target) = declared {
-            init_val.coerce_string_view(target, config, symbols, var_span)
-        } else {
-            init_val
-        };
-        let original_init = (temp_var.value_type != ValueType::Constant).then(|| init_val.clone());
+        let mutable_str = matches!(temp_var.ty, Some((out::TempType::MutableStr, _)));
+        let constant = temp_var.value_type == ValueType::Constant
+            || matches!(temp_var.ty, Some((out::TempType::ConstStr, _)));
+        let original_init = (!constant).then(|| init_val.clone());
         let init_val = init_val.const_fold(config, symbols);
         if let Some(ty) = declared {
             init_val.check_constant_range(ty, config, symbols, var_span);
@@ -230,26 +227,15 @@ impl Variable {
                     inferred
                 }
             }
-        }
-        .with_immutability(temp_var.value_type != ValueType::Flex, symbols);
-        // Native str bindings keep their compile-time payload and cannot be rebound.
-        let native_str = !ty.is_empty()
-            && match symbols.get_type(ty).unqualified() {
-                types::CompileType::Str => true,
-                types::CompileType::Enum(e) => matches!(
-                    symbols.get_type(e.underlying).unqualified(),
-                    types::CompileType::Str
-                ),
-                _ => false,
-            };
-        let ty = if native_str {
-            ty.with_immutability(true, symbols)
-        } else {
-            ty
         };
-
-        if (native_str || temp_var.value_type == ValueType::Constant) && !init_val.is_const(symbols)
-        {
+        let immutable_str = !mutable_str
+            && !ty.is_empty()
+            && matches!(symbols.get_type(ty).unqualified(), types::CompileType::Str);
+        let ty = ty.with_immutability(
+            constant || immutable_str || temp_var.value_type != ValueType::Flex,
+            symbols,
+        );
+        if constant && !init_val.is_const(symbols) {
             config.submit_error(
                 error::CompileError::IllegalUse(IllegalUseError::NonConstantInitializer),
                 var_span,
@@ -269,12 +255,12 @@ impl Variable {
                 span: temp_var.name_span,
                 ty: format!(
                     "{}{}",
-                    if temp_var.value_type == ValueType::Constant {
-                        "const "
+                    if constant { "const " } else { "" },
+                    if mutable_str && !ty.is_immutable(symbols) {
+                        "mut str".into()
                     } else {
-                        ""
-                    },
-                    crate::ast::semantic::display_type(ty, symbols)
+                        crate::ast::semantic::display_type(ty, symbols)
+                    }
                 ),
                 kind: "variable",
                 definition: Some((config.file_id(), temp_var.name_span)),
@@ -282,14 +268,13 @@ impl Variable {
             });
         }
         Rc::new(Self {
-            constant: (native_str && ctxt.is_some()) || temp_var.value_type == ValueType::Constant,
+            constant,
             read_count: Default::default(),
             declaration_span: temp_var.name_span,
             name: temp_var.name,
             var_type: ty,
             init_val: Box::new(
                 original_init
-                    .filter(|_| !native_str)
                     .unwrap_or(init_val)
                     .normalize_initializer(ty, symbols),
             ),
