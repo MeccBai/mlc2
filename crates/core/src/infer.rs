@@ -9,7 +9,7 @@ mod check;
 mod constantness;
 mod constants;
 mod expression;
-mod generics;
+pub(crate) mod generics;
 mod numeric;
 mod place;
 mod range;

@@ -104,7 +104,7 @@ mlc symbols native.h --module c_std::native --triplet x86_64-pc-windows-msvc
 程序继承当前终端的输入输出和工作目录，退出码由 mlc 原样返回。
 不再支持 `mlc main.m2` 形式。`ll`、`symbols` 和 `example` 命令保持独立。
 
-示例独立维护在 `crates/examples`（`mlc_examples` crate），目前有 25 个，
+示例独立维护在 `crates/examples`（`mlc_examples` crate），目前有 30 个，
 按基础、函数与泛型、类型与资源分组；每份源码包含英文说明、运行命令和预期输出。
 建议先运行 `mlc example list`，再按列表顺序学习。示例目录见 [示例指南](examples.md)。
 源码编译时内嵌到 mlc，安装后不需要额外部署示例目录；example 命令不读取项目或全局配置。

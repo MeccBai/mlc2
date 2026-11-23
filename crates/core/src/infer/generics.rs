@@ -78,7 +78,7 @@ impl TypeInfer<'_> {
         Some(bindings)
     }
 }
-fn infer(
+pub(crate) fn infer(
     expected: TypeIndex,
     found: TypeIndex,
     bindings: &mut HashMap<GenericIndex, TypeIndex>,

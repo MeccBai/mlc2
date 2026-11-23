@@ -87,3 +87,14 @@ func main() -> i32 {
 它不产生真实的替代值。正常编译后，一旦执行到该位置，就打印当前源文件、行、列
 和 not implemented (todo)，然后调用退出接口以 -1 结束进程。无需 import std。
 退出码在不同操作系统上可能表现为不同的非零整数。编辑器分析只检查它，不执行它。
+
+## Host system
+
+`import std::host;` exposes `std::host::System` with the variants `Windows`,
+`Linux`, and `Macos`. The constant function `std::host::host_os()` returns the
+system running the compiler. During cross-compilation it still returns the host
+system. Release builds can eliminate branches based on this constant.
+
+`std::host::is_debug()` returns a compile-time `bool`.
+The default and Debug profiles return `true`. Release and RelWithInfo
+return `false`. Optimization flags are independent of the build profile.

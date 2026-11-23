@@ -206,7 +206,9 @@ impl Expression {
             }
         }
         let valid = match kind {
-            Builtin::Todo
+            Builtin::IsDebug
+            | Builtin::HostOs
+            | Builtin::Todo
             | Builtin::Size
             | Builtin::BitAnd
             | Builtin::BitXor
@@ -257,7 +259,9 @@ impl Expression {
             }
         }
         let result = match kind {
-            Builtin::Todo
+            Builtin::IsDebug
+            | Builtin::HostOs
+            | Builtin::Todo
             | Builtin::Size
             | Builtin::BitAnd
             | Builtin::BitXor

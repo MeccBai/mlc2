@@ -297,6 +297,7 @@ pub fn analyze(entry: &Path) -> Result<Snapshot, Report> {
             WarningHandle::new(file.path.to_string_lossy().into()),
         );
         config.set_target_layout(layout);
+        config.release_build = paths.mode.optimized();
         if let TargetInput::Builtin(module) = target.input {
             config.builtin_module = Some(module);
         }

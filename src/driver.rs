@@ -391,6 +391,7 @@ fn build(
             debug_info: debug,
             optimized,
         },
+        mode.optimized(),
         &module_configs,
         Some(isolated_target.map_or_else(
             || output_root.join("ctfe"),

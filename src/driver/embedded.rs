@@ -132,6 +132,7 @@ pub(super) fn run(cli: &Cli, root: &Path, project: &Project) -> Result<i32, Repo
                 debug_info: false,
                 optimized: optimize,
             },
+            mode.optimized(),
             &HashMap::new(),
             Some(staging.path().join("ctfe")),
             std::time::Duration::from_secs(3),

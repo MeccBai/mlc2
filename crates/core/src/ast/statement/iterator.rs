@@ -4,7 +4,6 @@ use crate::ast::{
     config::Config,
     expression::{CompAtom, Expression, FuncCall, UnaryExpr, operators::Operator},
     generic::InterfaceRequire,
-    symbol_name::SymbolName,
     symbols::{Resolution, StatementContext, SupperScopeType},
     types::{CompileType, base_type::DataType},
 };
@@ -31,17 +30,6 @@ impl Statement {
         let Some((owner, borrowed)) = iterator_owner(ty, symbols) else {
             return invalid_iterator(config, mode, "a mutable iterator is required", span);
         };
-        let owner_name = symbols.get_type(owner).unqualified().format(symbols);
-        let Some(element) = symbols
-            .associated_interface(owner, &SymbolName::callable(Some(&owner_name), "get_clone"))
-            .and_then(|index| symbols.get_interface_regular(index).ret_type)
-        else {
-            return invalid_iterator(config, mode, "missing get_clone() -> T", span);
-        };
-
-        let mutable = mode == TempForBinding::MutRef;
-        let reference = element.make_ref(symbols, mutable);
-        let boolean = symbols.get_base(DataType::Boolean, 8, true);
         let iterator = Rc::new(Variable {
             constant: false,
             read_count: Cell::new(3),
@@ -51,26 +39,22 @@ impl Statement {
             init_val: Box::new(iterator),
         });
         let mut calls = Vec::new();
-        for (name, returned, mutable_self) in [
-            ("has_next", Some(boolean), false),
-            ("to_next", None, true),
-            ("get_ref", Some(reference), false),
-            ("get_clone", Some(element), false),
+        let mut methods = Vec::new();
+        for (name, mutable_self) in [
+            ("get_clone", false),
+            ("has_next", false),
+            ("to_next", true),
+            ("get_ref", false),
         ] {
-            let requirement = InterfaceRequire {
-                name: name.into(),
-                ret_type: returned,
-                params: vec![],
-                has_self: true,
-                mutable: mutable_self,
-                owner: false,
+            let Some((index, generic)) = Expression::associated_candidate(owner, name, symbols)
+            else {
+                let reason = if name == "get_clone" {
+                    "missing get_clone() -> T".into()
+                } else {
+                    format!("{name}: missing iterator method")
+                };
+                return invalid_iterator(config, mode, &reason, span);
             };
-            if let Some(reason) = requirement.failure(owner, symbols) {
-                return invalid_iterator(config, mode, &format!("{name}: {reason}"), span);
-            }
-            let index = symbols
-                .associated_interface(owner, &SymbolName::callable(Some(&owner_name), name))
-                .expect("validated iterator interface");
             let receiver = if borrowed {
                 Expression::VarValueE(iterator.clone(), span)
             } else {
@@ -86,6 +70,26 @@ impl Statement {
                     span,
                 )
             };
+            let symbol = symbols.get_interface(index, generic);
+            if !symbol.has_self || !symbol.params.is_empty() {
+                return invalid_iterator(config, mode, &format!("{name}: invalid signature"), span);
+            }
+            let index = if generic {
+                let Some(instance) = Expression::infer_interface(
+                    config,
+                    index,
+                    std::slice::from_ref(&receiver),
+                    span,
+                    symbols,
+                    context,
+                ) else {
+                    return Self::Poison;
+                };
+                instance
+            } else {
+                index
+            };
+            methods.push(index);
             calls.push(Expression::FuncCallE(
                 FuncCall {
                     pipeline: false,
@@ -96,8 +100,43 @@ impl Statement {
                 span,
             ));
         }
-        let [condition, advance, borrow, clone]: [Expression; 4] =
+        let [clone, condition, advance, borrow]: [Expression; 4] =
             calls.try_into().expect("four iterator methods");
+        let element = clone.type_inference(config, symbols);
+        if element.is_empty() {
+            return invalid_iterator(config, mode, "missing get_clone() -> T", span);
+        }
+        let mutable = mode == TempForBinding::MutRef;
+        let reference = element.make_ref(symbols, mutable);
+        let mutable_reference = element.make_ref(symbols, true);
+        let boolean = symbols.get_base(DataType::Boolean, 8, true);
+        let returned_ref = borrow.type_inference(config, symbols);
+        let required_ref = if !mutable && returned_ref == mutable_reference {
+            mutable_reference
+        } else {
+            reference
+        };
+        for ((name, returned, mutable_self), index) in [
+            ("get_clone", Some(element), false),
+            ("has_next", Some(boolean), false),
+            ("to_next", None, true),
+            ("get_ref", Some(required_ref), false),
+        ]
+        .into_iter()
+        .zip(methods)
+        {
+            let requirement = InterfaceRequire {
+                name: name.into(),
+                ret_type: returned,
+                params: vec![],
+                has_self: true,
+                mutable: mutable_self,
+                owner: false,
+            };
+            if let Some(reason) = requirement.signature_failure(index, name, symbols) {
+                return invalid_iterator(config, mode, &format!("{name}: {reason}"), span);
+            }
+        }
         let (value, element_type) = if mode == TempForBinding::Clone {
             (clone, element)
         } else {

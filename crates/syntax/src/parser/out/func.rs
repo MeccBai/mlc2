@@ -45,6 +45,8 @@ pub struct TempInterface {
 pub struct TempInterfaceSymbol {
     pub visibility: TempVisibility,
     pub owner: Option<Spanned<TempPath>>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub owner_args: Vec<Spanned<TempType>>,
     pub has_self: bool,
     pub mutable: bool,
     pub name: String,

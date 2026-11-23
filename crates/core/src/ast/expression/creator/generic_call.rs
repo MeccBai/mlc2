@@ -12,6 +12,116 @@ use crate::diagnostic::error::{CompileError, IllegalUseError, ResolveError};
 use crate::parser::out::{Span, Spanned, TempExpr, TempExpr::Path, TempPath, TempType};
 
 impl Expression {
+    pub(super) fn new_associated_call(
+        config: &mut Config,
+        owner: Spanned<TempType>,
+        name: String,
+        args: Vec<Spanned<TempExpr>>,
+        span: Span,
+        symbols: &mut dyn Resolution,
+        context: Option<&crate::ast::symbols::StatementContext>,
+    ) -> Self {
+        use crate::ast::{symbol_name::SymbolName, types::CompileType};
+        let Some(owner) = resolve_type(
+            config,
+            owner,
+            symbols,
+            context.map(|ctx| ctx as &dyn crate::ast::types::TypeContext),
+        ) else {
+            return Self::Poison(span);
+        };
+        let owner_name = symbols.get_type(owner).unqualified().format(symbols);
+        let concrete = SymbolName::callable(Some(&owner_name), &name);
+        let mut index = symbols.associated_interface(owner, &concrete);
+        let args = args
+            .into_iter()
+            .map(|arg| Self::new(config, arg, symbols, context))
+            .collect::<Vec<_>>();
+        if config.is_poisoned() {
+            return Self::Poison(span);
+        }
+        if index.is_none()
+            && let CompileType::Unit(unit) = symbols.get_type(owner).unqualified()
+            && let Some(application) = &unit.application
+        {
+            let key = SymbolName::callable(Some(&application.template_name), &name);
+            if let Some(template) = symbols
+                .table(application.template.file_id())
+                .generics
+                .interfaces
+                .get_by_name(&key)
+            {
+                let symbol = symbols.get_interface(template, true).clone();
+                if !symbol.has_self {
+                    let mut bindings = HashMap::new();
+                    let inferred = crate::infer::generics::infer(
+                        symbol.owner,
+                        owner,
+                        &mut bindings,
+                        &symbol.generic_map,
+                        symbols,
+                    )
+                    .and_then(|()| {
+                        for ((expected, _), arg) in symbol.params.iter().zip(&args) {
+                            let actual = arg.type_inference(config, symbols);
+                            if actual.is_empty() {
+                                return Err(IllegalUseError::ArgumentCountMismatch);
+                            }
+                            crate::infer::generics::infer(
+                                *expected,
+                                actual,
+                                &mut bindings,
+                                &symbol.generic_map,
+                                symbols,
+                            )?;
+                        }
+                        Ok(())
+                    });
+                    if let Err(error) = inferred {
+                        config.submit_error(CompileError::IllegalUse(error), span);
+                        return Self::Poison(span);
+                    }
+                    let instance = template.instantiation(
+                        config,
+                        &bindings,
+                        symbols,
+                        context.and_then(|ctx| ctx.instantiation_actives()),
+                        span,
+                    );
+                    if config.is_poisoned() || instance.is_empty() {
+                        return Self::Poison(span);
+                    }
+                    index = Some(instance);
+                }
+            }
+        }
+        let Some(index) = index else {
+            config.submit_error(CompileError::Resolve(ResolveError::UnknownInterface), span);
+            return Self::Poison(span);
+        };
+        let symbol = symbols.get_interface_regular(index);
+        if symbol.has_self || (!symbol.exported && index.file_id() != config.file_id()) {
+            config.submit_error(
+                CompileError::IllegalUse(IllegalUseError::MemberAccessViolation),
+                span,
+            );
+            return Self::Poison(span);
+        }
+        let params = symbol.params.clone();
+        if !crate::TypeInfer::new(config, symbols).check_arguments(&params, &args, span) {
+            return Self::Poison(span);
+        }
+        Self::FuncCallE(
+            FuncCall {
+                pipeline: false,
+                callee: None,
+                func: EnumBool::True(index),
+                args,
+            },
+            span,
+        )
+    }
+
     pub(super) fn new_generic_call(
         config: &mut Config,
         path: TempPath,

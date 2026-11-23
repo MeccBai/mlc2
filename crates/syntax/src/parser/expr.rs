@@ -187,17 +187,38 @@ where
                     .collect::<Vec<_>>()
                     .delimited_by(operator(Token::LAngle), operator(Token::RAngle)),
             )
+            .map_with(|(path, args), extra| (path, args, extra.span()))
+            .then(
+                operator(Token::ColonColon)
+                    .ignore_then(spanned_ident())
+                    .or_not(),
+            )
             .then(
                 list.clone()
                     .delimited_by(keyword(Token::LParen), keyword(Token::RParen)),
             )
-            .map(|((path, generic_args), args)| Expr::Call {
-                callee: TempCallee::GenericPath {
-                    path,
-                    args: generic_args,
+            .map(
+                |(((path, generic_args, owner_span), member), args)| Expr::Call {
+                    callee: if let Some((name, _)) = member {
+                        TempCallee::Associated {
+                            owner: (
+                                super::TypeExpr::Generic {
+                                    base: path,
+                                    args: generic_args,
+                                },
+                                owner_span,
+                            ),
+                            name,
+                        }
+                    } else {
+                        TempCallee::GenericPath {
+                            path,
+                            args: generic_args,
+                        }
+                    },
+                    args,
                 },
-                args,
-            })
+            )
             .map_with(|expr, extra| (expr, extra.span()));
 
         let atom = if allow_initializers {

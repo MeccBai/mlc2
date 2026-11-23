@@ -129,3 +129,41 @@ fn pruned_control_flow_preserves_side_effects_and_unmatched_match_fallthrough() 
         );
     }
 }
+
+#[test]
+fn host_os_is_a_constant_and_optimized_matches_keep_only_the_host_arm() {
+    let root = tempfile::tempdir().unwrap();
+    let entry = root.path().join("main.m2");
+    std::fs::write(
+        &entry,
+        r#"
+        import std::host;
+        func main() -> i32 {
+            const system: std::host::System = std::host::host_os();
+            match (system) {
+                std::host::System::Windows => { return 11; },
+                std::host::System::Linux => { return 22; },
+                std::host::System::Macos => { return 33; },
+            }
+        }
+    "#,
+    )
+    .unwrap();
+    let plan = BuildPlan::discover(&entry, &ImportResolver { lib_dirs: vec![] }).unwrap();
+    let generated = generate_with_options(
+        &plan,
+        mlc_manifest::Target::default().triplet(),
+        TargetKind::Bin,
+        mlc_optimizer::OptimizeConfig::enabled(),
+    )
+    .unwrap();
+    let ir = &generated.modules[0].1;
+    let expected = match mlc_manifest::System::host() {
+        mlc_manifest::System::Windows => 11,
+        mlc_manifest::System::Linux => 22,
+        mlc_manifest::System::Macos => 33,
+    };
+    assert_eq!(ir.matches("ret i32").count(), 1, "{ir}");
+    assert!(ir.contains(&format!("store i32 {expected},")), "{ir}");
+    assert!(!ir.contains("match.arm"), "{ir}");
+}

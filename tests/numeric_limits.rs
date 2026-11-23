@@ -97,6 +97,26 @@ fn numeric_limits_reject_arguments_type_arguments_and_implicit_narrowing() {
 }
 
 #[test]
+fn integer_assignment_widens_implicitly_and_requires_cast_for_truncation() {
+    let (_, ir) = ll(
+        "export func signed_widen(value:i32)->i64{var result:i64=0;result=value;return result;}
+         export func unsigned_widen(value:u32)->u64{var result:u64=0;result=value;return result;}
+         export func narrow(value:i64)->i32{var result:i32=0;result=cast<i32>(value);return result;}
+         func main()->i32{return 0;}",
+        true,
+    );
+    assert!(ir.contains("sext i32"), "{ir}");
+    assert!(ir.contains("zext i32"), "{ir}");
+    assert!(ir.contains("trunc i64"), "{ir}");
+    let (_, diagnostic) = ll(
+        "export func narrow(value:i64)->i32{var result:i32=0;result=value;return result;}
+         func main()->i32{return 0;}",
+        false,
+    );
+    assert!(diagnostic.contains("Type mismatch"), "{diagnostic}");
+}
+
+#[test]
 fn bit_builtins_emit_scalar_operations_and_float_bitcasts_without_calls() {
     let (root, ir) = ll(
         "import std::bit; export func mask(a:f32,b:i32)->u32{return std::bit::and(a,b);}export func toggle(a:f64,b:u64)->u64{return std::bit::xor(a,b);}export func invert(a:f32)->u32{return std::bit::not(a);}export func combine(a:i32,b:u32)->u32{return std::bit::or(a,b);}export func left(a:i32,b:i32)->u32{return std::bit::shl(a,b);}export func right(a:i32,b:i32)->u32{return std::bit::shr(a,b);}func main()->i32{return 0;}",

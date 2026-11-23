@@ -19,6 +19,55 @@ impl Expression {
             .is_some_and(|receiver| std::rc::Rc::ptr_eq(variable, receiver)))
     }
 
+    pub(crate) fn associated_candidate(
+        owner_type: crate::ast::TypeIndex,
+        name: &str,
+        symbols: &dyn Resolution,
+    ) -> Option<(InterfaceIndex, bool)> {
+        let interface_name = SymbolName::callable(Some(&owner_type.format(symbols)), name);
+        symbols
+            .associated_interface(owner_type, &interface_name)
+            .map(|index| (index, false))
+            .or_else(|| {
+                let crate::ast::types::CompileType::Unit(unit) =
+                    symbols.get_type(owner_type).unqualified()
+                else {
+                    return None;
+                };
+                let app = unit.application.as_ref()?;
+                let name = SymbolName::callable(Some(&app.template_name), name);
+                symbols
+                    .table(app.template.file_id())
+                    .generics
+                    .interfaces
+                    .get_by_name(&name)
+                    .map(|index| (index, true))
+            })
+            .or_else(|| {
+                symbols
+                    .local()
+                    .generics
+                    .interfaces
+                    .get_by_name(&interface_name)
+                    .map(|index| (index, true))
+            })
+            .or_else(|| {
+                symbols
+                    .table(owner_type.file_id())
+                    .generics
+                    .interfaces
+                    .get_by_name(&interface_name)
+                    .map(|index| (index, true))
+            })
+            .or_else(|| match symbols.lookup_export(&interface_name) {
+                Some(crate::ast::symbols::ExportSymbol::Interface {
+                    index,
+                    generic: true,
+                }) => Some((index, true)),
+                _ => None,
+            })
+    }
+
     pub fn search_interface(
         config: &mut Config,
         temp_expr: Spanned<TempExpr>,
@@ -58,33 +107,7 @@ impl Expression {
                     return None;
                 }
                 let owner_type = owner_type.with_immutability(false, symbols);
-                let interface_name = SymbolName::callable(Some(&owner_type.format(symbols)), &name);
-                let candidate = symbols
-                    .associated_interface(owner_type, &interface_name)
-                    .map(|index| (index, false))
-                    .or_else(|| {
-                        symbols
-                            .local()
-                            .generics
-                            .interfaces
-                            .get_by_name(&interface_name)
-                            .map(|index| (index, true))
-                    })
-                    .or_else(|| {
-                        symbols
-                            .table(owner_type.file_id())
-                            .generics
-                            .interfaces
-                            .get_by_name(&interface_name)
-                            .map(|index| (index, true))
-                    })
-                    .or_else(|| match symbols.lookup_export(&interface_name) {
-                        Some(crate::ast::symbols::ExportSymbol::Interface {
-                            index,
-                            generic: true,
-                        }) => Some((index, true)),
-                        _ => None,
-                    });
+                let candidate = Self::associated_candidate(owner_type, &name, symbols);
                 let Some((index, generic)) = candidate else {
                     config
                         .submit_error(CompileError::Resolve(ResolveError::UnknownInterface), span);

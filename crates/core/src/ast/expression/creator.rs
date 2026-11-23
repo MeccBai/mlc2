@@ -390,6 +390,9 @@ impl Expression {
                         symbols,
                         context,
                     ),
+                    TempCallee::Associated { owner, name } => {
+                        Self::new_associated_call(config, owner, name, args, span, symbols, context)
+                    }
                     TempCallee::Expr(callee) => {
                         if matches!(callee.0, Member { .. }) {
                             Self::new_member_callable(config, *callee, args, span, symbols, context)

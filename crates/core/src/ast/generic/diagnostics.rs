@@ -95,6 +95,15 @@ impl InterfaceRequire {
         let Some(index) = symbols.associated_interface(param, &name) else {
             return Some(format!("required interface `{name}` was not found"));
         };
+        self.signature_failure(index, &name, symbols)
+    }
+
+    pub(crate) fn signature_failure(
+        &self,
+        index: crate::ast::arena::InterfaceIndex,
+        name: &str,
+        symbols: &dyn Resolution,
+    ) -> Option<String> {
         let interface = symbols.get_interface_regular(index);
         if !interface.public {
             return Some(format!("interface `{name}` is not public"));

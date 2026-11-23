@@ -6,6 +6,10 @@ use std::{
 };
 static COMPILER_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 fn compile(source: &str, run: bool) -> (tempfile::TempDir, Output) {
+    compile_with_flags(source, run, &[])
+}
+
+fn compile_with_flags(source: &str, run: bool, flags: &[&str]) -> (tempfile::TempDir, Output) {
     // Each invocation generates helpers in the same standard-library cache.
     let _guard = COMPILER_LOCK
         .lock()
@@ -21,6 +25,7 @@ fn compile(source: &str, run: bool) -> (tempfile::TempDir, Output) {
             "--config",
             "config.toml",
         ])
+        .args(flags)
         .env("MLC", support::library())
         .output()
         .unwrap();
@@ -497,4 +502,55 @@ func main()->i32 {
     let (_, result) = compile(&source, true);
     success(&result);
     assert!(String::from_utf8_lossy(&result.stdout).contains("numeric formatting verified"));
+}
+
+#[test]
+fn vec_grows_and_supports_explicit_indexed_access() {
+    let source = r#"
+import std;
+import std::host;
+
+func main() -> i32 {
+    const zero: u64 = 0;
+    const one: u64 = 1;
+    const two: u64 = 2;
+    var values = std::Vec<i32>::new();
+    for $value in values.iter() {
+        return 3;
+    }
+    for $mut value in values.iter_mut() {
+        return 4;
+    }
+    values.push(10);
+    values.push(20);
+    values.set(one, 32);
+    if (!std::host::is_debug() || values.len() != two) {
+        return 1;
+    }
+    for $mut value in values.iter_mut() {
+        $value = $value + 1;
+    }
+    var sum = 0;
+    for $value in values.iter() {
+        sum = sum + $value;
+    }
+    for value in values.iter() {
+        sum = sum + value;
+    }
+    for $value in values.iter_mut() {
+        sum = sum + $value;
+    }
+    if (sum != 132) {
+        return 2;
+    }
+    return values.get(zero) + values.get(one) - 44;
+}
+"#;
+    success(&compile(source, true).1);
+    let release = source.replace("!std::host::is_debug()", "std::host::is_debug()");
+    success(&compile_with_flags(&release, true, &["--release"]).1);
+
+    let out_of_bounds = source.replace("values.get(one)", "values.get(two)");
+    let (_, invalid) = compile(&out_of_bounds, true);
+    assert!(!invalid.status.success());
 }

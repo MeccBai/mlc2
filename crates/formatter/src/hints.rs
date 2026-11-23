@@ -193,6 +193,7 @@ impl<'a> Hints<'a> {
                         };
                         self.within(start, span.end, Token::LParen, Style::Vertical);
                     }
+                    TempCallee::Associated { owner, .. } => self.ty(owner),
                     TempCallee::GenericPath { args: types, .. } => {
                         self.after(span.start, Token::LAngle, Style::Vertical);
                         for ty in types {

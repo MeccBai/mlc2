@@ -14,6 +14,10 @@ pub enum TempLiteralKind {
 #[serde(tag = "kind", content = "data")]
 pub enum TempCallee {
     Expr(Box<Spanned<TempExpr>>),
+    Associated {
+        owner: Spanned<TempType>,
+        name: String,
+    },
     GenericPath {
         path: TempPath,
         args: Vec<Spanned<TempType>>,
@@ -24,6 +28,7 @@ impl TempCallee {
     pub fn dump(&self) -> String {
         match self {
             Self::Expr(expr) => expr.0.dump(),
+            Self::Associated { owner, name } => format!("{}::{name}", owner.0.dump()),
             Self::GenericPath { path, args } => format!(
                 "{}<{}>",
                 path.segments.join("::"),

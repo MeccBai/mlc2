@@ -124,6 +124,7 @@ func main() -> i32 {
 
 初始化允许无损数值转换；可求值常量根据目标范围和精度检查。
 运行期转换只有在源类型全部取值均可无损表示时才隐式允许。
+整数赋值同样遵循这条规则。例如 `i32` 可以直接赋给 `i64`，反向赋值需要显式写 `cast<i32>(value)`。
 普通函数实参仍遵循参数类型检查，不能假设初始化宽容适用于所有调用。
 
 ```rust
@@ -749,4 +750,26 @@ self.value                          // Unit 字段通过 self->value；基础类
 value |> value.method()             // 不允许成员管道
 var pointer = ordinary;             // 使用 std::function(ordinary)
 match (payload = object) {}         // Union 本体不能按值匹配，右侧必须是 Ref
+```
+
+## Vec
+
+`import std::collection;` exposes `std::collection::Vec<T>`. Use `import std;` and `std::Vec<T>::new()` to create one and use the `len()`, `push(value)`, `get(index)`, and `set(index, value)` methods. Indices use `u64` and start at zero. Debug and Default builds
+terminate on an out-of-range index. Release callers must supply an index
+smaller than the vector length.
+
+Elements must be types supported by `std::mem::alloc<T>`. The vector owns
+its storage and expands it automatically when pushed past its capacity.
+
+`vec.iter()` visits elements in order by value or by read-only reference.
+`vec.iter_mut()` also lets you update elements in place with `for $mut`.
+Keep the vector alive and finish iterating before calling `push()`.
+
+```mlc
+for $mut item in values.iter_mut() {
+    $item = $item + 1;
+}
+for $item in values.iter() {
+    std::println!("{}", $item);
+}
 ```

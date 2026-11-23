@@ -143,7 +143,7 @@ pub const EXAMPLES: &[Example] = &[
     ),
     example!(
         "enums",
-        "Enum values and match branches",
+        "Enum values and exhaustive matching",
         "enums",
         "Types and resources",
         "running\n"
@@ -196,6 +196,41 @@ pub const EXAMPLES: &[Example] = &[
         "display",
         "Standard library",
         "point=Point(3,4)\n"
+    ),
+    example!(
+        "ranges",
+        "Half-open ranges, strides and read-only loop bindings",
+        "ranges",
+        "Standard library",
+        "plain=6 stepped=9\n"
+    ),
+    example!(
+        "mutable-iterator",
+        "Implement an iterator and update a value through a loop binding",
+        "mutable_iterator",
+        "Standard library",
+        "value=42\n"
+    ),
+    example!(
+        "iterator-constraints",
+        "Use a parameterized Iterator<T> constraint",
+        "iterator_constraints",
+        "Standard library",
+        "first=7\n"
+    ),
+    example!(
+        "native-str",
+        "Runtime str values, mutable bindings and the first UTF-8 byte",
+        "native_str",
+        "Standard library",
+        "ascii=43 utf8=228\ntext=中 bytes=3\n"
+    ),
+    example!(
+        "bit-operations",
+        "Bit flags, shifts and numeric type limits",
+        "bit_operations",
+        "Standard library",
+        "flags=9 low=1 max=255\n"
     ),
     example!(
         "c-interop",

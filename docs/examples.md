@@ -1,6 +1,6 @@
 # 内置示例指南
 
-目前共 25 个示例，从简单到复杂排列。每份都是独立的 `.m2` 程序，不需要 Project.toml。
+目前共 30 个示例，从简单到复杂排列。每份都是独立的 `.m2` 程序，不需要 Project.toml。
 
 ```powershell
 mlc example list
@@ -21,6 +21,7 @@ mlc run swap.m2
 | 基础 | while-loops | while、break、continue |
 | 基础 | references | @、@mut、$ 与引用可变性 |
 | 函数与泛型 | functions | 参数、返回值、递归 |
+| 函数与泛型 | const-functions | 编译期求值、循环与递归 |
 | 函数与泛型 | aliases | 类型别名与函数别名 |
 | 函数与泛型 | pipelines | 单值传入、参数拆分与连续调用 |
 | 函数与泛型 | function-pointers | std::function 与回调 |
@@ -30,7 +31,7 @@ mlc run swap.m2
 | 类型与资源 | units | 字段顺序初始化与 pub |
 | 类型与资源 | generic-units | Box<T> 构造与结构化泛型推断 |
 | 类型与资源 | methods | self、mut self、点号与箭头 |
-| 类型与资源 | enums | 枚举类型与值匹配 |
+| 类型与资源 | enums | 枚举类型与穷举匹配 |
 | 类型与资源 | unions | 带数据的候选类型与解包 |
 | 类型与资源 | globals | main 前的运行期初始化 |
 | 类型与资源 | memory | 分配、初始化、显式释放 |
@@ -38,6 +39,11 @@ mlc run swap.m2
 | 标准库 | strings | std::String、append、clone、非持有字符串视图 |
 | 标准库 | formatting | format!、print!、println!、转义花括号 |
 | 标准库 | display | 自定义 format 接口与 Display 约束 |
+| 标准库 | ranges | 半开区间、步长、只读引用绑定 |
+| 标准库 | mutable-iterator | 自定义迭代器、可写引用绑定 |
+| 标准库 | iterator-constraints | 带类型参数的 Iterator<T> 约束 |
+| 标准库 | native-str | mut str、运行时值、UTF-8 首字节 |
+| 标准库 | bit-operations | std::bit、位标志、整数类型上限 |
 | 互操作 | c-interop | C ABI、printf、NUL 终止字符串 |
 
 注意 `unit<T> Box` 与 `Base::func<T>` 的泛型归属不同：前者参数属于类型，

@@ -115,6 +115,7 @@ pub(super) struct Executor {
     layout: mlc_core::ast::config::TargetLayout,
     cache_root: PathBuf,
     max_time: std::time::Duration,
+    release_build: bool,
     temp_ast_hash: OnceCell<Result<String, String>>,
     compiler_hash: OnceCell<Result<String, String>>,
     running: Cell<bool>,
@@ -128,6 +129,7 @@ impl Executor {
         layout: mlc_core::ast::config::TargetLayout,
         cache_root: PathBuf,
         max_time: std::time::Duration,
+        release_build: bool,
     ) -> Self {
         Self {
             plan,
@@ -136,6 +138,7 @@ impl Executor {
             layout,
             cache_root,
             max_time,
+            release_build,
             temp_ast_hash: OnceCell::new(),
             compiler_hash: OnceCell::new(),
             running: Cell::new(false),
@@ -197,7 +200,12 @@ impl Executor {
             target: self.target.clone(),
             ptr_size: self.layout.ptr_size,
             ptr_align: self.layout.ptr_align,
-            optimization: "O3".into(),
+            optimization: if self.release_build {
+                "O3-release"
+            } else {
+                "O3-debug"
+            }
+            .into(),
             library_file: library.into(),
         };
         Ok(cache::Entry::new(&self.cache_root, fingerprint))
@@ -235,6 +243,7 @@ impl Executor {
                 WarningHandle::new(file),
             );
             config.set_target_layout(host_layout);
+            config.release_build = self.release_build;
             if let mlc_builder::plan::TargetInput::Builtin(module) = target.input {
                 config.builtin_module = Some(module);
             }

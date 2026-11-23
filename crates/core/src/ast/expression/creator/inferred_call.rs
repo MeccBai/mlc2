@@ -8,7 +8,7 @@ use crate::ast::{
 use crate::diagnostic::error::{CompileError, IllegalUseError};
 use crate::parser::out::{Span, Spanned, TempExpr};
 impl Expression {
-    pub(super) fn infer_interface(
+    pub(crate) fn infer_interface(
         config: &mut Config,
         template: InterfaceIndex,
         args: &[Expression],
@@ -17,8 +17,14 @@ impl Expression {
         context: Option<&StatementContext>,
     ) -> Option<InterfaceIndex> {
         let symbol = symbols.get_interface(template, true).clone();
+        let signature = symbol
+            .receiver_type
+            .into_iter()
+            .map(|ty| (ty, "self".into()))
+            .chain(symbol.params.iter().cloned())
+            .collect::<Vec<_>>();
         let bindings = crate::TypeInfer::new(config, symbols).generic_signature_arguments(
-            &symbol.params,
+            &signature,
             &symbol.generics,
             &symbol.generic_map,
             args,
@@ -35,7 +41,12 @@ impl Expression {
             return None;
         }
         let symbol = symbols.get_interface_regular(index);
-        let params = symbol.params.clone();
+        let params = symbol
+            .receiver_type
+            .into_iter()
+            .map(|ty| (ty, "self".into()))
+            .chain(symbol.params.iter().cloned())
+            .collect::<Vec<_>>();
         if !crate::TypeInfer::new(config, symbols).check_arguments(&params, args, span) {
             return None;
         }

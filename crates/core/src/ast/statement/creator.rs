@@ -161,43 +161,28 @@ impl Statement {
                             types::CompileType::Function(_) | types::CompileType::Str
                         )
                 });
-                if checked_type && !right_expr.type_check(&target_type, config, symbols) {
-                    config.submit_error(
-                        CompileError::IllegalUse(IllegalUseError::TypeMismatched {
-                            expected: target_type.format(symbols),
-                            found: source_type.format(symbols),
-                        }),
-                        span,
-                    );
-                    return Self::Poison;
-                }
-                let float_narrowing = !target_type.is_empty()
-                    && !source_type.is_empty()
-                    && match (
-                        symbols.get_type(target_type).unqualified(),
-                        symbols.get_type(source_type).unqualified(),
-                    ) {
-                        (types::CompileType::Base(to), types::CompileType::Base(from)) => {
-                            to.data_type() == types::base_type::DataType::Float
-                                && from.data_type() == types::base_type::DataType::Float
-                                && to.bits() < from.bits()
-                        }
-                        _ => false,
-                    };
-                if float_narrowing {
-                    config.submit_error(
-                        CompileError::IllegalUse(IllegalUseError::TypeMismatched {
-                            expected: target_type.format(symbols),
-                            found: source_type.format(symbols),
-                        }),
-                        span,
-                    );
-                    return Self::Poison;
-                }
                 right_expr.check_constant_range(target_type, config, symbols, span);
+                if config.is_poisoned() {
+                    return Self::Poison;
+                }
+                let compatible = right_expr
+                    .numeric_initialization(target_type, config, symbols)
+                    .unwrap_or_else(|| {
+                        !checked_type || right_expr.type_check(&target_type, config, symbols)
+                    });
+                if !compatible {
+                    config.submit_error(
+                        CompileError::IllegalUse(IllegalUseError::TypeMismatched {
+                            expected: target_type.format(symbols),
+                            found: source_type.format(symbols),
+                        }),
+                        span,
+                    );
+                    return Self::Poison;
+                }
                 Self::Assignment(super::Assignment {
                     variable: Box::new(left_expr),
-                    value: Box::new(right_expr),
+                    value: Box::new(right_expr.normalize_initializer(target_type, symbols)),
                 })
             }
             TempStmt::Expression(expr) => {

@@ -20,7 +20,7 @@ func main() -> i32 {
         State::Running => {
             println!("running");
         },
-        _ => {
+        State::Stopped => {
             println!("stopped");
         }
     }

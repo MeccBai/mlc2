@@ -86,6 +86,7 @@ pub fn generate_with_config(
         kind,
         optimize,
         codegen,
+        false,
         &HashMap::new(),
         None,
         std::time::Duration::from_secs(3),
@@ -100,6 +101,7 @@ pub fn generate_with_module_configs(
     kind: TargetKind,
     optimize: mlc_optimizer::OptimizeConfig,
     codegen: mlc_codegen::gens::CodegenConfig,
+    release_build: bool,
     module_configs: &HashMap<
         usize,
         (
@@ -160,6 +162,7 @@ pub fn generate_with_module_configs(
             target_layout,
             cache_root,
             ctfe_max_time,
+            release_build,
         )));
     for id in &plan.order {
         let target = &plan.targets[id.0];
@@ -185,6 +188,7 @@ pub fn generate_with_module_configs(
             WarningHandle::new(file),
         );
         config.set_target_layout(target_layout);
+        config.release_build = release_build;
         if let TargetInput::Builtin(module) = target.input {
             config.builtin_module = Some(module);
         }

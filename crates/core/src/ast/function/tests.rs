@@ -23,6 +23,7 @@ fn unknown_interface_owner_reports_owner_span() {
             },
             span,
         )),
+        owner_args: vec![],
         has_self: false,
         mutable: false,
         name: "run".into(),

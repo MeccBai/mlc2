@@ -2,6 +2,8 @@
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Builtin {
     Todo,
+    HostOs,
+    IsDebug,
     Alloc,
     Address,
     Cast,
@@ -28,6 +30,18 @@ pub struct BuiltinDefinition {
 }
 
 pub const FUNCTIONS: &[BuiltinDefinition] = &[
+    BuiltinDefinition {
+        name: "std::host::is_debug",
+        kind: Builtin::IsDebug,
+        type_arguments: 0,
+        arguments: 0,
+    },
+    BuiltinDefinition {
+        name: "std::host::host_os",
+        kind: Builtin::HostOs,
+        type_arguments: 0,
+        arguments: 0,
+    },
     BuiltinDefinition {
         name: "std::mem::address",
         kind: Builtin::Address,
@@ -156,6 +170,7 @@ pub fn module_builtin(module: &str, name: &str) -> Option<Builtin> {
 pub enum BuiltinModule {
     Bit,
     Mem,
+    Host,
 }
 
 impl BuiltinModule {
@@ -166,6 +181,7 @@ impl BuiltinModule {
         match (namespace.as_str(), module.as_str()) {
             ("std", "bit") => Some(Self::Bit),
             ("std", "mem") => Some(Self::Mem),
+            ("std", "host") => Some(Self::Host),
             _ => None,
         }
     }
@@ -174,6 +190,7 @@ impl BuiltinModule {
         match self {
             Self::Bit => "std::bit",
             Self::Mem => "std::mem",
+            Self::Host => "std::host",
         }
     }
 
@@ -208,56 +225,74 @@ impl BuiltinModule {
                 span,
             )
         };
-        FUNCTIONS
-            .iter()
-            .filter_map(|definition| {
-                let (module, name) = definition.name.rsplit_once("::")?;
-                if module != self.name() {
-                    return None;
-                }
-                let (parameters, return_type) = match definition.kind {
-                    Builtin::Alloc => (vec![("count", ty("u64"))], Some(resource())),
-                    Builtin::Dealloc => (vec![("pointer", resource())], None),
-                    Builtin::Address => (vec![("address", ty("u64"))], Some(reference())),
-                    // The call checker handles scalar types and width-dependent results.
-                    _ => (
-                        vec![("value", ty("u64")), ("rhs", ty("u64"))],
-                        Some(ty("u64")),
-                    ),
-                };
-                Some((
-                    TempGlobalStmt::Func(TempFunc {
-                        symbol: TempFuncSymbol {
-                            constant: self == Self::Bit,
-                            visibility: TempVisibility::Export,
-                            name: name.into(),
-                            name_span: span,
-                            generics: (0..definition.type_arguments)
-                                .map(|_| TempGenericParam {
-                                    name: "T".into(),
-                                    name_span: span,
-                                    constraint: None,
-                                    constraint_args: vec![],
-                                })
-                                .collect(),
-                            params: parameters
-                                .into_iter()
-                                .take(definition.arguments)
-                                .map(|(name, ty)| TempParam {
-                                    name: name.into(),
-                                    name_span: span,
-                                    ty: Some(ty),
-                                })
-                                .collect(),
-                            return_type,
-                            attributes: vec![],
-                        },
-                        body: None,
-                    }),
-                    span,
-                ))
-            })
-            .collect()
+        let mut declarations = Vec::new();
+        if self == Self::Host {
+            declarations.push((
+                TempGlobalStmt::Enum(crate::parser::out::TempEnum {
+                    visibility: TempVisibility::Export,
+                    name: "System".into(),
+                    name_span: span,
+                    variants: ["Windows", "Linux", "Macos"]
+                        .into_iter()
+                        .map(|name| (name.into(), span))
+                        .collect(),
+                    underlying: None,
+                    values: vec![],
+                    attributes: vec![],
+                }),
+                span,
+            ));
+        }
+        declarations.extend(FUNCTIONS.iter().filter_map(|definition| {
+            let (module, name) = definition.name.rsplit_once("::")?;
+            if module != self.name() {
+                return None;
+            }
+            let (parameters, return_type) = match definition.kind {
+                Builtin::HostOs => (vec![], Some(ty("System"))),
+                Builtin::IsDebug => (vec![], Some(ty("bool"))),
+                Builtin::Alloc => (vec![("count", ty("u64"))], Some(resource())),
+                Builtin::Dealloc => (vec![("pointer", resource())], None),
+                Builtin::Address => (vec![("address", ty("u64"))], Some(reference())),
+                // The call checker handles scalar types and width-dependent results.
+                _ => (
+                    vec![("value", ty("u64")), ("rhs", ty("u64"))],
+                    Some(ty("u64")),
+                ),
+            };
+            Some((
+                TempGlobalStmt::Func(TempFunc {
+                    symbol: TempFuncSymbol {
+                        constant: self != Self::Mem,
+                        visibility: TempVisibility::Export,
+                        name: name.into(),
+                        name_span: span,
+                        generics: (0..definition.type_arguments)
+                            .map(|_| TempGenericParam {
+                                name: "T".into(),
+                                name_span: span,
+                                constraint: None,
+                                constraint_args: vec![],
+                            })
+                            .collect(),
+                        params: parameters
+                            .into_iter()
+                            .take(definition.arguments)
+                            .map(|(name, ty)| TempParam {
+                                name: name.into(),
+                                name_span: span,
+                                ty: Some(ty),
+                            })
+                            .collect(),
+                        return_type,
+                        attributes: vec![],
+                    },
+                    body: None,
+                }),
+                span,
+            ))
+        }));
+        declarations
     }
 }
 

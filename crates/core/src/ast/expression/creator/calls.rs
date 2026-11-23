@@ -101,12 +101,14 @@ impl Expression {
                     owner_span,
                 )
             };
-            if !crate::TypeInfer::new(config, symbols).check(
-                &receiver,
-                receiver_type,
-                crate::infer::CheckMode::Argument,
-                span,
-            ) {
+            if !generic
+                && !crate::TypeInfer::new(config, symbols).check(
+                    &receiver,
+                    receiver_type,
+                    crate::infer::CheckMode::Argument,
+                    span,
+                )
+            {
                 return Self::Poison(span);
             }
             params.push(receiver);
@@ -118,7 +120,7 @@ impl Expression {
         let offset = usize::from(symbol.receiver_type.is_some());
         if generic {
             let Some(index) =
-                Self::infer_interface(config, interface, &params[offset..], span, symbols, context)
+                Self::infer_interface(config, interface, &params, span, symbols, context)
             else {
                 return Self::Poison(span);
             };
@@ -213,7 +215,38 @@ impl Expression {
             use crate::ast::symbols::PathSymbol;
             let resolved = symbols.resolve_path(config, path, context);
             if let Some(PathSymbol::Function { index, generic }) = resolved {
-                if let Some(kind) = symbols.get_function(index, generic).builtin() {
+                let function = symbols.get_function(index, generic);
+                use crate::ast::builtins::Builtin;
+                if let Some(kind @ (Builtin::HostOs | Builtin::IsDebug)) = function.builtin() {
+                    if !args.is_empty() {
+                        config.submit_error(
+                            CompileError::IllegalUse(IllegalUseError::ArgumentCountMismatch),
+                            span,
+                        );
+                        return Self::Poison(span);
+                    }
+                    let value = if kind == Builtin::IsDebug {
+                        if config.release_build {
+                            "false"
+                        } else {
+                            "true"
+                        }
+                    } else {
+                        match mlc_manifest::System::host() {
+                            mlc_manifest::System::Windows => "0",
+                            mlc_manifest::System::Linux => "1",
+                            mlc_manifest::System::Macos => "2",
+                        }
+                    };
+                    return Self::ConstValueE(
+                        crate::ast::expression::ConstValue {
+                            ty: function.ret_type.expect("host builtin returns a value"),
+                            value: value.into(),
+                        },
+                        span,
+                    );
+                }
+                if let Some(kind) = function.builtin() {
                     if generic {
                         config.submit_error(
                             CompileError::IllegalUse(IllegalUseError::GenericCountMismatch),

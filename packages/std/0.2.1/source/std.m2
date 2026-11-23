@@ -8,3 +8,4 @@ export using String = std::base::String;
 export using format = std::fmt::format;
 export using print = std::fmt::print;
 export using println = std::fmt::println;
+export using Vec = std::collection::Vec;

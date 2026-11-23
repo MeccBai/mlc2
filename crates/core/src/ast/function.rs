@@ -172,7 +172,7 @@ impl InterfaceSymbol {
 
     pub fn new(
         config: &mut Config,
-        prototype: TempInterfaceSymbol,
+        mut prototype: TempInterfaceSymbol,
         symbols: &mut dyn Resolution,
     ) -> (Self, Span) {
         let name_span = prototype.name_span;
@@ -183,6 +183,22 @@ impl InterfaceSymbol {
             !prototype.generics.is_empty(),
             name_span,
         );
+        for (argument, span) in &prototype.owner_args {
+            if let TempType::Path(path) = argument
+                && let [name] = path.segments.as_slice()
+                && !prototype.generics.iter().any(|param| param.name == *name)
+                && symbols.named_type(config, name).is_none()
+            {
+                prototype
+                    .generics
+                    .push(crate::parser::out::TempGenericParam {
+                        name: name.clone(),
+                        name_span: *span,
+                        constraint: None,
+                        constraint_args: vec![],
+                    });
+            }
+        }
         let owner_name = prototype
             .owner
             .as_ref()
@@ -222,7 +238,17 @@ impl InterfaceSymbol {
             .and_then(|(path, span)| {
                 crate::ast::types::resolve_type_with_bindings(
                     config,
-                    (TempType::Path(path), span),
+                    (
+                        if prototype.owner_args.is_empty() {
+                            TempType::Path(path)
+                        } else {
+                            TempType::Generic {
+                                base: path,
+                                args: prototype.owner_args,
+                            }
+                        },
+                        span,
+                    ),
                     symbols,
                     &types,
                 )
@@ -231,7 +257,16 @@ impl InterfaceSymbol {
         let name = if owner.is_empty() {
             name
         } else {
-            let owner = symbols.get_type(owner).unqualified().format(symbols);
+            let ty = symbols.get_type(owner).unqualified();
+            let owner = match ty {
+                crate::ast::types::CompileType::Unit(unit) => unit
+                    .application
+                    .as_ref()
+                    .filter(|app| !app.concrete)
+                    .map(|app| app.template_name.clone())
+                    .unwrap_or_else(|| ty.format(symbols)),
+                _ => ty.format(symbols),
+            };
             SymbolName::callable(Some(&owner), &prototype.name)
         };
 

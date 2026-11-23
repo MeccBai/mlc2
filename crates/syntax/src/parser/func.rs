@@ -144,8 +144,12 @@ pub fn interface_symbol_parser<'tokens, I>(
 where
     I: ValueInput<'tokens, Token = TokenPack, Span = Span>,
 {
-    let owner = path()
-        .map_with(|path, extra| (path, extra.span()))
+    let owner = type_parser()
+        .try_map(|(ty, span), _| match ty {
+            super::TypeExpr::Path(path) => Ok(((path, span), vec![])),
+            super::TypeExpr::Generic { base, args } => Ok(((base, span), args)),
+            _ => Err(Rich::custom(span, "expected an interface owner type")),
+        })
         .then_ignore(operator(Token::ColonColon))
         .map(Some);
     let owner = if require_owner {
@@ -182,8 +186,12 @@ where
                         )),
                     }),
                 )?;
+                let (owner, owner_args) = owner
+                    .map(|(owner, args)| (Some(owner), args))
+                    .unwrap_or_default();
                 Ok(TempInterfaceSymbol {
                     visibility: Default::default(),
+                    owner_args,
                     owner,
                     has_self,
                     mutable,

@@ -148,7 +148,9 @@ impl Expander<'_> {
                 input.signed = false;
                 input
             }
-            Builtin::Todo
+            Builtin::IsDebug
+            | Builtin::HostOs
+            | Builtin::Todo
             | Builtin::Size
             | Builtin::BitAnd
             | Builtin::BitXor
