@@ -29,13 +29,13 @@ api Vec<T>::func push(mut self, value: T) {
         var i: u64 = 0;
         while (i < self->length) {
             data[i] = self->data[i];
-            i = i + cast<u64>(1);
+            i = i + 1;
         }
         self->data = data;
         self->capacity = capacity;
     }
     self->data[self->length] = value;
-    self->length = self->length + cast<u64>(1);
+    self->length = self->length + 1;
 }
 
 func check_index(index: u64, length: u64) {
@@ -83,7 +83,7 @@ api VecIter<T>::func has_next(self) -> bool {
 }
 
 api VecIter<T>::func to_next(mut self) {
-    self->index = self->index + cast<u64>(1);
+    self->index = self->index + 1;
 }
 
 api VecIter<T>::func get_ref(self) -> $T {
@@ -105,7 +105,7 @@ api VecIterMut<T>::func has_next(self) -> bool {
 }
 
 api VecIterMut<T>::func to_next(mut self) {
-    self->index = self->index + cast<u64>(1);
+    self->index = self->index + 1;
 }
 
 api VecIterMut<T>::func get_ref(self) -> $mut T {

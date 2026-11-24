@@ -1,11 +1,11 @@
 [[Packages]]
 Name = "std"
-Version = "0.2.1"
+Version = "0.2.2"
 [Packages.Source]
 Entry = "std.m2"
 
 [[Packages]]
 Name = "c_std"
-Version = "0.2.1"
+Version = "0.2.2"
 [Packages.Source]
 DeclarationOnly = true

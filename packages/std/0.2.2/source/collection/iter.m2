@@ -27,7 +27,7 @@ export func range_step(start: u64, end: u64, step: u64) -> RangeIter {
 }
 
 api RangeIter::func has_next(self) -> bool {
-    return self->step != cast<u64>(0) && self->current < self->end;
+    return self->step != 0 && self->current < self->end;
 }
 
 api RangeIter::func to_next(mut self) {

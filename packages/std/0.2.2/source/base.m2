@@ -24,7 +24,7 @@ api String::func with_capacity(capacity: u64) -> String {
     if (capacity == u64::max()) {
         c_std::lib::abort();
     }
-    val allocated = capacity + cast<u64>(1);
+    val allocated = capacity + 1;
     var data: res = std::mem::alloc<i8>(allocated);
     data[0] = 0;
     return String {data, 0, allocated};
@@ -42,7 +42,7 @@ api String::func len(self) -> u64 {
 
 
 api String::func is_empty(self) -> bool {
-    return self -> length == cast<u64>(0);
+    return self -> length == 0;
 }
 
 
@@ -62,17 +62,17 @@ api String::func reserve(mut self, required: u64) {
     }
     var capacity = self -> capacity;
     while (capacity < required) {
-        if (capacity > u64::max() / cast<u64>(2)) {
+        if (capacity > u64::max() / 2) {
             capacity = required;
         } else {
-            capacity = capacity * cast<u64>(2);
+            capacity = capacity * 2;
         }
     }
     var fresh: res = std::mem::alloc<i8>(capacity);
     var i: u64 = 0;
     while (i < self -> length) {
         fresh[i] = self -> data[i];
-        i = i + cast<u64>(1);
+        i = i + 1;
     }
     fresh[self -> length] = 0;
     self -> data = fresh;
@@ -87,28 +87,28 @@ api String::func append(mut self, value: str) {
     if (length >= maximum - self -> length) {
         c_std::lib::abort();
     }
-    val required = self -> length + length + cast<u64>(1);
+    val required = self -> length + length + 1;
     if (required > self -> capacity) {
         var capacity = self -> capacity;
         while (capacity < required) {
-            if (capacity > u64::max() / cast<u64>(2)) {
+            if (capacity > u64::max() / 2) {
                 capacity = required;
             } else {
-                capacity = capacity * cast<u64>(2);
+                capacity = capacity * 2;
             }
         }
         var fresh: res = std::mem::alloc<i8>(capacity);
         var old: u64 = 0;
         while (old < self -> length) {
             fresh[old] = self -> data[old];
-            old = old + cast<u64>(1);
+            old = old + 1;
         }
         var extra: u64 = 0;
         while (extra < length) {
             fresh[self -> length + extra] = source[extra];
-            extra = extra + cast<u64>(1);
+            extra = extra + 1;
         }
-        fresh[required - cast<u64>(1)] = 0;
+        fresh[required - 1] = 0;
         // Copy the input first: it may be a view into our existing allocation.
         self -> data = fresh;
         self -> capacity = capacity;
@@ -116,21 +116,21 @@ api String::func append(mut self, value: str) {
         var i: u64 = 0;
         while (i < length) {
             self -> data[self -> length + i] = source[i];
-            i = i + cast<u64>(1);
+            i = i + 1;
         }
     }
-    self -> length = required - cast<u64>(1);
+    self -> length = required - 1;
     self -> data[self -> length] = 0;
 }
 
 
 api String::func push_byte(mut self, value: i8) {
-    if (self -> length > u64::max() - cast<u64>(2)) {
+    if (self -> length > u64::max() - 2) {
         c_std::lib::abort();
     }
-    self -> reserve(self -> length + cast<u64>(2));
+    self -> reserve(self -> length + 2);
     self -> data[self -> length] = value;
-    self -> length = self -> length + cast<u64>(1);
+    self -> length = self -> length + 1;
     self -> data[self -> length] = 0;
 }
 
@@ -141,12 +141,12 @@ api String::func from(value: str) -> String {
     if (length == u64::max()) {
         c_std::lib::abort();
     }
-    val capacity = length + cast<u64>(1);
+    val capacity = length + 1;
     var data: res = std::mem::alloc<i8>(capacity);
     var i: u64 = 0;
     while (i < length) {
         data[i] = source[i];
-        i = i + cast<u64>(1);
+        i = i + 1;
     }
     data[length] = 0;
     return String {data, length, capacity};

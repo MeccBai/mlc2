@@ -9,15 +9,17 @@ using println = std::println;
 func main() -> i32 {
     const base: i32 = 6 * 7;
     val answer = base;
-    var counter = answer;
+    var counter: i64 = 0;
+    counter = answer; // i32 widens to i64 on assignment.
     counter = counter + 1;
     // Explicit cast permits truncation; implicit i8 = 300 is an error.
     val narrowed: i8 = cast<i8>(300);
+    val widened: i32 = narrowed;
     println!(
         "answer={} counter={} narrowed={}",
         answer,
         counter,
-        cast<i32>(narrowed)
+        widened
     );
     // Floating literals are f64; narrowing to f32 also requires an explicit cast.
     val fraction: f32 = cast<f32>(1.5);

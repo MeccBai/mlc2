@@ -29,7 +29,7 @@ pub FormatWriter::func flush(mut self) {
     while (self -> offset < length) {
         val byte = data[self -> offset];
         if (byte == cast<i8>("{".first_byte())) {
-            val next = data[self -> offset + cast<u64>(1)];
+            val next = data[self -> offset + 1];
             if (next == cast<i8>("}".first_byte())) {
                 if (self -> offset > start) {
                     self -> output -> append(str::from_parts(
@@ -37,25 +37,25 @@ pub FormatWriter::func flush(mut self) {
                         self -> offset - start
                     ));
                 }
-                self -> offset = self -> offset + cast<u64>(2);
+                self -> offset = self -> offset + 2;
                 return;
             }
             self -> output -> append(str::from_parts(
                 @data[start],
-                self -> offset - start + cast<u64>(1)
+                self -> offset - start + 1
             ));
-            self -> offset = self -> offset + cast<u64>(2);
+            self -> offset = self -> offset + 2;
             start = self -> offset;
         } else {
             if (byte == cast<i8>("}".first_byte())) {
                 self -> output -> append(str::from_parts(
                     @data[start],
-                    self -> offset - start + cast<u64>(1)
+                    self -> offset - start + 1
                 ));
-                self -> offset = self -> offset + cast<u64>(2);
+                self -> offset = self -> offset + 2;
                 start = self -> offset;
             } else {
-                self -> offset = self -> offset + cast<u64>(1);
+                self -> offset = self -> offset + 1;
             }
         }
     }
@@ -84,7 +84,7 @@ export macro func format!(
     pattern: str,
     args: std::macro::Args<std::fmt::Display>
 ) -> String {
-    var output = String::with_capacity(str::len(pattern) + cast<u64>(32));
+    var output = String::with_capacity(str::len(pattern) + 32);
     anonymous {
         var writer = FormatWriter::new(pattern, @mut output);
         macro for arg in args {
@@ -103,18 +103,18 @@ func decimal(value: u64, negative: bool) -> String {
     var offset: u64 = 21; // 20 decimal digits plus a possible sign.
     val end = offset;
     var remaining = value;
-    while (remaining >= cast<u64>(10)) {
-        val quotient = remaining / cast<u64>(10);
-        offset = offset - cast<u64>(1);
+    while (remaining >= 10) {
+        val quotient = remaining / 10;
+        offset = offset - 1;
         bytes[offset] = cast<i8>(
-            remaining - quotient * cast<u64>(10)
+            remaining - quotient * 10
         ) + cast<i8>("0".first_byte());
         remaining = quotient;
     }
-    offset = offset - cast<u64>(1);
+    offset = offset - 1;
     bytes[offset] = cast<i8>(remaining) + cast<i8>("0".first_byte());
     if (negative) {
-        offset = offset - cast<u64>(1);
+        offset = offset - 1;
         bytes[offset] = cast<i8>("-".first_byte());
     }
     return String::from(str::from_parts(
@@ -125,7 +125,7 @@ func decimal(value: u64, negative: bool) -> String {
 
 
 func signed(value: i64) -> String {
-    val negative = value < cast<i64>(0);
+    val negative = value < 0;
     var magnitude = cast<u64>(value);
     if (negative) {
         magnitude = cast<u64>(0) - magnitude;
@@ -152,13 +152,14 @@ func floating(value: f64) -> String {
     val bits = $representation;
     const fraction_bits: u64 = 52;
     const exponent_bits: u64 = 11;
-    const fraction_mask = std::bit::shl(cast<u64>(1), fraction_bits) - cast<u64>(1);
-    const exponent_mask = std::bit::shl(cast<u64>(1), exponent_bits) - cast<u64>(1);
-    val negative = std::bit::shr(bits, fraction_bits + exponent_bits) != cast<u64>(0);
+    const magnitude_mask: u64 = i64::max();
+    const fraction_mask = std::bit::shl(cast<u64>(1), fraction_bits) - 1;
+    const exponent_mask = std::bit::shl(cast<u64>(1), exponent_bits) - 1;
+    val negative = std::bit::shr(bits, fraction_bits + exponent_bits) != 0;
     val fraction = bits & fraction_mask;
     val exponent = std::bit::shr(bits, fraction_bits) & exponent_mask;
     if (exponent == exponent_mask) {
-        if (fraction != cast<u64>(0)) {
+        if (fraction != 0) {
             if (negative) {
                 return String::from("-nan");
             }
@@ -169,7 +170,7 @@ func floating(value: f64) -> String {
         }
         return String::from("inf");
     }
-    if ((bits & cast<u64>(i64::max())) == cast<u64>(0)) {
+    if ((bits & magnitude_mask) == 0) {
         if (negative) {
             return String::from("-0");
         }
@@ -189,37 +190,37 @@ func floating(value: f64) -> String {
         c_std::lib::abort();
     }
     var count: u64 = 0;
-    while (count < cast<u64>(17) && digits[count] != cast<i8>("\0".first_byte())) {
-        count = count + cast<u64>(1);
+    while (count < 17 && digits[count] != cast<i8>("\0".first_byte())) {
+        count = count + 1;
     }
-    if (count == cast<u64>(0)) {
+    if (count == 0) {
         c_std::lib::abort();
     }
-    while (count > cast<u64>(1) && digits[count - cast<u64>(1)] == cast<i8>("0".first_byte())) {
-        count = count - cast<u64>(1);
+    while (count > 1 && digits[count - 1] == cast<i8>("0".first_byte())) {
+        count = count - 1;
     }
     var bytes: [i8: 32] = "";
     var length: u64 = 0;
     if (negative) {
         bytes[length] = cast<i8>("-".first_byte());
-        length = length + cast<u64>(1);
+        length = length + 1;
     }
     val power = decimal_point - 1;
     if (power < - 4 || power >= 17) {
         bytes[length] = digits[0];
-        length = length + cast<u64>(1);
-        if (count > cast<u64>(1)) {
+        length = length + 1;
+        if (count > 1) {
             bytes[length] = cast<i8>(".".first_byte());
-            length = length + cast<u64>(1);
+            length = length + 1;
             var i: u64 = 1;
             while (i < count) {
                 bytes[length] = digits[i];
-                length = length + cast<u64>(1);
-                i = i + cast<u64>(1);
+                length = length + 1;
+                i = i + 1;
             }
         }
         bytes[length] = cast<i8>("e".first_byte());
-        length = length + cast<u64>(1);
+        length = length + 1;
         var magnitude = power;
         if (power < 0) {
             bytes[length] = cast<i8>("-".first_byte());
@@ -227,31 +228,31 @@ func floating(value: f64) -> String {
         } else {
             bytes[length] = cast<i8>("+".first_byte());
         }
-        length = length + cast<u64>(1);
+        length = length + 1;
         if (magnitude >= 100) {
             bytes[length] = cast<i8>(magnitude / 100) + cast<i8>("0".first_byte());
-            length = length + cast<u64>(1);
+            length = length + 1;
         }
         bytes[length] = cast<i8>((magnitude / 10) % 10) + cast<i8>("0".first_byte());
-        length = length + cast<u64>(1);
+        length = length + 1;
         bytes[length] = cast<i8>(magnitude % 10) + cast<i8>("0".first_byte());
-        length = length + cast<u64>(1);
+        length = length + 1;
     } else {
         if (decimal_point <= 0) {
             bytes[length] = cast<i8>("0".first_byte());
-            bytes[length + cast<u64>(1)] = cast<i8>(".".first_byte());
-            length = length + cast<u64>(2);
+            bytes[length + 1] = cast<i8>(".".first_byte());
+            length = length + 2;
             var zeros = 0 - decimal_point;
             while (zeros > 0) {
                 bytes[length] = cast<i8>("0".first_byte());
-                length = length + cast<u64>(1);
+                length = length + 1;
                 zeros = zeros - 1;
             }
             var i: u64 = 0;
             while (i < count) {
                 bytes[length] = digits[i];
-                length = length + cast<u64>(1);
-                i = i + cast<u64>(1);
+                length = length + 1;
+                i = i + 1;
             }
         } else {
             var i: u64 = 0;
@@ -259,15 +260,15 @@ func floating(value: f64) -> String {
             while (i < point || i < count) {
                 if (i == point) {
                     bytes[length] = cast<i8>(".".first_byte());
-                    length = length + cast<u64>(1);
+                    length = length + 1;
                 }
                 if (i < count) {
                     bytes[length] = digits[i];
                 } else {
                     bytes[length] = cast<i8>("0".first_byte());
                 }
-                length = length + cast<u64>(1);
-                i = i + cast<u64>(1);
+                length = length + 1;
+                i = i + 1;
             }
         }
     }
@@ -293,7 +294,7 @@ api i32::func format(self) -> String {
 
 
 api i64::func format(self) -> String {
-    return signed(cast<i64>($self));
+    return signed($self);
 }
 
 
@@ -313,7 +314,7 @@ api u32::func format(self) -> String {
 
 
 api u64::func format(self) -> String {
-    return unsigned(cast<u64>($self));
+    return unsigned($self);
 }
 
 
@@ -323,7 +324,7 @@ api f32::func format(self) -> String {
 
 
 api f64::func format(self) -> String {
-    return floating(cast<f64>($self));
+    return floating($self);
 }
 
 
@@ -360,7 +361,7 @@ func write(text: str) {
             length - offset,
             stream
         );
-        if (written == cast<u64>(0)) {
+        if (written == 0) {
             return;
         }
         offset = offset + written;
@@ -372,7 +373,7 @@ export macro func print!(
     pattern: str,
     args: std::macro::Args<std::fmt::Display>
 ) {
-    var output = String::with_capacity(str::len(pattern) + cast<u64>(32));
+    var output = String::with_capacity(str::len(pattern) + 32);
     anonymous {
         var writer = FormatWriter::new(pattern, @mut output);
         macro for arg in args {
@@ -388,7 +389,7 @@ export macro func println!(
     pattern: str,
     args: std::macro::Args<std::fmt::Display>
 ) {
-    var output = String::with_capacity(str::len(pattern) + cast<u64>(32));
+    var output = String::with_capacity(str::len(pattern) + 32);
     anonymous {
         var writer = FormatWriter::new(pattern, @mut output);
         macro for arg in args {

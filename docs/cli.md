@@ -94,7 +94,7 @@ mlc example hello-world   # 仅打印源码，不编译或运行
 mlc example generics
 mlc ll main.m2             # 仅生成 LLVM IR，默认 build/ll/<mode>/<triplet>
 mlc ll main.m2 -o ir       # 指定 .ll 输出目录
-mlc symbols packages/c_std/0.2.1/source/io.h --module c_std::io --triplet universal  # 输出同名 io.sym
+mlc symbols packages/c_std/0.2.2/source/io.h --module c_std::io --triplet universal  # 输出同名 io.sym
 mlc symbols c_api.toml -o declarations/c_api.sym
 mlc symbols native.h       # 固定宽度 C 声明 → native.sym
 mlc symbols native.h --module c_std::native --triplet x86_64-pc-windows-msvc
